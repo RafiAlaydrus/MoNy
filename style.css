@@ -1,0 +1,420 @@
+/* =====================
+   Global Reset & Base
+===================== */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+
+/* =====================
+   App Container
+===================== */
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* =====================
+   Header
+===================== */
+header {
+  margin-bottom: 20px;
+}
+
+header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+header p {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #9a9a9a;
+}
+
+/* =====================
+   Summary Cards
+===================== */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.card {
+  background: #111;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.card span {
+  display: block;
+  font-size: 12px;
+  color: #8a8a8a;
+  margin-bottom: 6px;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* Emphasize remaining money */
+#remaining-money {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+/* =====================
+   Section Titles
+===================== */
+h3 {
+  margin: 30px 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* =====================
+   Priority Section
+===================== */
+#priority-list {
+  background: #0f0f0f;
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+#priority-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #1f1f1f;
+  font-size: 15px;
+}
+
+#priority-list li:last-child {
+  border-bottom: none;
+}
+
+/* =====================
+   Second Choice Form
+===================== */
+.second-form {
+  background: #0f0f0f;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.second-form input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+}
+
+.second-form input::placeholder {
+  color: #777;
+}
+
+.second-form input:focus {
+  outline: none;
+  border-color: #3a3a3a;
+}
+
+/* =====================
+   Action Buttons
+===================== */
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.actions button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#add-money {
+  background: #1e7f43;
+  color: #eafff2;
+}
+
+#take-money {
+  background: #7f1e1e;
+  color: #ffecec;
+}
+
+.actions button:active {
+  transform: scale(0.98);
+}
+
+/* =====================
+   Second Choice Table
+===================== */
+table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+thead {
+  color: #7a7a7a;
+}
+
+th {
+  text-align: left;
+  font-weight: 500;
+  padding-bottom: 8px;
+}
+
+th:last-child,
+td:last-child {
+  text-align: right;
+}
+
+tbody tr {
+  border-bottom: 1px solid #1f1f1f;
+}
+
+td {
+  padding: 10px 0;
+}
+
+/* =====================
+   Utility (future-proof)
+===================== */
+.hidden {
+  display: none;
+}
+
+#month-setup input {
+  margin-top: 10px;
+}
+
+#confirm-income {
+  background: #2c2c2c;
+  color: white;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-weight: 600;
+}
+
+#income-section input {
+  margin-top: 10px;
+}
+
+#confirm-income {
+  background: #2c2c2c;
+  color: #fff;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-weight: 600;
+}
+
+
+
+
+#income-card {
+  cursor: pointer;
+}
+
+
+#income-card input {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+
+/* MODAL OVERLAY */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: auto;   /* ✅ allow modal to receive clicks */
+}
+
+.modal-card {
+  pointer-events: auto;   /* ✅ buttons become clickable */
+  z-index: 1001;
+}
+
+
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  background: #1c1c1c;
+  padding: 24px;
+  border-radius: 16px;
+  max-width: 420px;
+  width: 90%;
+  z-index: 1001;          /* ABOVE overlay */
+  pointer-events: auto;  /* FORCE clickable */
+}
+
+
+/* MODAL CARD */
+.modal-card {
+  background: #111;
+  border-radius: 16px;
+  padding: 20px;
+  width: 90%;
+  max-width: 360px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+.modal-card h3 {
+  margin-bottom: 10px;
+}
+
+.modal-card p {
+  color: #aaa;
+  font-size: 14px;
+}
+
+/* MODAL BUTTONS */
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.modal-actions button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-actions .danger {
+  background: #b3261e;
+  color: white;
+}
+
+.modal-actions button:not(.danger) {
+  background: #333;
+  color: white;
+}
+
+/* HIDDEN */
+.hidden {
+  display: none !important;
+}
+
+/* =====================
+   MODAL CLICK FIX (IMPORTANT)
+===================== */
+
+/* Disable app interaction when modal is open */
+.modal:not(.hidden) ~ .app,
+.modal:not(.hidden) + .app,
+.modal:not(.hidden) {
+  pointer-events: auto;
+}
+
+/* Force modal to capture all clicks */
+.modal {
+  pointer-events: auto;
+}
+
+/* Disable background clicks */
+.modal:not(.hidden) {
+  z-index: 9999;
+}
+
+/* Prevent app from stealing clicks */
+.modal:not(.hidden) ~ main,
+.modal:not(.hidden) ~ .app {
+  pointer-events: none;
+}
+
+/* Re-enable modal card & buttons */
+.modal-card,
+.modal-card * {
+  pointer-events: auto;
+}
+
+/* =====================
+   MODAL HARD LOCK
+===================== */
+
+body.modal-open .app {
+  pointer-events: none;
+  filter: blur(1px);
+}
+
+body.modal-open .modal {
+  pointer-events: auto;
+}
+
+/* =====================
+   Priority Buttons
+===================== */
+
+.priority-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.priority-actions button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Add Priority */
+#add-priority {
+  background: #2c2c2c;
+  color: #fff;
+}
+
+/* Save Priority */
+#save-priority {
+  background: #444;
+  color: #fff;
+}
+
+/* Click feedback */
+.priority-actions button:active {
+  transform: scale(0.98);
+}

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monthly Money Tracker</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <main class="app">
+
+    <!-- HEADER (SECRET RESET TRIGGER) -->
+    <header>
+      <h1 id="secret-reset">MONTHLY SPENT</h1>
+      <p id="current-month"></p>
+    </header>
+
+    <!-- SUMMARY -->
+    <section class="summary">
+
+      <!-- TOTAL INCOME -->
+      <div class="card" id="income-card">
+        <span>Total Income</span>
+        <h2 id="total-income-display">RM 0</h2>
+
+        <input
+          type="number"
+          id="total-income-input"
+          placeholder="Enter income (RM)"
+          class="hidden"
+        />
+      </div>
+
+      <!-- REMAINING -->
+      <div class="card">
+        <span>Remaining</span>
+        <h2 id="remaining-money">RM 0</h2>
+      </div>
+
+    </section>
+
+    <!-- PRIORITY -->
+    <section>
+      <h3>Priority</h3>
+
+      <!-- PRIORITY FORM -->
+      <div class="second-form" id="priority-form">
+        <input id="pb-name" placeholder="Bill name" />
+        <input id="pb-category" placeholder="Category" />
+        <input id="pb-amount" type="number" placeholder="Amount (RM)" />
+
+        <button id="add-priority">Add Priority Bill</button>
+        <button id="save-priority">Save Priority</button>
+      </div>
+
+      <!-- PRIORITY LIST -->
+      <ul id="priority-list"></ul>
+    </section>
+
+    <!-- SECOND CHOICE -->
+    <section>
+      <h3>Second choice</h3>
+
+      <div class="second-form">
+        <input id="sc-name" placeholder="Name" />
+        <input id="sc-category" placeholder="Category" />
+        <input id="sc-amount" type="number" placeholder="Amount (RM)" />
+
+        <div class="actions">
+          <button id="add-money">+ Add</button>
+          <button id="take-money">- Take</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody id="sc-table"></tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <!-- SECRET RESET MODAL -->
+  <div id="reset-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Reset Everything?</h3>
+      <p>
+        This will erase all data for this month.<br />
+        This action cannot be undone.
+      </p>
+
+      <div class="modal-actions">
+        <button id="cancel-reset">Cancel</button>
+        <button id="confirm-reset" class="danger">Yes, Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAVE PRIORITY MODAL -->
+  <div id="priority-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Save Priority Bills?</h3>
+      <p>
+        Are you sure?<br />
+        Once saved, you cannot change priority bills again.
+      </p>
+
+      <div class="modal-actions">
+        <button id="cancel-priority">Cancel</button>
+        <button id="confirm-priority" class="danger">Yes, Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js");
+    });
+  }
+</script>
+
+</body>
+</html>
