@@ -3,13 +3,26 @@
 ========================= */
 
 const STORAGE_KEY = "monthly-money-tracker";
+const SETTINGS_KEY = "monthly-money-tracker-settings";
 
 const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
+let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
+  keepData: false
+};
+
 let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
 
-if (!data || data.month !== currentMonthKey) {
+if (!data) {
+  data = {
+    month: currentMonthKey,
+    income: null,
+    priority: [],
+    priorityLocked: false,
+    secondChoice: []
+  };
+} else if (!settings.keepData && data.month !== currentMonthKey) {
   data = {
     month: currentMonthKey,
     income: null,
@@ -237,6 +250,32 @@ renderPriority();
 renderSecondChoice();
 calculateRemaining();
 updatePriorityLockUI();
+
+/* =========================
+   SETTINGS PANEL
+========================= */
+
+const settingsToggle = document.getElementById("settings-toggle");
+const settingsPanel = document.getElementById("settings-panel");
+const keepDataToggle = document.getElementById("keep-data-toggle");
+
+keepDataToggle.checked = settings.keepData;
+
+settingsToggle.addEventListener("click", () => {
+  settingsPanel.classList.toggle("hidden");
+});
+
+// Close settings when clicking outside
+document.addEventListener("click", (e) => {
+  if (!settingsPanel.contains(e.target) && !settingsToggle.contains(e.target)) {
+    settingsPanel.classList.add("hidden");
+  }
+});
+
+keepDataToggle.addEventListener("change", () => {
+  settings.keepData = keepDataToggle.checked;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+});
 
 /* =========================
    SECRET RESET (DOUBLE CLICK HEADER)
