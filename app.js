@@ -7,18 +7,13 @@ const STORAGE_KEY = "monthly-money-tracker";
 const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
-let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
-
-if (!data || data.month !== currentMonthKey) {
-  data = {
-    month: currentMonthKey,
-    income: null,
-    priority: [],
-    priorityLocked: false,
-    secondChoice: []
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
+let data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+  month: currentMonthKey,
+  income: null,
+  priority: [],
+  priorityLocked: false,
+  secondChoice: []
+};
 
 /* =========================
    DOM REFERENCES (SAFE)
