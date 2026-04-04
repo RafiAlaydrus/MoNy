@@ -350,7 +350,25 @@ function renderChart() {
   const income = Number(data.income) || 0;
   if (income === 0) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    legend.innerHTML = '<span style="color:#666;font-size:13px;">Set your income to see the chart.</span>';
+    const size = canvas.width;
+    const center = size / 2;
+
+    // Empty ring
+    ctx.beginPath();
+    ctx.arc(center, center, size / 2 - 10, 0, Math.PI * 2);
+    ctx.arc(center, center, (size / 2 - 10) * 0.55, Math.PI * 2, 0, true);
+    ctx.closePath();
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fill();
+
+    // Empty state text
+    ctx.fillStyle = "#555";
+    ctx.font = "13px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("No data yet", center, center);
+
+    legend.innerHTML = '<span style="color:#555;font-size:13px;">Set your income to get started.</span>';
     return;
   }
 
