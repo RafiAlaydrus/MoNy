@@ -112,6 +112,11 @@ incomeInput.addEventListener("keydown", (e) => {
 function renderPriority() {
   priorityList.innerHTML = "";
 
+  if (data.priority.length === 0) {
+    priorityList.innerHTML = '<li class="empty-state">No priority bills added yet.</li>';
+    return;
+  }
+
   data.priority.forEach((bill, index) => {
     const wrapper = document.createElement("div");
     wrapper.className = "swipe-wrapper";
@@ -253,6 +258,11 @@ addPriorityBtn.addEventListener("click", () => {
 
 function renderSecondChoice() {
   scTable.innerHTML = "";
+
+  if (data.secondChoice.length === 0) {
+    scTable.innerHTML = '<tr><td colspan="4" class="empty-state">No transactions yet.</td></tr>';
+    return;
+  }
 
   data.secondChoice.forEach(item => {
     const row = document.createElement("tr");

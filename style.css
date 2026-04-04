@@ -577,6 +577,14 @@ body.modal-open .modal {
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
+.empty-state {
+  color: #555;
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
+  border: none !important;
+}
+
 .date-stamp {
   font-size: 11px;
   color: #666;
