@@ -566,6 +566,17 @@ body.modal-open .modal {
   pointer-events: auto;
 }
 
+.item-enter {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.item-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
 .date-stamp {
   font-size: 11px;
   color: #666;

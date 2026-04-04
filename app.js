@@ -183,7 +183,9 @@ function renderPriority() {
 
     wrapper.appendChild(deleteLayer);
     wrapper.appendChild(li);
+    wrapper.classList.add("item-enter");
     priorityList.appendChild(wrapper);
+    requestAnimationFrame(() => wrapper.classList.add("item-enter-active"));
   });
 }
 
@@ -265,7 +267,9 @@ function renderSecondChoice() {
       <td class="date-stamp">${dateStr}</td>
       <td>${item.type === "add" ? "+" : "-"} RM ${item.amount}</td>
     `;
+    row.classList.add("item-enter");
     scTable.appendChild(row);
+    requestAnimationFrame(() => row.classList.add("item-enter-active"));
   });
 }
 
