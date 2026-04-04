@@ -31,7 +31,6 @@ html, body {
   justify-content: flex-end;
   align-items: center;
   position: relative;
-  margin-bottom: 4px;
 }
 
 .settings-btn {
@@ -114,6 +113,12 @@ html, body {
 /* =====================
    Header
 ===================== */
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 header {
   margin-bottom: 20px;
 }
