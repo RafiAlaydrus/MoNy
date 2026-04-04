@@ -60,6 +60,19 @@ const addMoneyBtn = document.getElementById("add-money");
 const takeMoneyBtn = document.getElementById("take-money");
 const scTable = document.getElementById("sc-table");
 
+const chartCanvas = document.getElementById("summary-chart");
+const chartCtx = chartCanvas ? chartCanvas.getContext("2d") : null;
+const chartLegend = document.getElementById("chart-legend");
+
+const CATEGORY_COLORS = {
+  "Bills": "#e74c3c",
+  "Subscription": "#e67e22",
+  "Grocery": "#f1c40f",
+  "Food / Drink": "#9b59b6",
+  "Transport": "#1abc9c",
+  "Others": "#7f8c8d",
+};
+
 /* =========================
    HEADER
 ========================= */
@@ -151,7 +164,7 @@ function renderPriority() {
         currentX = 0;
         swiping = true;
         li.style.transition = "none";
-      });
+      }, { passive: true });
 
       li.addEventListener("touchmove", (e) => {
         if (!swiping) return;
@@ -179,7 +192,7 @@ function renderPriority() {
         } else {
           li.style.transform = "translateX(0)";
         }
-      });
+      }, { passive: true });
     }
 
     wrapper.appendChild(deleteLayer);
@@ -351,11 +364,11 @@ function calculateRemaining() {
 ========================= */
 
 function renderChart() {
-  if (!settings.showChart) return;
+  if (!settings.showChart || !chartCtx) return;
 
-  const canvas = document.getElementById("summary-chart");
-  const ctx = canvas.getContext("2d");
-  const legend = document.getElementById("chart-legend");
+  const canvas = chartCanvas;
+  const ctx = chartCtx;
+  const legend = chartLegend;
 
   const income = Number(data.income) || 0;
   if (income === 0) {
@@ -363,7 +376,6 @@ function renderChart() {
     const size = canvas.width;
     const center = size / 2;
 
-    // Empty ring
     ctx.beginPath();
     ctx.arc(center, center, size / 2 - 10, 0, Math.PI * 2);
     ctx.arc(center, center, (size / 2 - 10) * 0.55, Math.PI * 2, 0, true);
@@ -371,7 +383,6 @@ function renderChart() {
     ctx.fillStyle = "#1a1a1a";
     ctx.fill();
 
-    // Empty state text
     ctx.fillStyle = "#555";
     ctx.font = "13px -apple-system, sans-serif";
     ctx.textAlign = "center";
@@ -381,15 +392,6 @@ function renderChart() {
     legend.innerHTML = '<span style="color:#555;font-size:13px;">Set your income to get started.</span>';
     return;
   }
-
-  const categoryColors = {
-    "Bills": "#e74c3c",
-    "Subscription": "#e67e22",
-    "Grocery": "#f1c40f",
-    "Food / Drink": "#9b59b6",
-    "Transport": "#1abc9c",
-    "Others": "#7f8c8d",
-  };
 
   const categoryTotals = {};
 
@@ -413,7 +415,7 @@ function renderChart() {
   const segments = Object.entries(categoryTotals).map(([label, amount]) => ({
     label,
     amount,
-    color: categoryColors[label] || "#7f8c8d",
+    color: CATEGORY_COLORS[label] || "#7f8c8d",
   }));
 
   if (remaining > 0) {
@@ -569,6 +571,7 @@ confirmResetBtn.addEventListener("click", () => {
 
   const app = document.querySelector(".app");
   let dragging = false;
+  let pullDistance = 0;
 
   document.addEventListener("touchstart", (e) => {
     const tag = e.target.tagName;
@@ -578,8 +581,9 @@ confirmResetBtn.addEventListener("click", () => {
       startY = e.touches[0].clientY;
       pulling = true;
       dragging = false;
+      pullDistance = 0;
     }
-  });
+  }, { passive: true });
 
   document.addEventListener("touchmove", (e) => {
     if (!pulling) return;
@@ -588,11 +592,11 @@ confirmResetBtn.addEventListener("click", () => {
     if (dy < 0) { pulling = false; return; }
     if (dy > 10) {
       dragging = true;
-      const clamped = Math.min(dy, 120);
+      pullDistance = Math.min(dy, 120);
       app.style.transition = "none";
-      app.style.transform = `translateY(${clamped}px)`;
-      indicator.style.opacity = Math.min(clamped / threshold, 1);
-      pullText.textContent = clamped >= threshold ? "Release to refresh" : "Pull to refresh";
+      app.style.transform = `translateY(${pullDistance}px)`;
+      indicator.style.opacity = Math.min(pullDistance / threshold, 1);
+      pullText.textContent = pullDistance >= threshold ? "Release to refresh" : "Pull to refresh";
       e.preventDefault();
     }
   }, { passive: false });
@@ -604,11 +608,10 @@ confirmResetBtn.addEventListener("click", () => {
     }
     pulling = false;
     dragging = false;
-    const current = parseFloat(app.style.transform.replace(/[^0-9.-]/g, "")) || 0;
     app.style.transition = "transform 0.3s ease";
     app.style.transform = "";
 
-    if (current >= threshold) {
+    if (pullDistance >= threshold) {
       pullText.textContent = "Refreshing...";
       pullSpinner.classList.remove("hidden");
       indicator.style.opacity = "1";
@@ -617,6 +620,7 @@ confirmResetBtn.addEventListener("click", () => {
       return;
     }
 
+    pullDistance = 0;
     indicator.style.opacity = "0";
-  });
+  }, { passive: true });
 })();

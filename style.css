@@ -389,45 +389,15 @@ td {
 }
 
 /* =====================
-   Utility (future-proof)
+   Utility
 ===================== */
 .hidden {
-  display: none;
+  display: none !important;
 }
-
-#month-setup input {
-  margin-top: 10px;
-}
-
-#confirm-income {
-  background: #2c2c2c;
-  color: white;
-  padding: 12px;
-  border-radius: 12px;
-  border: none;
-  font-weight: 600;
-}
-
-#income-section input {
-  margin-top: 10px;
-}
-
-#confirm-income {
-  background: #2c2c2c;
-  color: #fff;
-  padding: 12px;
-  border-radius: 12px;
-  border: none;
-  font-weight: 600;
-}
-
-
-
 
 #income-card {
   cursor: pointer;
 }
-
 
 #income-card input {
   width: 100%;
@@ -436,8 +406,9 @@ td {
   border-radius: 12px;
 }
 
-
-/* MODAL OVERLAY */
+/* =====================
+   Modal
+===================== */
 .modal {
   position: fixed;
   inset: 0;
@@ -445,33 +416,14 @@ td {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  pointer-events: auto;   /* ✅ allow modal to receive clicks */
+  z-index: 9999;
+  pointer-events: auto;
 }
-
-.modal-card {
-  pointer-events: auto;   /* ✅ buttons become clickable */
-  z-index: 1001;
-}
-
-
 
 .modal.hidden {
   display: none;
 }
 
-.modal-card {
-  background: #1c1c1c;
-  padding: 24px;
-  border-radius: 16px;
-  max-width: 420px;
-  width: 90%;
-  z-index: 1001;          /* ABOVE overlay */
-  pointer-events: auto;  /* FORCE clickable */
-}
-
-
-/* MODAL CARD */
 .modal-card {
   background: #111;
   border-radius: 16px;
@@ -479,6 +431,8 @@ td {
   width: 90%;
   max-width: 360px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  z-index: 10000;
 }
 
 .modal-card h3 {
@@ -490,7 +444,6 @@ td {
   font-size: 14px;
 }
 
-/* MODAL BUTTONS */
 .modal-actions {
   display: flex;
   gap: 10px;
@@ -515,55 +468,10 @@ td {
   color: white;
 }
 
-/* HIDDEN */
-.hidden {
-  display: none !important;
-}
-
-/* =====================
-   MODAL CLICK FIX (IMPORTANT)
-===================== */
-
-/* Disable app interaction when modal is open */
-.modal:not(.hidden) ~ .app,
-.modal:not(.hidden) + .app,
-.modal:not(.hidden) {
-  pointer-events: auto;
-}
-
-/* Force modal to capture all clicks */
-.modal {
-  pointer-events: auto;
-}
-
-/* Disable background clicks */
-.modal:not(.hidden) {
-  z-index: 9999;
-}
-
-/* Prevent app from stealing clicks */
+/* Prevent app from stealing clicks when modal is open */
 .modal:not(.hidden) ~ main,
 .modal:not(.hidden) ~ .app {
   pointer-events: none;
-}
-
-/* Re-enable modal card & buttons */
-.modal-card,
-.modal-card * {
-  pointer-events: auto;
-}
-
-/* =====================
-   MODAL HARD LOCK
-===================== */
-
-body.modal-open .app {
-  pointer-events: none;
-  filter: blur(1px);
-}
-
-body.modal-open .modal {
-  pointer-events: auto;
 }
 
 .item-enter {
