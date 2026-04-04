@@ -135,8 +135,10 @@ function renderPriority() {
 
 function updatePriorityLockUI() {
   const form = document.getElementById("priority-form");
-  if (form && data.priorityLocked) {
-    form.style.display = "none";
+  const lockBadge = document.getElementById("priority-lock-badge");
+  if (data.priorityLocked) {
+    if (form) form.style.display = "none";
+    if (lockBadge) lockBadge.classList.remove("hidden");
   }
 }
 
