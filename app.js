@@ -121,11 +121,15 @@ function renderPriority() {
     deleteLayer.textContent = "Delete";
 
     const li = document.createElement("li");
+    const dateStr = bill.date ? new Date(bill.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
     li.innerHTML = `
-      <label style="display:flex; gap:8px;">
-        <input type="checkbox" ${bill.paid ? "checked" : ""} />
-        ${bill.name} (${bill.category})
-      </label>
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <label style="display:flex;gap:8px;">
+          <input type="checkbox" ${bill.paid ? "checked" : ""} />
+          ${bill.name} (${bill.category})
+        </label>
+        ${dateStr ? `<span class="date-stamp">${dateStr}</span>` : ""}
+      </div>
       <strong>RM ${bill.amount}</strong>
     `;
 
@@ -233,7 +237,7 @@ addPriorityBtn.addEventListener("click", () => {
   });
   if (hasError) return;
 
-  data.priority.push({ name, category, amount, paid: false });
+  data.priority.push({ name, category, amount, paid: false, date: new Date().toISOString() });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
   pbName.value = "";
@@ -254,9 +258,11 @@ function renderSecondChoice() {
 
   data.secondChoice.forEach(item => {
     const row = document.createElement("tr");
+    const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
     row.innerHTML = `
       <td>${item.name}</td>
       <td>${item.category}</td>
+      <td class="date-stamp">${dateStr}</td>
       <td>${item.type === "add" ? "+" : "-"} RM ${item.amount}</td>
     `;
     scTable.appendChild(row);
@@ -281,7 +287,7 @@ function addSecondChoice(type) {
   });
   if (hasError) return;
 
-  data.secondChoice.push({ name, category, amount, type });
+  data.secondChoice.push({ name, category, amount, type, date: new Date().toISOString() });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
   scName.value = "";

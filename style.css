@@ -557,6 +557,11 @@ body.modal-open .modal {
   pointer-events: auto;
 }
 
+.date-stamp {
+  font-size: 11px;
+  color: #666;
+}
+
 .lock-badge {
   font-size: 11px;
   background: #2a2a2a;
