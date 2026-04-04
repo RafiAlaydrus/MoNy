@@ -121,15 +121,11 @@ function renderPriority() {
     deleteLayer.textContent = "Delete";
 
     const li = document.createElement("li");
-    const dateStr = bill.date ? new Date(bill.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
     li.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:2px;">
-        <label style="display:flex;gap:8px;">
-          <input type="checkbox" ${bill.paid ? "checked" : ""} />
-          ${bill.name} (${bill.category})
-        </label>
-        ${dateStr ? `<span class="date-stamp">${dateStr}</span>` : ""}
-      </div>
+      <label style="display:flex; gap:8px;">
+        <input type="checkbox" ${bill.paid ? "checked" : ""} />
+        ${bill.name} (${bill.category})
+      </label>
       <strong>RM ${bill.amount}</strong>
     `;
 
