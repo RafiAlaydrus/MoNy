@@ -19,19 +19,20 @@ html, body {
 ===================== */
 .pull-indicator {
   position: fixed;
-  top: -50px;
+  top: 0;
   left: 0;
   right: 0;
-  height: 50px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   color: #888;
   font-size: 13px;
-  transition: transform 0.2s ease;
   z-index: 500;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .pull-spinner {

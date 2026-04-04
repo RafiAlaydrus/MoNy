@@ -540,13 +540,15 @@ confirmResetBtn.addEventListener("click", () => {
     }
   });
 
+  const app = document.querySelector(".app");
+
   document.addEventListener("touchmove", (e) => {
     if (!pulling) return;
     const dy = Math.min(e.touches[0].clientY - startY, 120);
     if (dy > 0) {
-      indicator.style.transform = `translateY(${dy}px)`;
-      document.body.style.transform = `translateY(${dy}px)`;
-      document.body.style.transition = "none";
+      app.style.transition = "none";
+      app.style.transform = `translateY(${dy}px)`;
+      indicator.style.opacity = Math.min(dy / threshold, 1);
       pullText.textContent = dy >= threshold ? "Release to refresh" : "Pull to refresh";
     }
   });
@@ -554,22 +556,19 @@ confirmResetBtn.addEventListener("click", () => {
   document.addEventListener("touchend", () => {
     if (!pulling) return;
     pulling = false;
-    const current = parseFloat(document.body.style.transform.replace(/[^0-9.-]/g, "")) || 0;
-    document.body.style.transition = "transform 0.3s ease";
-    document.body.style.transform = "";
-    indicator.style.transition = "transform 0.3s ease";
-    indicator.style.transform = "";
+    const current = parseFloat(app.style.transform.replace(/[^0-9.-]/g, "")) || 0;
+    app.style.transition = "transform 0.3s ease";
+    app.style.transform = "";
 
     if (current >= threshold) {
       pullText.textContent = "Refreshing...";
       pullSpinner.classList.remove("hidden");
-      indicator.style.transform = "translateY(50px)";
+      indicator.style.opacity = "1";
+      app.style.transform = "translateY(40px)";
       setTimeout(() => location.reload(), 600);
       return;
     }
 
-    setTimeout(() => {
-      indicator.style.transition = "";
-    }, 300);
+    indicator.style.opacity = "0";
   });
 })();
