@@ -95,6 +95,59 @@ html, body {
   color: #ccc;
 }
 
+.setting-row + .setting-row {
+  margin-top: 10px;
+}
+
+.setting-select {
+  background: #111;
+  color: #fff;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.setting-input {
+  background: #111;
+  color: #fff;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  width: 80px;
+  text-align: right;
+}
+
+.setting-input::placeholder {
+  color: #555;
+}
+
+.setting-btn-action {
+  width: 100%;
+  background: #2c2c2c;
+  color: #ccc;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.setting-btn-action:active {
+  background: #3a3a3a;
+}
+
+.budget-warning {
+  color: #e74c3c;
+  font-size: 12px;
+  text-align: center;
+  margin-top: 4px;
+}
+
 .setting-version {
   text-align: center;
   font-size: 11px;

@@ -46,7 +46,34 @@
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="setting-version">v1.0.0</div>
+            <div class="setting-row">
+              <span>Currency</span>
+              <select id="currency-select" class="setting-select">
+                <option value="RM">RM</option>
+                <option value="$">USD ($)</option>
+                <option value="S$">SGD (S$)</option>
+                <option value="€">EUR (€)</option>
+                <option value="£">GBP (£)</option>
+                <option value="¥">JPY (¥)</option>
+                <option value="₩">KRW (₩)</option>
+                <option value="Rp">IDR (Rp)</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <span>Sort transactions</span>
+              <select id="sort-select" class="setting-select">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <span>Budget limit</span>
+              <input type="number" inputmode="decimal" id="budget-limit-input" class="setting-input" placeholder="Off" />
+            </div>
+            <div class="setting-row">
+              <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
+            </div>
+            <div class="setting-version">v1.1.0</div>
           </div>
         </section>
       </div>
@@ -82,6 +109,7 @@
       <div class="card">
         <span>Remaining</span>
         <h2 id="remaining-money">RM 0</h2>
+        <p id="budget-warning" class="budget-warning hidden"></p>
       </div>
 
     </section>

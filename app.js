@@ -10,8 +10,15 @@ const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
 let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
   keepData: false,
-  showChart: false
+  showChart: false,
+  currency: "RM",
+  sortOrder: "newest",
+  budgetLimit: null
 };
+// Ensure new keys exist for older saved settings
+if (!settings.currency) settings.currency = "RM";
+if (!settings.sortOrder) settings.sortOrder = "newest";
+if (settings.budgetLimit === undefined) settings.budgetLimit = null;
 
 let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
 
@@ -73,6 +80,8 @@ const CATEGORY_COLORS = {
   "Others": "#7f8c8d",
 };
 
+function cur() { return settings.currency; }
+
 /* =========================
    HEADER
 ========================= */
@@ -88,7 +97,7 @@ monthText.textContent = now.toLocaleString("default", {
 
 function renderIncome() {
   incomeDisplay.textContent =
-    data.income !== null ? `RM ${data.income}` : "RM 0";
+    data.income !== null ? `${cur()} ${data.income}` : `${cur()} 0`;
 }
 
 incomeCard.addEventListener("click", () => {
@@ -144,7 +153,7 @@ function renderPriority() {
         <input type="checkbox" ${bill.paid ? "checked" : ""} />
         ${bill.name} (${bill.category})
       </label>
-      <strong>RM ${bill.amount}</strong>
+      <strong>${cur()} ${bill.amount}</strong>
     `;
 
     li.querySelector("input").addEventListener("change", (e) => {
@@ -277,14 +286,21 @@ function renderSecondChoice() {
     return;
   }
 
-  data.secondChoice.forEach(item => {
+  const sorted = [...data.secondChoice];
+  if (settings.sortOrder === "newest") {
+    sorted.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  } else {
+    sorted.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  }
+
+  sorted.forEach(item => {
     const row = document.createElement("tr");
     const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
     row.innerHTML = `
       <td>${item.name}</td>
       <td>${item.category}</td>
       <td class="date-stamp">${dateStr}</td>
-      <td>${item.type === "add" ? "+" : "-"} RM ${item.amount}</td>
+      <td>${item.type === "add" ? "+" : "-"} ${cur()} ${item.amount}</td>
     `;
     row.classList.add("item-enter");
     scTable.appendChild(row);
@@ -337,7 +353,7 @@ document.querySelectorAll(".second-form input, .second-form select").forEach(el 
 
 function calculateRemaining() {
   if (data.income === null) {
-    remainingMoneyEl.textContent = "RM 0.00";
+    remainingMoneyEl.textContent = `${cur()} 0.00`;
     return;
   }
 
@@ -354,7 +370,18 @@ function calculateRemaining() {
   });
 
   // ✅ FIX: force 2 decimal places
-  remainingMoneyEl.textContent = `RM ${remaining.toFixed(2)}`;
+  remainingMoneyEl.textContent = `${cur()} ${remaining.toFixed(2)}`;
+
+  // Budget limit warning
+  const warningEl = document.getElementById("budget-warning");
+  if (warningEl) {
+    if (settings.budgetLimit && remaining <= settings.budgetLimit) {
+      warningEl.textContent = `Warning: Remaining is below ${cur()} ${settings.budgetLimit}`;
+      warningEl.classList.remove("hidden");
+    } else {
+      warningEl.classList.add("hidden");
+    }
+  }
   renderChart();
 }
 
@@ -452,7 +479,7 @@ function renderChart() {
   ctx.font = "bold 18px -apple-system, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(`RM ${spent.toFixed(0)}`, center, center - 8);
+  ctx.fillText(`${cur()} ${spent.toFixed(0)}`, center, center - 8);
   ctx.font = "12px -apple-system, sans-serif";
   ctx.fillStyle = "#888";
   ctx.fillText("total spent", center, center + 12);
@@ -464,7 +491,7 @@ function renderChart() {
         <span class="legend-dot" style="background:${s.color}"></span>
         <span>${s.label}</span>
       </div>
-      <span class="legend-amount">RM ${s.amount.toFixed(2)}</span>
+      <span class="legend-amount">${cur()} ${s.amount.toFixed(2)}</span>
     </div>
   `).join("");
 }
@@ -522,6 +549,65 @@ chartToggle.addEventListener("change", () => {
   } else {
     chartSection.classList.add("hidden");
   }
+});
+
+/* =========================
+   CURRENCY SETTING
+========================= */
+
+const currencySelect = document.getElementById("currency-select");
+currencySelect.value = settings.currency;
+
+currencySelect.addEventListener("change", () => {
+  settings.currency = currencySelect.value;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  renderIncome();
+  renderPriority();
+  renderSecondChoice();
+  calculateRemaining();
+});
+
+/* =========================
+   SORT SETTING
+========================= */
+
+const sortSelect = document.getElementById("sort-select");
+sortSelect.value = settings.sortOrder;
+
+sortSelect.addEventListener("change", () => {
+  settings.sortOrder = sortSelect.value;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  renderSecondChoice();
+});
+
+/* =========================
+   BUDGET LIMIT SETTING
+========================= */
+
+const budgetLimitInput = document.getElementById("budget-limit-input");
+budgetLimitInput.value = settings.budgetLimit || "";
+
+budgetLimitInput.addEventListener("change", () => {
+  const val = Number(budgetLimitInput.value);
+  settings.budgetLimit = val > 0 ? val : null;
+  if (!val) budgetLimitInput.value = "";
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  calculateRemaining();
+});
+
+/* =========================
+   EXPORT DATA
+========================= */
+
+document.getElementById("export-data-btn").addEventListener("click", () => {
+  const exportObj = { data, settings };
+  const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `money-tracker-${currentMonthKey}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 });
 
 /* =========================
