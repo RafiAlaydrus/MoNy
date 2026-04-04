@@ -45,6 +45,14 @@
       <p id="current-month"></p>
     </header>
 
+    <!-- MONTHLY CHART -->
+    <section id="chart-section" class="hidden">
+      <div class="chart-container">
+        <canvas id="summary-chart" width="300" height="300"></canvas>
+        <div id="chart-legend"></div>
+      </div>
+    </section>
+
     <!-- SUMMARY -->
     <section class="summary">
 
@@ -76,7 +84,13 @@
       <!-- PRIORITY FORM -->
       <div class="second-form" id="priority-form">
         <input id="pb-name" placeholder="Bill name" />
-        <input id="pb-category" placeholder="Category" />
+        <select id="pb-category">
+          <option value="" disabled selected>Category</option>
+          <option value="Bills">Bills</option>
+          <option value="Subscription">Subscription</option>
+          <option value="Grocery">Grocery</option>
+          <option value="Others">Others</option>
+        </select>
         <input id="pb-amount" type="number" placeholder="Amount (RM)" />
 
         <button id="add-priority">Add Priority Bill</button>
@@ -93,7 +107,12 @@
 
       <div class="second-form">
         <input id="sc-name" placeholder="Name" />
-        <input id="sc-category" placeholder="Category" />
+        <select id="sc-category">
+          <option value="" disabled selected>Category</option>
+          <option value="Food / Drink">Food / Drink</option>
+          <option value="Transport">Transport</option>
+          <option value="Others">Others</option>
+        </select>
         <input id="sc-amount" type="number" placeholder="Amount (RM)" />
 
         <div class="actions">
@@ -112,15 +131,6 @@
         </thead>
         <tbody id="sc-table"></tbody>
       </table>
-    </section>
-
-    <!-- MONTHLY CHART -->
-    <section id="chart-section" class="hidden">
-      <h3>Monthly Summary</h3>
-      <div class="chart-container">
-        <canvas id="summary-chart" width="300" height="300"></canvas>
-        <div id="chart-legend"></div>
-      </div>
     </section>
 
   </main>

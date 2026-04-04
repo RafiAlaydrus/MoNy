@@ -206,7 +206,8 @@ h3 {
   padding: 14px;
 }
 
-.second-form input {
+.second-form input,
+.second-form select {
   width: 100%;
   padding: 12px;
   margin-bottom: 10px;
@@ -215,13 +216,29 @@ h3 {
   border-radius: 10px;
   color: #fff;
   font-size: 15px;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-.second-form input::placeholder {
+.second-form select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23777' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.second-form select option {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.second-form input::placeholder,
+.second-form select:invalid {
   color: #777;
 }
 
-.second-form input:focus {
+.second-form input:focus,
+.second-form select:focus {
   outline: none;
   border-color: #3a3a3a;
 }

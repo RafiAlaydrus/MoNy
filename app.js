@@ -169,7 +169,7 @@ addPriorityBtn.addEventListener("click", () => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
   document.getElementById("pb-name").value = "";
-  document.getElementById("pb-category").value = "";
+  document.getElementById("pb-category").selectedIndex = 0;
   document.getElementById("pb-amount").value = "";
 
   renderPriority();
@@ -205,7 +205,7 @@ function addSecondChoice(type) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
   scName.value = "";
-  scCategory.value = "";
+  scCategory.selectedIndex = 0;
   scAmount.value = "";
 
   renderSecondChoice();
@@ -261,32 +261,47 @@ function renderChart() {
     return;
   }
 
-  const priorityPaid = data.priority
-    .filter(b => b.paid)
-    .reduce((sum, b) => sum + Number(b.amount), 0);
+  const categoryColors = {
+    "Bills": "#e74c3c",
+    "Subscription": "#e67e22",
+    "Grocery": "#f1c40f",
+    "Food / Drink": "#9b59b6",
+    "Transport": "#1abc9c",
+    "Others": "#7f8c8d",
+  };
 
-  const priorityUnpaid = data.priority
-    .filter(b => !b.paid)
-    .reduce((sum, b) => sum + Number(b.amount), 0);
+  const categoryTotals = {};
 
-  let scTakes = 0;
-  let scAdds = 0;
-  data.secondChoice.forEach(item => {
-    if (item.type === "take") scTakes += Number(item.amount);
-    else scAdds += Number(item.amount);
+  data.priority.forEach(bill => {
+    if (bill.paid) {
+      const cat = bill.category || "Others";
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(bill.amount);
+    }
   });
 
-  const totalPool = income + scAdds;
-  const spent = priorityPaid + scTakes;
-  const remaining = Math.max(totalPool - spent - priorityUnpaid, 0);
+  data.secondChoice.forEach(item => {
+    if (item.type === "take") {
+      const cat = item.category || "Others";
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(item.amount);
+    }
+  });
 
-  const segments = [
-    { label: "Priority (Paid)", amount: priorityPaid, color: "#e74c3c" },
-    { label: "Priority (Unpaid)", amount: priorityUnpaid, color: "#e67e22" },
-    { label: "Second Choice", amount: scTakes, color: "#9b59b6" },
-    { label: "Added Funds", amount: scAdds, color: "#2ecc71" },
-    { label: "Remaining", amount: remaining, color: "#3498db" },
-  ].filter(s => s.amount > 0);
+  const spent = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
+  const remaining = Math.max(income - spent, 0);
+
+  const segments = Object.entries(categoryTotals).map(([label, amount]) => ({
+    label,
+    amount,
+    color: categoryColors[label] || "#7f8c8d",
+  }));
+
+  if (remaining > 0) {
+    segments.push({ label: "Remaining", amount: remaining, color: "#3498db" });
+  }
+
+  if (segments.length === 0) {
+    segments.push({ label: "Remaining", amount: income, color: "#3498db" });
+  }
 
   // Draw donut chart
   const size = canvas.width;
