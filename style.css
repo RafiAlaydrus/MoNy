@@ -171,7 +171,7 @@ header p {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 8px;
 }
 
 .card {
@@ -203,7 +203,7 @@ header p {
    Section Titles
 ===================== */
 h3 {
-  margin: 30px 0 12px;
+  margin: 16px 0 10px;
   font-size: 18px;
   font-weight: 600;
 }
