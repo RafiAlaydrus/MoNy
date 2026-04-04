@@ -9,7 +9,8 @@ const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
 let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
-  keepData: false
+  keepData: false,
+  showChart: false
 };
 
 let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -238,8 +239,97 @@ function calculateRemaining() {
 
   // ✅ FIX: force 2 decimal places
   remainingMoneyEl.textContent = `RM ${remaining.toFixed(2)}`;
+  renderChart();
 }
 
+
+/* =========================
+   CHART
+========================= */
+
+function renderChart() {
+  if (!settings.showChart) return;
+
+  const canvas = document.getElementById("summary-chart");
+  const ctx = canvas.getContext("2d");
+  const legend = document.getElementById("chart-legend");
+
+  const income = Number(data.income) || 0;
+  if (income === 0) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    legend.innerHTML = '<span style="color:#666;font-size:13px;">Set your income to see the chart.</span>';
+    return;
+  }
+
+  const priorityPaid = data.priority
+    .filter(b => b.paid)
+    .reduce((sum, b) => sum + Number(b.amount), 0);
+
+  const priorityUnpaid = data.priority
+    .filter(b => !b.paid)
+    .reduce((sum, b) => sum + Number(b.amount), 0);
+
+  let scTakes = 0;
+  let scAdds = 0;
+  data.secondChoice.forEach(item => {
+    if (item.type === "take") scTakes += Number(item.amount);
+    else scAdds += Number(item.amount);
+  });
+
+  const totalPool = income + scAdds;
+  const spent = priorityPaid + scTakes;
+  const remaining = Math.max(totalPool - spent - priorityUnpaid, 0);
+
+  const segments = [
+    { label: "Priority (Paid)", amount: priorityPaid, color: "#e74c3c" },
+    { label: "Priority (Unpaid)", amount: priorityUnpaid, color: "#e67e22" },
+    { label: "Second Choice", amount: scTakes, color: "#9b59b6" },
+    { label: "Added Funds", amount: scAdds, color: "#2ecc71" },
+    { label: "Remaining", amount: remaining, color: "#3498db" },
+  ].filter(s => s.amount > 0);
+
+  // Draw donut chart
+  const size = canvas.width;
+  const center = size / 2;
+  const radius = size / 2 - 10;
+  const innerRadius = radius * 0.55;
+  const total = segments.reduce((sum, s) => sum + s.amount, 0);
+
+  ctx.clearRect(0, 0, size, size);
+
+  let startAngle = -Math.PI / 2;
+  segments.forEach(seg => {
+    const sliceAngle = (seg.amount / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(center, center, radius, startAngle, startAngle + sliceAngle);
+    ctx.arc(center, center, innerRadius, startAngle + sliceAngle, startAngle, true);
+    ctx.closePath();
+    ctx.fillStyle = seg.color;
+    ctx.fill();
+    startAngle += sliceAngle;
+  });
+
+  // Center text
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 18px -apple-system, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`RM ${spent.toFixed(0)}`, center, center - 8);
+  ctx.font = "12px -apple-system, sans-serif";
+  ctx.fillStyle = "#888";
+  ctx.fillText("total spent", center, center + 12);
+
+  // Legend
+  legend.innerHTML = segments.map(s => `
+    <div class="legend-item">
+      <div class="legend-left">
+        <span class="legend-dot" style="background:${s.color}"></span>
+        <span>${s.label}</span>
+      </div>
+      <span class="legend-amount">RM ${s.amount.toFixed(2)}</span>
+    </div>
+  `).join("");
+}
 
 /* =========================
    INITIAL RENDER
@@ -250,6 +340,7 @@ renderPriority();
 renderSecondChoice();
 calculateRemaining();
 updatePriorityLockUI();
+renderChart();
 
 /* =========================
    SETTINGS PANEL
@@ -275,6 +366,24 @@ document.addEventListener("click", (e) => {
 keepDataToggle.addEventListener("change", () => {
   settings.keepData = keepDataToggle.checked;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+});
+
+const chartToggle = document.getElementById("chart-toggle");
+const chartSection = document.getElementById("chart-section");
+
+chartToggle.checked = settings.showChart;
+if (settings.showChart) chartSection.classList.remove("hidden");
+
+chartToggle.addEventListener("change", () => {
+  settings.showChart = chartToggle.checked;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+
+  if (settings.showChart) {
+    chartSection.classList.remove("hidden");
+    renderChart();
+  } else {
+    chartSection.classList.add("hidden");
+  }
 });
 
 /* =========================
