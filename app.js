@@ -112,9 +112,15 @@ incomeInput.addEventListener("keydown", (e) => {
 function renderPriority() {
   priorityList.innerHTML = "";
 
-  data.priority.forEach((bill) => {
-    const li = document.createElement("li");
+  data.priority.forEach((bill, index) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "swipe-wrapper";
 
+    const deleteLayer = document.createElement("div");
+    deleteLayer.className = "swipe-delete-bg";
+    deleteLayer.textContent = "Delete";
+
+    const li = document.createElement("li");
     li.innerHTML = `
       <label style="display:flex; gap:8px;">
         <input type="checkbox" ${bill.paid ? "checked" : ""} />
@@ -129,7 +135,51 @@ function renderPriority() {
       calculateRemaining();
     });
 
-    priorityList.appendChild(li);
+    // Swipe-to-delete (only when unlocked)
+    if (!data.priorityLocked) {
+      let startX = 0;
+      let currentX = 0;
+      let swiping = false;
+
+      li.addEventListener("touchstart", (e) => {
+        startX = e.touches[0].clientX;
+        currentX = 0;
+        swiping = true;
+        li.style.transition = "none";
+      });
+
+      li.addEventListener("touchmove", (e) => {
+        if (!swiping) return;
+        currentX = e.touches[0].clientX - startX;
+        if (currentX < 0) {
+          li.style.transform = `translateX(${Math.max(currentX, -120)}px)`;
+        }
+      });
+
+      li.addEventListener("touchend", () => {
+        swiping = false;
+        li.style.transition = "transform 0.3s ease";
+        if (currentX < -80) {
+          li.style.transform = "translateX(-100%)";
+          li.style.opacity = "0";
+          wrapper.style.transition = "max-height 0.3s ease, opacity 0.3s ease";
+          wrapper.style.maxHeight = "0";
+          wrapper.style.overflow = "hidden";
+          setTimeout(() => {
+            data.priority.splice(index, 1);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            renderPriority();
+            calculateRemaining();
+          }, 300);
+        } else {
+          li.style.transform = "translateX(0)";
+        }
+      });
+    }
+
+    wrapper.appendChild(deleteLayer);
+    wrapper.appendChild(li);
+    priorityList.appendChild(wrapper);
   });
 }
 
