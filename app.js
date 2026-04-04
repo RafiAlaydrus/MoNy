@@ -528,6 +528,7 @@ confirmResetBtn.addEventListener("click", () => {
 (function () {
   const indicator = document.getElementById("pull-indicator");
   const pullText = document.getElementById("pull-text");
+  const pullSpinner = document.getElementById("pull-spinner");
   let startY = 0;
   let pulling = false;
   const threshold = 80;
@@ -560,7 +561,11 @@ confirmResetBtn.addEventListener("click", () => {
     indicator.style.transform = "";
 
     if (current >= threshold) {
-      location.reload();
+      pullText.textContent = "Refreshing...";
+      pullSpinner.classList.remove("hidden");
+      indicator.style.transform = "translateY(50px)";
+      setTimeout(() => location.reload(), 600);
+      return;
     }
 
     setTimeout(() => {
