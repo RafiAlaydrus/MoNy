@@ -243,6 +243,17 @@ h3 {
   border-color: #3a3a3a;
 }
 
+.second-form .input-error {
+  border-color: #b3261e;
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
 /* =====================
    Action Buttons
 ===================== */

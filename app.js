@@ -159,18 +159,34 @@ confirmPriorityBtn.addEventListener("click", () => {
 addPriorityBtn.addEventListener("click", () => {
   if (data.priorityLocked) return;
 
-  const name = document.getElementById("pb-name").value.trim();
-  const category = document.getElementById("pb-category").value.trim();
-  const amount = Number(document.getElementById("pb-amount").value);
+  const pbName = document.getElementById("pb-name");
+  const pbCategory = document.getElementById("pb-category");
+  const pbAmount = document.getElementById("pb-amount");
 
-  if (!name || !category || !amount) return;
+  const name = pbName.value.trim();
+  const category = pbCategory.value;
+  const amount = Number(pbAmount.value);
+
+  const fields = [
+    { el: pbName, valid: !!name },
+    { el: pbCategory, valid: !!category },
+    { el: pbAmount, valid: !!amount },
+  ];
+
+  let hasError = false;
+  fields.forEach(f => {
+    if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
+    else f.el.classList.remove("input-error");
+  });
+  if (hasError) return;
 
   data.priority.push({ name, category, amount, paid: false });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
-  document.getElementById("pb-name").value = "";
-  document.getElementById("pb-category").selectedIndex = 0;
-  document.getElementById("pb-amount").value = "";
+  pbName.value = "";
+  pbCategory.selectedIndex = 0;
+  pbAmount.value = "";
+  fields.forEach(f => f.el.classList.remove("input-error"));
 
   renderPriority();
   calculateRemaining();
@@ -196,10 +212,21 @@ function renderSecondChoice() {
 
 function addSecondChoice(type) {
   const name = scName.value.trim();
-  const category = scCategory.value.trim();
+  const category = scCategory.value;
   const amount = Number(scAmount.value);
 
-  if (!name || !category || !amount) return;
+  const fields = [
+    { el: scName, valid: !!name },
+    { el: scCategory, valid: !!category },
+    { el: scAmount, valid: !!amount },
+  ];
+
+  let hasError = false;
+  fields.forEach(f => {
+    if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
+    else f.el.classList.remove("input-error");
+  });
+  if (hasError) return;
 
   data.secondChoice.push({ name, category, amount, type });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -207,6 +234,7 @@ function addSecondChoice(type) {
   scName.value = "";
   scCategory.selectedIndex = 0;
   scAmount.value = "";
+  fields.forEach(f => f.el.classList.remove("input-error"));
 
   renderSecondChoice();
   calculateRemaining();
@@ -214,6 +242,12 @@ function addSecondChoice(type) {
 
 addMoneyBtn.addEventListener("click", () => addSecondChoice("add"));
 takeMoneyBtn.addEventListener("click", () => addSecondChoice("take"));
+
+// Clear error highlight on input
+document.querySelectorAll(".second-form input, .second-form select").forEach(el => {
+  el.addEventListener("input", () => el.classList.remove("input-error"));
+  el.addEventListener("change", () => el.classList.remove("input-error"));
+});
 
 /* =========================
    CALCULATION
