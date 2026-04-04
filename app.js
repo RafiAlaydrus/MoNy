@@ -205,6 +205,7 @@ confirmPriorityBtn.addEventListener("click", () => {
   data.priorityLocked = true;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   priorityModal.classList.add("hidden");
+  renderPriority();
   updatePriorityLockUI();
 });
 
