@@ -549,7 +549,9 @@ confirmResetBtn.addEventListener("click", () => {
 
   document.addEventListener("touchmove", (e) => {
     if (!pulling) return;
+    if (window.scrollY > 0) { pulling = false; return; }
     const dy = e.touches[0].clientY - startY;
+    if (dy < 0) { pulling = false; return; }
     if (dy > 10) {
       dragging = true;
       const clamped = Math.min(dy, 120);
