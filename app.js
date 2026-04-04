@@ -520,3 +520,51 @@ confirmResetBtn.addEventListener("click", () => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   location.reload(); // clean reset
 });
+
+/* =========================
+   PULL TO REFRESH
+========================= */
+
+(function () {
+  const indicator = document.getElementById("pull-indicator");
+  const pullText = document.getElementById("pull-text");
+  let startY = 0;
+  let pulling = false;
+  const threshold = 80;
+
+  document.addEventListener("touchstart", (e) => {
+    if (window.scrollY === 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }
+  });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!pulling) return;
+    const dy = Math.min(e.touches[0].clientY - startY, 120);
+    if (dy > 0) {
+      indicator.style.transform = `translateY(${dy}px)`;
+      document.body.style.transform = `translateY(${dy}px)`;
+      document.body.style.transition = "none";
+      pullText.textContent = dy >= threshold ? "Release to refresh" : "Pull to refresh";
+    }
+  });
+
+  document.addEventListener("touchend", () => {
+    if (!pulling) return;
+    pulling = false;
+    const current = parseFloat(document.body.style.transform.replace(/[^0-9.-]/g, "")) || 0;
+    document.body.style.transition = "transform 0.3s ease";
+    document.body.style.transform = "";
+    indicator.style.transition = "transform 0.3s ease";
+    indicator.style.transform = "";
+
+    if (current >= threshold) {
+      location.reload();
+    }
+
+    setTimeout(() => {
+      indicator.style.transition = "";
+    }, 300);
+  });
+})();
