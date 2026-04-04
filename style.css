@@ -528,7 +528,8 @@ body.modal-open .modal {
    Monthly Chart
 ===================== */
 #chart-section {
-  margin-top: 30px;
+  margin-top: 16px;
+  margin-bottom: 28px;
 }
 
 .chart-container {
