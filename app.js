@@ -534,7 +534,8 @@ confirmResetBtn.addEventListener("click", () => {
   const threshold = 80;
 
   document.addEventListener("touchstart", (e) => {
-    if (window.scrollY === 0) {
+    const modalOpen = document.querySelector(".modal:not(.hidden)");
+    if (window.scrollY === 0 && !modalOpen) {
       startY = e.touches[0].clientY;
       pulling = true;
     }
