@@ -533,30 +533,41 @@ confirmResetBtn.addEventListener("click", () => {
   let pulling = false;
   const threshold = 80;
 
+  const app = document.querySelector(".app");
+  let dragging = false;
+
   document.addEventListener("touchstart", (e) => {
-    const modalOpen = document.querySelector(".modal:not(.hidden)");
-    if (window.scrollY === 0 && !modalOpen) {
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON" || tag === "LABEL") return;
+    if (document.querySelector(".modal:not(.hidden)")) return;
+    if (window.scrollY === 0) {
       startY = e.touches[0].clientY;
       pulling = true;
+      dragging = false;
     }
   });
-
-  const app = document.querySelector(".app");
 
   document.addEventListener("touchmove", (e) => {
     if (!pulling) return;
-    const dy = Math.min(e.touches[0].clientY - startY, 120);
-    if (dy > 0) {
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 10) {
+      dragging = true;
+      const clamped = Math.min(dy, 120);
       app.style.transition = "none";
-      app.style.transform = `translateY(${dy}px)`;
-      indicator.style.opacity = Math.min(dy / threshold, 1);
-      pullText.textContent = dy >= threshold ? "Release to refresh" : "Pull to refresh";
+      app.style.transform = `translateY(${clamped}px)`;
+      indicator.style.opacity = Math.min(clamped / threshold, 1);
+      pullText.textContent = clamped >= threshold ? "Release to refresh" : "Pull to refresh";
+      e.preventDefault();
     }
-  });
+  }, { passive: false });
 
   document.addEventListener("touchend", () => {
-    if (!pulling) return;
+    if (!pulling || !dragging) {
+      pulling = false;
+      return;
+    }
     pulling = false;
+    dragging = false;
     const current = parseFloat(app.style.transform.replace(/[^0-9.-]/g, "")) || 0;
     app.style.transition = "transform 0.3s ease";
     app.style.transform = "";
