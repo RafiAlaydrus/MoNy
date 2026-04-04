@@ -29,6 +29,13 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
+        <div class="setting-row">
+          <span>Show monthly chart</span>
+          <label class="toggle">
+            <input type="checkbox" id="chart-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
       </div>
     </section>
 
@@ -105,6 +112,15 @@
         </thead>
         <tbody id="sc-table"></tbody>
       </table>
+    </section>
+
+    <!-- MONTHLY CHART -->
+    <section id="chart-section" class="hidden">
+      <h3>Monthly Summary</h3>
+      <div class="chart-container">
+        <canvas id="summary-chart" width="300" height="300"></canvas>
+        <div id="chart-legend"></div>
+      </div>
     </section>
 
   </main>
