@@ -468,8 +468,35 @@ function calculateRemaining() {
       : -Number(item.amount);
   });
 
-  // ✅ FIX: force 2 decimal places
   remainingMoneyEl.textContent = `${cur()} ${fmt(remaining)}`;
+
+  // Progress bar
+  const income = Number(data.income);
+  const spent = income - remaining;
+  const pct = Math.min(Math.max((spent / income) * 100, 0), 100);
+  const fill = document.getElementById("spend-bar-fill");
+  const label = document.getElementById("spend-bar-label");
+  const limitMark = document.getElementById("spend-bar-limit");
+
+  fill.style.width = `${pct}%`;
+  label.textContent = `${Math.round(pct)}% spent`;
+
+  if (pct < 50) {
+    fill.style.background = "#1e7f43";
+  } else if (pct < 75) {
+    fill.style.background = "#e6a817";
+  } else {
+    fill.style.background = "#e74c3c";
+  }
+
+  // Budget limit marker
+  if (settings.budgetLimit && income > 0) {
+    const limitSpendPct = ((income - settings.budgetLimit) / income) * 100;
+    limitMark.style.left = `${Math.min(Math.max(limitSpendPct, 0), 100)}%`;
+    limitMark.classList.remove("hidden");
+  } else {
+    limitMark.classList.add("hidden");
+  }
 
   // Budget limit warning
   const warningEl = document.getElementById("budget-warning");

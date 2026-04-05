@@ -80,7 +80,7 @@
             <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.2.4</div>
+            <div class="setting-version">v1.2.5</div>
           </div>
         </section>
       </div>
@@ -116,6 +116,13 @@
       <div class="card">
         <span>Remaining</span>
         <h2 id="remaining-money">RM 0</h2>
+        <div class="spend-bar-wrapper">
+          <div class="spend-bar-track">
+            <div id="spend-bar-fill" class="spend-bar-fill"></div>
+            <div id="spend-bar-limit" class="spend-bar-limit hidden"></div>
+          </div>
+          <span id="spend-bar-label" class="spend-bar-label">0% spent</span>
+        </div>
         <p id="budget-warning" class="budget-warning hidden"></p>
       </div>
 
