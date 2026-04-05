@@ -613,6 +613,12 @@ function calculateRemaining() {
 
   if (data.groceryBudget) remaining -= Number(data.groceryBudget);
 
+  data.groceryItems.forEach(item => {
+    remaining += item.type === "add"
+      ? Number(item.amount)
+      : -Number(item.amount);
+  });
+
   data.secondChoice.forEach(item => {
     remaining += item.type === "add"
       ? Number(item.amount)
