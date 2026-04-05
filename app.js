@@ -701,9 +701,13 @@ function renderChart() {
     }
   });
 
-  data.groceryItems.forEach(item => {
-    categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + Number(item.amount);
-  });
+  if (data.groceryBudget) {
+    const grocerySpent = data.groceryItems.reduce((sum, item) => sum + Number(item.amount), 0);
+    categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + Math.max(Number(data.groceryBudget), grocerySpent);
+  } else if (data.groceryItems.length > 0) {
+    const grocerySpent = data.groceryItems.reduce((sum, item) => sum + Number(item.amount), 0);
+    categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + grocerySpent;
+  }
 
   data.secondChoice.forEach(item => {
     if (item.type === "take") {
