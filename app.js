@@ -98,7 +98,7 @@ function showUndo(message, onExpire, onUndo) {
   if (undoTimeout) { clearTimeout(undoTimeout); }
 
   undoText.textContent = message;
-  undoToast.classList.remove("hidden");
+  undoToast.classList.remove("hidden", "fading");
 
   // Reset and animate bar
   undoBar.style.transition = "none";
@@ -110,16 +110,28 @@ function showUndo(message, onExpire, onUndo) {
 
   undoCallback = onUndo;
   undoTimeout = setTimeout(() => {
-    undoToast.classList.add("hidden");
-    onExpire();
-    undoTimeout = null;
-    undoCallback = null;
+    undoToast.classList.add("fading");
+    setTimeout(() => {
+      undoToast.classList.add("hidden");
+      undoToast.classList.remove("fading");
+      onExpire();
+      undoTimeout = null;
+      undoCallback = null;
+    }, 300);
   }, 3000);
+}
+
+function hideUndo() {
+  undoToast.classList.add("fading");
+  setTimeout(() => {
+    undoToast.classList.add("hidden");
+    undoToast.classList.remove("fading");
+  }, 300);
 }
 
 undoBtn.addEventListener("click", () => {
   if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
-  undoToast.classList.add("hidden");
+  hideUndo();
   if (undoCallback) { undoCallback(); undoCallback = null; }
 });
 

@@ -632,6 +632,15 @@ td {
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+}
+
+.undo-toast.fading {
+  animation: toast-out 0.3s ease forwards;
+}
+
 /* =====================
    Priority Buttons
 ===================== */
