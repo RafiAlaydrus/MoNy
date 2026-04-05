@@ -82,6 +82,8 @@ const CATEGORY_COLORS = {
 };
 
 function cur() { return settings.currency; }
+function fmt(n) { return Number(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtInt(n) { return Number(n).toLocaleString("en"); }
 
 /* =========================
    UNDO TOAST
@@ -151,7 +153,7 @@ monthText.textContent = now.toLocaleString("default", {
 
 function renderIncome() {
   incomeDisplay.textContent =
-    data.income !== null ? `${cur()} ${data.income}` : `${cur()} 0`;
+    data.income !== null ? `${cur()} ${fmtInt(data.income)}` : `${cur()} 0`;
 }
 
 incomeCard.addEventListener("click", () => {
@@ -207,7 +209,7 @@ function renderPriority() {
         <input type="checkbox" ${bill.paid ? "checked" : ""} />
         ${bill.name} (${bill.category})
       </label>
-      <strong>${cur()} ${bill.amount}</strong>
+      <strong>${cur()} ${fmt(bill.amount)}</strong>
     `;
 
     li.querySelector("input").addEventListener("change", (e) => {
@@ -397,7 +399,7 @@ function renderSecondChoice() {
       <td>${item.name}</td>
       <td>${item.category}</td>
       <td class="date-stamp">${dateStr}</td>
-      <td>${item.type === "add" ? "+" : "-"} ${cur()} ${item.amount}</td>
+      <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
     `;
     row.classList.add("item-enter");
     scTable.appendChild(row);
@@ -450,7 +452,7 @@ document.querySelectorAll(".second-form input, .second-form select").forEach(el 
 
 function calculateRemaining() {
   if (data.income === null) {
-    remainingMoneyEl.textContent = `${cur()} 0.00`;
+    remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
     return;
   }
 
@@ -467,13 +469,13 @@ function calculateRemaining() {
   });
 
   // ✅ FIX: force 2 decimal places
-  remainingMoneyEl.textContent = `${cur()} ${remaining.toFixed(2)}`;
+  remainingMoneyEl.textContent = `${cur()} ${fmt(remaining)}`;
 
   // Budget limit warning
   const warningEl = document.getElementById("budget-warning");
   if (warningEl) {
     if (settings.budgetLimit && remaining <= settings.budgetLimit) {
-      warningEl.textContent = `Warning: Remaining is below ${cur()} ${settings.budgetLimit}`;
+      warningEl.textContent = `Warning: Remaining is below ${cur()} ${fmt(settings.budgetLimit)}`;
       warningEl.classList.remove("hidden");
     } else {
       warningEl.classList.add("hidden");
@@ -576,7 +578,7 @@ function renderChart() {
   ctx.font = "bold 18px -apple-system, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(`${cur()} ${spent.toFixed(0)}`, center, center - 8);
+  ctx.fillText(`${cur()} ${fmtInt(spent)}`, center, center - 8);
   ctx.font = "12px -apple-system, sans-serif";
   ctx.fillStyle = "#888";
   ctx.fillText("total spent", center, center + 12);
@@ -588,7 +590,7 @@ function renderChart() {
         <span class="legend-dot" style="background:${s.color}"></span>
         <span>${s.label}</span>
       </div>
-      <span class="legend-amount">${cur()} ${s.amount.toFixed(2)}</span>
+      <span class="legend-amount">${cur()} ${fmt(s.amount)}</span>
     </div>
   `).join("");
 }
