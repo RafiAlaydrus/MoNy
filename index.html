@@ -80,7 +80,7 @@
             <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.2.5</div>
+            <div class="setting-version">v1.3.0</div>
           </div>
         </section>
       </div>
@@ -156,6 +156,50 @@
 
       <!-- PRIORITY LIST -->
       <ul id="priority-list"></ul>
+    </section>
+
+    <!-- GROCERY -->
+    <section>
+      <h3>Grocery</h3>
+
+      <div class="card" id="grocery-card">
+        <span>Grocery Budget</span>
+        <h2 id="grocery-budget-display">RM 0</h2>
+
+        <input
+          type="number"
+          inputmode="decimal"
+          id="grocery-budget-input"
+          placeholder="Set budget (RM)"
+          class="hidden"
+        />
+        <div id="grocery-bar-wrapper" class="spend-bar-wrapper hidden">
+          <div class="spend-bar-track">
+            <div id="grocery-bar-fill" class="spend-bar-fill"></div>
+          </div>
+          <span id="grocery-bar-label" class="spend-bar-label">0% spent</span>
+        </div>
+      </div>
+
+      <div class="second-form grocery-form">
+        <input id="gr-name" placeholder="Item name" />
+        <input id="gr-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
+
+        <div class="actions">
+          <button id="add-grocery">+ Add Item</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Date</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody id="grocery-table"></tbody>
+      </table>
     </section>
 
     <!-- SECOND CHOICE -->

@@ -29,6 +29,8 @@ if (!data) {
     income: null,
     priority: [],
     priorityLocked: false,
+    groceryBudget: null,
+    groceryItems: [],
     secondChoice: []
   };
 } else if (!settings.keepData && data.month !== currentMonthKey) {
@@ -37,10 +39,16 @@ if (!data) {
     income: null,
     priority: [],
     priorityLocked: false,
+    groceryBudget: null,
+    groceryItems: [],
     secondChoice: []
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
+
+// Ensure grocery fields exist for older saved data
+if (!data.groceryItems) data.groceryItems = [];
+if (data.groceryBudget === undefined) data.groceryBudget = null;
 
 /* =========================
    DOM REFERENCES (SAFE)
@@ -60,6 +68,14 @@ const savePriorityBtn = document.getElementById("save-priority");
 const priorityModal = document.getElementById("priority-modal");
 const confirmPriorityBtn = document.getElementById("confirm-priority");
 const cancelPriorityBtn = document.getElementById("cancel-priority");
+
+const groceryCard = document.getElementById("grocery-card");
+const groceryBudgetDisplay = document.getElementById("grocery-budget-display");
+const groceryBudgetInput = document.getElementById("grocery-budget-input");
+const grName = document.getElementById("gr-name");
+const grAmount = document.getElementById("gr-amount");
+const addGroceryBtn = document.getElementById("add-grocery");
+const groceryTable = document.getElementById("grocery-table");
 
 const scName = document.getElementById("sc-name");
 const scCategory = document.getElementById("sc-category");
@@ -374,6 +390,133 @@ copyLastBtn.addEventListener("click", () => {
 updateCopyLastBtn();
 
 /* =========================
+   GROCERY
+========================= */
+
+function renderGroceryBudget() {
+  groceryBudgetDisplay.textContent =
+    data.groceryBudget !== null ? `${cur()} ${fmtInt(data.groceryBudget)}` : `${cur()} 0`;
+}
+
+groceryCard.addEventListener("click", (e) => {
+  if (e.target === groceryBudgetInput) return;
+  groceryBudgetInput.classList.remove("hidden");
+  groceryBudgetInput.value = data.groceryBudget ?? "";
+  groceryBudgetInput.focus();
+});
+
+function saveGroceryBudget() {
+  const value = Number(groceryBudgetInput.value);
+
+  if (!value || value <= 0) {
+    groceryBudgetInput.classList.add("hidden");
+    return;
+  }
+
+  data.groceryBudget = value;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+  groceryBudgetInput.classList.add("hidden");
+  renderGroceryBudget();
+  updateGroceryBar();
+  calculateRemaining();
+}
+
+groceryBudgetInput.addEventListener("blur", saveGroceryBudget);
+groceryBudgetInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") groceryBudgetInput.blur();
+});
+
+function getGrocerySpent() {
+  return data.groceryItems.reduce((sum, item) => sum + Number(item.amount), 0);
+}
+
+function updateGroceryBar() {
+  const wrapper = document.getElementById("grocery-bar-wrapper");
+  const fill = document.getElementById("grocery-bar-fill");
+  const label = document.getElementById("grocery-bar-label");
+
+  if (!data.groceryBudget || data.groceryBudget <= 0) {
+    wrapper.classList.add("hidden");
+    return;
+  }
+
+  wrapper.classList.remove("hidden");
+  const budget = Number(data.groceryBudget);
+  const spent = getGrocerySpent();
+  const remaining = budget - spent;
+  const pct = Math.min(Math.max((spent / budget) * 100, 0), 100);
+
+  fill.style.width = `${pct}%`;
+  label.textContent = `${Math.round(pct)}% spent · ${cur()} ${fmt(remaining)} left`;
+
+  if (pct < 50) {
+    fill.style.background = "#1e7f43";
+  } else if (pct < 75) {
+    fill.style.background = "#e6a817";
+  } else {
+    fill.style.background = "#e74c3c";
+  }
+}
+
+function renderGroceryItems() {
+  groceryTable.innerHTML = "";
+
+  if (data.groceryItems.length === 0) {
+    groceryTable.innerHTML = '<tr><td colspan="3" class="empty-state">No grocery items yet.</td></tr>';
+    return;
+  }
+
+  const sorted = [...data.groceryItems];
+  if (settings.sortOrder === "newest") {
+    sorted.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  } else {
+    sorted.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  }
+
+  sorted.forEach(item => {
+    const row = document.createElement("tr");
+    const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+    row.innerHTML = `
+      <td>${item.name}</td>
+      <td class="date-stamp">${dateStr}</td>
+      <td>- ${cur()} ${fmt(item.amount)}</td>
+    `;
+    row.classList.add("item-enter");
+    groceryTable.appendChild(row);
+    requestAnimationFrame(() => row.classList.add("item-enter-active"));
+  });
+}
+
+addGroceryBtn.addEventListener("click", () => {
+  const name = grName.value.trim();
+  const amount = Number(grAmount.value);
+
+  const fields = [
+    { el: grName, valid: !!name },
+    { el: grAmount, valid: !!amount },
+  ];
+
+  let hasError = false;
+  fields.forEach(f => {
+    if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
+    else f.el.classList.remove("input-error");
+  });
+  if (hasError) return;
+
+  data.groceryItems.push({ name, amount, date: new Date().toISOString() });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+  grName.value = "";
+  grAmount.value = "";
+  fields.forEach(f => f.el.classList.remove("input-error"));
+
+  renderGroceryItems();
+  updateGroceryBar();
+  calculateRemaining();
+});
+
+/* =========================
    SECOND CHOICE
 ========================= */
 
@@ -462,6 +605,8 @@ function calculateRemaining() {
     if (bill.paid) remaining -= Number(bill.amount);
   });
 
+  if (data.groceryBudget) remaining -= Number(data.groceryBudget);
+
   data.secondChoice.forEach(item => {
     remaining += item.type === "add"
       ? Number(item.amount)
@@ -508,6 +653,7 @@ function calculateRemaining() {
       warningEl.classList.add("hidden");
     }
   }
+  updateGroceryBar();
   renderChart();
 }
 
@@ -553,6 +699,10 @@ function renderChart() {
       const cat = bill.category || "Others";
       categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(bill.amount);
     }
+  });
+
+  data.groceryItems.forEach(item => {
+    categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + Number(item.amount);
   });
 
   data.secondChoice.forEach(item => {
@@ -628,6 +778,8 @@ function renderChart() {
 
 renderIncome();
 renderPriority();
+renderGroceryBudget();
+renderGroceryItems();
 renderSecondChoice();
 calculateRemaining();
 updatePriorityLockUI();
@@ -689,6 +841,9 @@ currencySelect.addEventListener("change", () => {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   renderIncome();
   renderPriority();
+  renderGroceryBudget();
+  renderGroceryItems();
+  updateGroceryBar();
   renderSecondChoice();
   calculateRemaining();
 });
@@ -703,6 +858,7 @@ sortSelect.value = settings.sortOrder;
 sortSelect.addEventListener("change", () => {
   settings.sortOrder = sortSelect.value;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  renderGroceryItems();
   renderSecondChoice();
 });
 
@@ -767,6 +923,8 @@ confirmResetBtn.addEventListener("click", () => {
     income: null,
     priority: [],
     priorityLocked: false,
+    groceryBudget: null,
+    groceryItems: [],
     secondChoice: []
   };
 

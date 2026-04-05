@@ -679,6 +679,30 @@ td {
 }
 
 /* =====================
+   Grocery Section
+===================== */
+#grocery-card {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+#grocery-card input {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.grocery-form {
+  margin-top: 12px;
+}
+
+#add-grocery {
+  background: #2d7a4f;
+  color: #e0ffe8;
+}
+
+/* =====================
    Priority Buttons
 ===================== */
 
