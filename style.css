@@ -651,6 +651,22 @@ td {
   color: #e0f0ff;
 }
 
+.copy-last-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px dashed #3a3a3a;
+  background: none;
+  color: #888;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.copy-last-btn:active {
+  background: #1a1a1a;
+}
+
 /* Save Priority */
 #save-priority {
   background: #144f73;

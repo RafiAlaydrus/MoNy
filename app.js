@@ -4,6 +4,7 @@
 
 const STORAGE_KEY = "monthly-money-tracker";
 const SETTINGS_KEY = "monthly-money-tracker-settings";
+const BACKUP_PRIORITY_KEY = "monthly-money-tracker-priority-backup";
 
 const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
@@ -338,6 +339,37 @@ addPriorityBtn.addEventListener("click", () => {
   renderPriority();
   calculateRemaining();
 });
+
+/* =========================
+   COPY LAST PRIORITY
+========================= */
+
+const copyLastBtn = document.getElementById("copy-last-priority");
+const backupPriority = JSON.parse(localStorage.getItem(BACKUP_PRIORITY_KEY));
+
+function updateCopyLastBtn() {
+  if (backupPriority && backupPriority.length > 0 && data.priority.length === 0 && !data.priorityLocked) {
+    copyLastBtn.classList.remove("hidden");
+  } else {
+    copyLastBtn.classList.add("hidden");
+  }
+}
+
+copyLastBtn.addEventListener("click", () => {
+  data.priority = backupPriority.map(b => ({
+    name: b.name,
+    category: b.category,
+    amount: b.amount,
+    paid: false,
+    date: new Date().toISOString()
+  }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  copyLastBtn.classList.add("hidden");
+  renderPriority();
+  calculateRemaining();
+});
+
+updateCopyLastBtn();
 
 /* =========================
    SECOND CHOICE
@@ -696,6 +728,11 @@ cancelResetBtn.addEventListener("click", () => {
 
 // Confirm reset
 confirmResetBtn.addEventListener("click", () => {
+  // Save current priority bills as backup before wiping
+  if (data.priority.length > 0) {
+    localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
+  }
+
   data = {
     month: currentMonthKey,
     income: null,
