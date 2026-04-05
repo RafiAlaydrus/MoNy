@@ -73,7 +73,7 @@
             <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.1.1</div>
+            <div class="setting-version">v1.2.0</div>
           </div>
         </section>
       </div>
@@ -208,6 +208,13 @@
         <button id="confirm-priority" class="danger">Yes, Save</button>
       </div>
     </div>
+  </div>
+
+  <!-- UNDO TOAST -->
+  <div id="undo-toast" class="undo-toast hidden">
+    <span id="undo-text">Bill deleted</span>
+    <button id="undo-btn">Undo</button>
+    <div class="undo-timer"><div id="undo-bar" class="undo-bar"></div></div>
   </div>
 
   <script src="app.js"></script>

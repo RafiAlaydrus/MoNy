@@ -83,6 +83,47 @@ const CATEGORY_COLORS = {
 function cur() { return settings.currency; }
 
 /* =========================
+   UNDO TOAST
+========================= */
+
+const undoToast = document.getElementById("undo-toast");
+const undoText = document.getElementById("undo-text");
+const undoBtn = document.getElementById("undo-btn");
+const undoBar = document.getElementById("undo-bar");
+let undoTimeout = null;
+let undoCallback = null;
+
+function showUndo(message, onExpire, onUndo) {
+  // Clear any existing undo
+  if (undoTimeout) { clearTimeout(undoTimeout); }
+
+  undoText.textContent = message;
+  undoToast.classList.remove("hidden");
+
+  // Reset and animate bar
+  undoBar.style.transition = "none";
+  undoBar.style.width = "100%";
+  requestAnimationFrame(() => {
+    undoBar.style.transition = "width 3s linear";
+    undoBar.style.width = "0%";
+  });
+
+  undoCallback = onUndo;
+  undoTimeout = setTimeout(() => {
+    undoToast.classList.add("hidden");
+    onExpire();
+    undoTimeout = null;
+    undoCallback = null;
+  }, 3000);
+}
+
+undoBtn.addEventListener("click", () => {
+  if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
+  undoToast.classList.add("hidden");
+  if (undoCallback) { undoCallback(); undoCallback = null; }
+});
+
+/* =========================
    HEADER
 ========================= */
 
@@ -192,12 +233,24 @@ function renderPriority() {
           wrapper.style.transition = "max-height 0.3s ease, opacity 0.3s ease";
           wrapper.style.maxHeight = "0";
           wrapper.style.overflow = "hidden";
-          setTimeout(() => {
-            data.priority.splice(index, 1);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            renderPriority();
-            calculateRemaining();
-          }, 300);
+
+          const removed = data.priority.splice(index, 1)[0];
+          calculateRemaining();
+
+          showUndo(
+            `"${removed.name}" deleted`,
+            () => {
+              // Timer expired — persist deletion
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            },
+            () => {
+              // Undo — restore the bill
+              data.priority.splice(index, 0, removed);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+              renderPriority();
+              calculateRemaining();
+            }
+          );
         } else {
           li.style.transform = "translateX(0)";
         }
