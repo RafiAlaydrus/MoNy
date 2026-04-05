@@ -698,8 +698,13 @@ td {
 }
 
 #add-grocery {
-  background: #2d7a4f;
-  color: #e0ffe8;
+  background: #1e7f43;
+  color: #eafff2;
+}
+
+#take-grocery {
+  background: #7f1e1e;
+  color: #ffecec;
 }
 
 /* =====================

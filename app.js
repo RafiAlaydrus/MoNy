@@ -75,6 +75,7 @@ const groceryBudgetInput = document.getElementById("grocery-budget-input");
 const grName = document.getElementById("gr-name");
 const grAmount = document.getElementById("gr-amount");
 const addGroceryBtn = document.getElementById("add-grocery");
+const takeGroceryBtn = document.getElementById("take-grocery");
 const groceryTable = document.getElementById("grocery-table");
 
 const scName = document.getElementById("sc-name");
@@ -428,7 +429,9 @@ groceryBudgetInput.addEventListener("keydown", (e) => {
 });
 
 function getGrocerySpent() {
-  return data.groceryItems.reduce((sum, item) => sum + Number(item.amount), 0);
+  return data.groceryItems.reduce((sum, item) => {
+    return sum + (item.type === "add" ? -Number(item.amount) : Number(item.amount));
+  }, 0);
 }
 
 function updateGroceryBar() {
@@ -480,7 +483,7 @@ function renderGroceryItems() {
     row.innerHTML = `
       <td>${item.name}</td>
       <td class="date-stamp">${dateStr}</td>
-      <td>- ${cur()} ${fmt(item.amount)}</td>
+      <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
     `;
     row.classList.add("item-enter");
     groceryTable.appendChild(row);
@@ -488,7 +491,7 @@ function renderGroceryItems() {
   });
 }
 
-addGroceryBtn.addEventListener("click", () => {
+function addGroceryItem(type) {
   const name = grName.value.trim();
   const amount = Number(grAmount.value);
 
@@ -504,7 +507,7 @@ addGroceryBtn.addEventListener("click", () => {
   });
   if (hasError) return;
 
-  data.groceryItems.push({ name, amount, date: new Date().toISOString() });
+  data.groceryItems.push({ name, amount, type, date: new Date().toISOString() });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
   grName.value = "";
@@ -514,7 +517,10 @@ addGroceryBtn.addEventListener("click", () => {
   renderGroceryItems();
   updateGroceryBar();
   calculateRemaining();
-});
+}
+
+addGroceryBtn.addEventListener("click", () => addGroceryItem("add"));
+takeGroceryBtn.addEventListener("click", () => addGroceryItem("take"));
 
 /* =========================
    SECOND CHOICE
@@ -702,11 +708,11 @@ function renderChart() {
   });
 
   if (data.groceryBudget) {
-    const grocerySpent = data.groceryItems.reduce((sum, item) => sum + Number(item.amount), 0);
+    const grocerySpent = getGrocerySpent();
     categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + Math.max(Number(data.groceryBudget), grocerySpent);
   } else if (data.groceryItems.length > 0) {
-    const grocerySpent = data.groceryItems.reduce((sum, item) => sum + Number(item.amount), 0);
-    categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + grocerySpent;
+    const grocerySpent = getGrocerySpent();
+    if (grocerySpent > 0) categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + grocerySpent;
   }
 
   data.secondChoice.forEach(item => {
