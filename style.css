@@ -573,37 +573,16 @@ td {
    Priority Buttons
 ===================== */
 
-.priority-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.priority-actions button {
-  flex: 1;
-  padding: 12px;
-  border-radius: 12px;
-  border: none;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 /* Add Priority */
 #add-priority {
-  background: #2c2c2c;
-  color: #fff;
+  background: #1e6f9f;
+  color: #e0f0ff;
 }
 
 /* Save Priority */
 #save-priority {
-  background: #444;
-  color: #fff;
-}
-
-/* Click feedback */
-.priority-actions button:active {
-  transform: scale(0.98);
+  background: #144f73;
+  color: #d0e8f5;
 }
 
 /* =====================
