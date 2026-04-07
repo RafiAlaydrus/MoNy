@@ -98,8 +98,13 @@ const CATEGORY_COLORS = {
   "Others": "#7f8c8d",
 };
 
+/** Returns the currently selected currency symbol (e.g. "RM", "$", "€") */
 function cur() { return settings.currency; }
+
+/** Formats a number to 2 decimal places with locale separators (e.g. 1,234.56) */
 function fmt(n) { return Number(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+/** Formats a number as a whole integer with locale separators (e.g. 1,234) */
 function fmtInt(n) { return Number(n).toLocaleString("en"); }
 
 /* =========================
@@ -113,6 +118,12 @@ const undoBar = document.getElementById("undo-bar");
 let undoTimeout = null;
 let undoCallback = null;
 
+/**
+ * Displays an undo toast notification with a 3-second countdown timer.
+ * @param {string} message - Text to display in the toast
+ * @param {Function} onExpire - Callback when the timer runs out (persists the action)
+ * @param {Function} onUndo - Callback when the user clicks "Undo" (reverts the action)
+ */
 function showUndo(message, onExpire, onUndo) {
   // Clear any existing undo
   if (undoTimeout) { clearTimeout(undoTimeout); }
@@ -141,6 +152,7 @@ function showUndo(message, onExpire, onUndo) {
   }, 3000);
 }
 
+/** Hides the undo toast with a fade-out animation */
 function hideUndo() {
   undoToast.classList.add("fading");
   setTimeout(() => {
@@ -168,6 +180,7 @@ monthText.textContent = now.toLocaleString("default", {
    INCOME (WORKING)
 ========================= */
 
+/** Renders the income display card with the current currency and income value */
 function renderIncome() {
   incomeDisplay.textContent =
     data.income !== null ? `${cur()} ${fmtInt(data.income)}` : `${cur()} 0`;
@@ -179,6 +192,7 @@ incomeCard.addEventListener("click", () => {
   incomeInput.focus();
 });
 
+/** Saves the income input value to data, hides the input, and recalculates the remaining balance */
 function saveIncome() {
   const value = Number(incomeInput.value);
 
@@ -204,6 +218,11 @@ incomeInput.addEventListener("keydown", (e) => {
    PRIORITY BILLS
 ========================= */
 
+/**
+ * Renders the priority bills list with checkboxes and swipe-to-delete gestures.
+ * Each bill shows its name, category, and amount. When unlocked, bills can be
+ * swiped left to reveal a delete action with an undo option.
+ */
 function renderPriority() {
   priorityList.innerHTML = "";
 
@@ -297,6 +316,7 @@ function renderPriority() {
   });
 }
 
+/** Updates the UI to reflect the locked state — hides the form and shows the "Locked" badge */
 function updatePriorityLockUI() {
   const form = document.getElementById("priority-form");
   const lockBadge = document.getElementById("priority-lock-badge");
@@ -366,6 +386,7 @@ addPriorityBtn.addEventListener("click", () => {
 const copyLastBtn = document.getElementById("copy-last-priority");
 const backupPriority = JSON.parse(localStorage.getItem(BACKUP_PRIORITY_KEY));
 
+/** Shows or hides the "Copy Last Priority" button based on whether a backup exists and the list is empty and unlocked */
 function updateCopyLastBtn() {
   if (backupPriority && backupPriority.length > 0 && data.priority.length === 0 && !data.priorityLocked) {
     copyLastBtn.classList.remove("hidden");
@@ -394,6 +415,7 @@ updateCopyLastBtn();
    GROCERY
 ========================= */
 
+/** Renders the grocery budget display card with the current currency and budget value */
 function renderGroceryBudget() {
   groceryBudgetDisplay.textContent =
     data.groceryBudget !== null ? `${cur()} ${fmtInt(data.groceryBudget)}` : `${cur()} 0`;
@@ -406,6 +428,7 @@ groceryCard.addEventListener("click", (e) => {
   groceryBudgetInput.focus();
 });
 
+/** Saves the grocery budget input value to data, hides the input, and updates the grocery bar and remaining balance */
 function saveGroceryBudget() {
   const value = Number(groceryBudgetInput.value);
 
@@ -428,12 +451,14 @@ groceryBudgetInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") groceryBudgetInput.blur();
 });
 
+/** Calculates total grocery spending by summing "take" items and subtracting "add" items */
 function getGrocerySpent() {
   return data.groceryItems.reduce((sum, item) => {
     return sum + (item.type === "add" ? -Number(item.amount) : Number(item.amount));
   }, 0);
 }
 
+/** Updates the grocery progress bar width, color (green/yellow/red), and label based on spending vs budget */
 function updateGroceryBar() {
   const wrapper = document.getElementById("grocery-bar-wrapper");
   const fill = document.getElementById("grocery-bar-fill");
@@ -462,6 +487,7 @@ function updateGroceryBar() {
   }
 }
 
+/** Renders the grocery items table sorted by date, showing item name, date, and signed amount */
 function renderGroceryItems() {
   groceryTable.innerHTML = "";
 
@@ -491,6 +517,10 @@ function renderGroceryItems() {
   });
 }
 
+/**
+ * Validates inputs and adds a grocery item to the list.
+ * @param {string} type - "add" for income/refund or "take" for expense
+ */
 function addGroceryItem(type) {
   const name = grName.value.trim();
   const amount = Number(grAmount.value);
@@ -526,6 +556,7 @@ takeGroceryBtn.addEventListener("click", () => addGroceryItem("take"));
    SECOND CHOICE
 ========================= */
 
+/** Renders the second choice transactions table sorted by date, showing name, category, date, and signed amount */
 function renderSecondChoice() {
   scTable.innerHTML = "";
 
@@ -556,6 +587,10 @@ function renderSecondChoice() {
   });
 }
 
+/**
+ * Validates inputs and adds a second choice transaction to the list.
+ * @param {string} type - "add" for income or "take" for expense
+ */
 function addSecondChoice(type) {
   const name = scName.value.trim();
   const category = scCategory.value;
@@ -599,6 +634,11 @@ document.querySelectorAll(".second-form input, .second-form select").forEach(el 
    CALCULATION
 ========================= */
 
+/**
+ * Calculates the remaining balance from income minus all spending.
+ * Updates the remaining display, progress bar (color-coded), budget limit marker,
+ * budget warning message, grocery bar, and chart.
+ */
 function calculateRemaining() {
   if (data.income === null) {
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
@@ -674,6 +714,11 @@ function calculateRemaining() {
    CHART
 ========================= */
 
+/**
+ * Renders a donut chart on the canvas showing spending breakdown by category.
+ * Segments are color-coded per CATEGORY_COLORS. Center text shows total spent.
+ * A legend with category labels and amounts is rendered below the chart.
+ */
 function renderChart() {
   if (!settings.showChart || !chartCtx) return;
 
