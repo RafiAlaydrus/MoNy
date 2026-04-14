@@ -657,14 +657,8 @@ function calculateRemaining() {
     if (bill.paid) remaining -= Number(bill.amount);
   });
 
-  if (settings.secondWalletEnabled) {
-    if (data.groceryBudget) remaining -= Number(data.groceryBudget);
-
-    data.groceryItems.forEach(item => {
-      remaining += item.type === "add"
-        ? Number(item.amount)
-        : -Number(item.amount);
-    });
+  if (settings.secondWalletEnabled && data.groceryBudget) {
+    remaining -= Number(data.groceryBudget);
   }
 
   data.secondChoice.forEach(item => {
