@@ -419,12 +419,20 @@ updateCopyLastBtn();
    GROCERY
 ========================= */
 
-/** Renders the second wallet budget display card with the current currency and budget value */
+/** Returns the live wallet balance: budget + adds - takes */
+function getWalletBalance() {
+  const budget = Number(data.groceryBudget) || 0;
+  return data.groceryItems.reduce((bal, item) => {
+    return bal + (item.type === "add" ? Number(item.amount) : -Number(item.amount));
+  }, budget);
+}
+
+/** Renders the second wallet display card with the live balance */
 function renderGroceryBudget() {
-  groceryBudgetDisplay.textContent =
-    data.groceryBudget !== null ? `${cur()} ${fmtInt(data.groceryBudget)}` : `${cur()} 0`;
+  const balance = getWalletBalance();
+  groceryBudgetDisplay.textContent = `${cur()} ${fmtInt(balance)}`;
   document.getElementById("second-wallet-title").textContent = walletName();
-  document.getElementById("second-wallet-budget-label").textContent = `${walletName()} Budget`;
+  document.getElementById("second-wallet-budget-label").textContent = `${walletName()} Balance`;
 }
 
 groceryCard.addEventListener("click", (e) => {
@@ -482,7 +490,7 @@ function updateGroceryBar() {
   const pct = Math.min(Math.max((spent / budget) * 100, 0), 100);
 
   fill.style.width = `${pct}%`;
-  label.textContent = `${Math.round(pct)}% spent · ${cur()} ${fmt(remaining)} left`;
+  label.textContent = `${Math.round(pct)}% spent`;
 
   if (pct < 50) {
     fill.style.background = "#1e7f43";
@@ -543,6 +551,11 @@ function addGroceryItem(type) {
   });
   if (hasError) return;
 
+  if (type === "add" && amount > getMainRemaining()) {
+    grAmount.classList.add("input-error");
+    return;
+  }
+
   data.groceryItems.push({ name, amount, type, date: new Date().toISOString() });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
@@ -550,6 +563,7 @@ function addGroceryItem(type) {
   grAmount.value = "";
   fields.forEach(f => f.el.classList.remove("input-error"));
 
+  renderGroceryBudget();
   renderGroceryItems();
   updateGroceryBar();
   calculateRemaining();
@@ -645,11 +659,9 @@ document.querySelectorAll(".second-form input, .second-form select").forEach(el 
  * Updates the remaining display, progress bar (color-coded), budget limit marker,
  * budget warning message, grocery bar, and chart.
  */
-function calculateRemaining() {
-  if (data.income === null) {
-    remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
-    return;
-  }
+/** Returns the current main remaining balance as a number */
+function getMainRemaining() {
+  if (data.income === null) return 0;
 
   let remaining = Number(data.income);
 
@@ -657,8 +669,11 @@ function calculateRemaining() {
     if (bill.paid) remaining -= Number(bill.amount);
   });
 
-  if (settings.secondWalletEnabled && data.groceryBudget) {
-    remaining -= Number(data.groceryBudget);
+  if (settings.secondWalletEnabled) {
+    if (data.groceryBudget) remaining -= Number(data.groceryBudget);
+    data.groceryItems.forEach(item => {
+      if (item.type === "add") remaining -= Number(item.amount);
+    });
   }
 
   data.secondChoice.forEach(item => {
@@ -666,6 +681,17 @@ function calculateRemaining() {
       ? Number(item.amount)
       : -Number(item.amount);
   });
+
+  return remaining;
+}
+
+function calculateRemaining() {
+  if (data.income === null) {
+    remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
+    return;
+  }
+
+  let remaining = getMainRemaining();
 
   remainingMoneyEl.textContent = `${cur()} ${fmt(remaining)}`;
 
