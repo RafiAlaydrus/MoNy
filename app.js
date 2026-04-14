@@ -20,6 +20,8 @@ let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
 if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "newest";
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
+if (settings.secondWalletEnabled === undefined) settings.secondWalletEnabled = true;
+if (!settings.secondWalletName) settings.secondWalletName = "Second Wallet";
 
 let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
 
@@ -46,7 +48,7 @@ if (!data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-// Ensure grocery fields exist for older saved data
+// Ensure second wallet fields exist for older saved data
 if (!data.groceryItems) data.groceryItems = [];
 if (data.groceryBudget === undefined) data.groceryBudget = null;
 
@@ -92,11 +94,13 @@ const chartLegend = document.getElementById("chart-legend");
 const CATEGORY_COLORS = {
   "Bills": "#e74c3c",
   "Subscription": "#e67e22",
-  "Grocery": "#f1c40f",
   "Food / Drink": "#9b59b6",
   "Transport": "#1abc9c",
   "Others": "#7f8c8d",
 };
+
+/** Returns the user-defined Second Wallet name */
+function walletName() { return settings.secondWalletName || "Second Wallet"; }
 
 /** Returns the currently selected currency symbol (e.g. "RM", "$", "€") */
 function cur() { return settings.currency; }
@@ -415,10 +419,12 @@ updateCopyLastBtn();
    GROCERY
 ========================= */
 
-/** Renders the grocery budget display card with the current currency and budget value */
+/** Renders the second wallet budget display card with the current currency and budget value */
 function renderGroceryBudget() {
   groceryBudgetDisplay.textContent =
     data.groceryBudget !== null ? `${cur()} ${fmtInt(data.groceryBudget)}` : `${cur()} 0`;
+  document.getElementById("second-wallet-title").textContent = walletName();
+  document.getElementById("second-wallet-budget-label").textContent = `${walletName()} Budget`;
 }
 
 groceryCard.addEventListener("click", (e) => {
@@ -651,13 +657,15 @@ function calculateRemaining() {
     if (bill.paid) remaining -= Number(bill.amount);
   });
 
-  if (data.groceryBudget) remaining -= Number(data.groceryBudget);
+  if (settings.secondWalletEnabled) {
+    if (data.groceryBudget) remaining -= Number(data.groceryBudget);
 
-  data.groceryItems.forEach(item => {
-    remaining += item.type === "add"
-      ? Number(item.amount)
-      : -Number(item.amount);
-  });
+    data.groceryItems.forEach(item => {
+      remaining += item.type === "add"
+        ? Number(item.amount)
+        : -Number(item.amount);
+    });
+  }
 
   data.secondChoice.forEach(item => {
     remaining += item.type === "add"
@@ -758,12 +766,15 @@ function renderChart() {
     }
   });
 
-  if (data.groceryBudget) {
-    const grocerySpent = getGrocerySpent();
-    categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + Math.max(Number(data.groceryBudget), grocerySpent);
-  } else if (data.groceryItems.length > 0) {
-    const grocerySpent = getGrocerySpent();
-    if (grocerySpent > 0) categoryTotals["Grocery"] = (categoryTotals["Grocery"] || 0) + grocerySpent;
+  if (settings.secondWalletEnabled) {
+    const wName = walletName();
+    if (data.groceryBudget) {
+      const grocerySpent = getGrocerySpent();
+      categoryTotals[wName] = (categoryTotals[wName] || 0) + Math.max(Number(data.groceryBudget), grocerySpent);
+    } else if (data.groceryItems.length > 0) {
+      const grocerySpent = getGrocerySpent();
+      if (grocerySpent > 0) categoryTotals[wName] = (categoryTotals[wName] || 0) + grocerySpent;
+    }
   }
 
   data.secondChoice.forEach(item => {
@@ -779,7 +790,7 @@ function renderChart() {
   const segments = Object.entries(categoryTotals).map(([label, amount]) => ({
     label,
     amount,
-    color: CATEGORY_COLORS[label] || "#7f8c8d",
+    color: CATEGORY_COLORS[label] || (label === walletName() ? "#f1c40f" : "#7f8c8d"),
   }));
 
   if (remaining > 0) {
@@ -845,6 +856,11 @@ renderSecondChoice();
 calculateRemaining();
 updatePriorityLockUI();
 renderChart();
+
+// Show/hide second wallet section based on setting
+if (!settings.secondWalletEnabled) {
+  document.getElementById("second-wallet-section").classList.add("hidden");
+}
 
 /* =========================
    SETTINGS PANEL
@@ -936,6 +952,45 @@ budgetLimitInput.addEventListener("change", () => {
   if (!val) budgetLimitInput.value = "";
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   calculateRemaining();
+});
+
+/* =========================
+   SECOND WALLET SETTING
+========================= */
+
+const secondWalletToggle = document.getElementById("second-wallet-toggle");
+const secondWalletNameInput = document.getElementById("second-wallet-name-input");
+const secondWalletNameRow = document.getElementById("second-wallet-name-row");
+const secondWalletSection = document.getElementById("second-wallet-section");
+
+secondWalletToggle.checked = settings.secondWalletEnabled;
+secondWalletNameInput.value = settings.secondWalletName || "";
+if (!settings.secondWalletEnabled) secondWalletNameRow.classList.add("hidden");
+
+secondWalletToggle.addEventListener("change", () => {
+  settings.secondWalletEnabled = secondWalletToggle.checked;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+
+  if (settings.secondWalletEnabled) {
+    secondWalletSection.classList.remove("hidden");
+    secondWalletNameRow.classList.remove("hidden");
+    renderGroceryBudget();
+    renderGroceryItems();
+    updateGroceryBar();
+  } else {
+    secondWalletSection.classList.add("hidden");
+    secondWalletNameRow.classList.add("hidden");
+  }
+  calculateRemaining();
+  renderChart();
+});
+
+secondWalletNameInput.addEventListener("change", () => {
+  const name = secondWalletNameInput.value.trim();
+  settings.secondWalletName = name || "Second Wallet";
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  renderGroceryBudget();
+  renderChart();
 });
 
 /* =========================

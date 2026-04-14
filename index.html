@@ -78,9 +78,20 @@
               <input type="number" inputmode="decimal" id="budget-limit-input" class="setting-input" placeholder="Off" />
             </div>
             <div class="setting-row">
+              <span>Second Wallet</span>
+              <label class="toggle">
+                <input type="checkbox" id="second-wallet-toggle" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-row" id="second-wallet-name-row">
+              <span>Wallet name</span>
+              <input type="text" id="second-wallet-name-input" class="setting-input" placeholder="Second Wallet" />
+            </div>
+            <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.3.2</div>
+            <div class="setting-version">v1.4.0</div>
           </div>
         </section>
       </div>
@@ -157,12 +168,12 @@
       <ul id="priority-list"></ul>
     </section>
 
-    <!-- GROCERY -->
-    <section>
-      <h3>Grocery</h3>
+    <!-- SECOND WALLET -->
+    <section id="second-wallet-section">
+      <h3 id="second-wallet-title">Second Wallet</h3>
 
       <div class="card" id="grocery-card">
-        <span>Grocery Budget</span>
+        <span id="second-wallet-budget-label">Second Wallet Budget</span>
         <h2 id="grocery-budget-display">RM 0</h2>
 
         <input
