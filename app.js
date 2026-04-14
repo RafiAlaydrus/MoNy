@@ -797,12 +797,13 @@ function renderChart() {
 
   if (settings.secondWalletEnabled) {
     const wName = walletName();
-    if (data.groceryBudget) {
-      const grocerySpent = getGrocerySpent();
-      categoryTotals[wName] = (categoryTotals[wName] || 0) + Math.max(Number(data.groceryBudget), grocerySpent);
-    } else if (data.groceryItems.length > 0) {
-      const grocerySpent = getGrocerySpent();
-      if (grocerySpent > 0) categoryTotals[wName] = (categoryTotals[wName] || 0) + grocerySpent;
+    const budget = Number(data.groceryBudget) || 0;
+    const adds = data.groceryItems
+      .filter(i => i.type === "add")
+      .reduce((s, i) => s + Number(i.amount), 0);
+    const walletTotal = budget + adds;
+    if (walletTotal > 0) {
+      categoryTotals[wName] = (categoryTotals[wName] || 0) + walletTotal;
     }
   }
 
