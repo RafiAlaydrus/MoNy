@@ -451,6 +451,15 @@ function saveGroceryBudget() {
     return;
   }
 
+  // Check if budget exceeds available balance
+  const oldBudget = Number(data.groceryBudget) || 0;
+  const available = getMainRemaining() + oldBudget; // add back old budget to get true available
+  if (value > available) {
+    groceryBudgetInput.classList.add("input-error");
+    return;
+  }
+  groceryBudgetInput.classList.remove("input-error");
+
   data.groceryBudget = value;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
