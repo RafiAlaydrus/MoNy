@@ -16,7 +16,7 @@ let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
   sortOrder: "newest",
   budgetLimit: null
 };
-// Ensure new keys exist for older saved settings
+// Default missing settings
 if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "newest";
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
@@ -48,7 +48,7 @@ if (!data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-// Ensure second wallet fields exist for older saved data
+// Default missing wallet fields
 if (!data.groceryItems) data.groceryItems = [];
 if (data.groceryBudget === undefined) data.groceryBudget = null;
 
@@ -99,16 +99,16 @@ const CATEGORY_COLORS = {
   "Others": "#7f8c8d",
 };
 
-/** Returns the user-defined Second Wallet name */
+// Returns the Second Wallet name
 function walletName() { return settings.secondWalletName || "Second Wallet"; }
 
-/** Returns the currently selected currency symbol (e.g. "RM", "$", "€") */
+// Returns the current currency symbol
 function cur() { return settings.currency; }
 
-/** Formats a number to 2 decimal places with locale separators (e.g. 1,234.56) */
+// Formats a number with 2 decimals
 function fmt(n) { return Number(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-/** Formats a number as a whole integer with locale separators (e.g. 1,234) */
+// Formats a number as a whole integer
 function fmtInt(n) { return Number(n).toLocaleString("en"); }
 
 /* =========================
@@ -122,20 +122,13 @@ const undoBar = document.getElementById("undo-bar");
 let undoTimeout = null;
 let undoCallback = null;
 
-/**
- * Displays an undo toast notification with a 3-second countdown timer.
- * @param {string} message - Text to display in the toast
- * @param {Function} onExpire - Callback when the timer runs out (persists the action)
- * @param {Function} onUndo - Callback when the user clicks "Undo" (reverts the action)
- */
+// Shows an undo toast for 3 seconds
 function showUndo(message, onExpire, onUndo) {
-  // Clear any existing undo
   if (undoTimeout) { clearTimeout(undoTimeout); }
 
   undoText.textContent = message;
   undoToast.classList.remove("hidden", "fading");
 
-  // Reset and animate bar
   undoBar.style.transition = "none";
   undoBar.style.width = "100%";
   requestAnimationFrame(() => {
@@ -156,7 +149,7 @@ function showUndo(message, onExpire, onUndo) {
   }, 3000);
 }
 
-/** Hides the undo toast with a fade-out animation */
+// Hides the undo toast
 function hideUndo() {
   undoToast.classList.add("fading");
   setTimeout(() => {
@@ -184,7 +177,7 @@ monthText.textContent = now.toLocaleString("default", {
    INCOME (WORKING)
 ========================= */
 
-/** Renders the income display card with the current currency and income value */
+// Renders the income display
 function renderIncome() {
   incomeDisplay.textContent =
     data.income !== null ? `${cur()} ${fmtInt(data.income)}` : `${cur()} 0`;
@@ -196,7 +189,7 @@ incomeCard.addEventListener("click", () => {
   incomeInput.focus();
 });
 
-/** Saves the income input value to data, hides the input, and recalculates the remaining balance */
+// Saves the income input
 function saveIncome() {
   const value = Number(incomeInput.value);
 
@@ -222,11 +215,7 @@ incomeInput.addEventListener("keydown", (e) => {
    PRIORITY BILLS
 ========================= */
 
-/**
- * Renders the priority bills list with checkboxes and swipe-to-delete gestures.
- * Each bill shows its name, category, and amount. When unlocked, bills can be
- * swiped left to reveal a delete action with an undo option.
- */
+// Renders the priority bills list
 function renderPriority() {
   priorityList.innerHTML = "";
 
@@ -258,7 +247,6 @@ function renderPriority() {
       calculateRemaining();
     });
 
-    // Swipe-to-delete (only when unlocked)
     if (!data.priorityLocked) {
       let startX = 0;
       let currentX = 0;
@@ -295,11 +283,9 @@ function renderPriority() {
           showUndo(
             `"${removed.name}" deleted`,
             () => {
-              // Timer expired — persist deletion
               localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
             },
             () => {
-              // Undo — restore the bill
               data.priority.splice(index, 0, removed);
               localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
               renderPriority();
@@ -320,7 +306,7 @@ function renderPriority() {
   });
 }
 
-/** Updates the UI to reflect the locked state — hides the form and shows the "Locked" badge */
+// Updates the priority lock UI
 function updatePriorityLockUI() {
   const form = document.getElementById("priority-form");
   const lockBadge = document.getElementById("priority-lock-badge");
@@ -390,7 +376,7 @@ addPriorityBtn.addEventListener("click", () => {
 const copyLastBtn = document.getElementById("copy-last-priority");
 const backupPriority = JSON.parse(localStorage.getItem(BACKUP_PRIORITY_KEY));
 
-/** Shows or hides the "Copy Last Priority" button based on whether a backup exists and the list is empty and unlocked */
+// Shows or hides the "Copy Last Priority" button
 function updateCopyLastBtn() {
   if (backupPriority && backupPriority.length > 0 && data.priority.length === 0 && !data.priorityLocked) {
     copyLastBtn.classList.remove("hidden");
@@ -419,7 +405,7 @@ updateCopyLastBtn();
    GROCERY
 ========================= */
 
-/** Returns the live wallet balance: budget + adds - takes */
+// Returns the live wallet balance
 function getWalletBalance() {
   const budget = Number(data.groceryBudget) || 0;
   return data.groceryItems.reduce((bal, item) => {
@@ -427,7 +413,7 @@ function getWalletBalance() {
   }, budget);
 }
 
-/** Renders the second wallet display card with the live balance */
+// Renders the second wallet display
 function renderGroceryBudget() {
   const balance = getWalletBalance();
   groceryBudgetDisplay.textContent = `${cur()} ${fmtInt(balance)}`;
@@ -442,7 +428,7 @@ groceryCard.addEventListener("click", (e) => {
   groceryBudgetInput.focus();
 });
 
-/** Saves the grocery budget input value to data, hides the input, and updates the grocery bar and remaining balance */
+// Saves the grocery budget input
 function saveGroceryBudget() {
   const value = Number(groceryBudgetInput.value);
 
@@ -451,9 +437,8 @@ function saveGroceryBudget() {
     return;
   }
 
-  // Check if budget exceeds available balance
   const oldBudget = Number(data.groceryBudget) || 0;
-  const available = getMainRemaining() + oldBudget; // add back old budget to get true available
+  const available = getMainRemaining() + oldBudget;
   if (value > available) {
     groceryBudgetInput.classList.add("input-error");
     return;
@@ -474,14 +459,14 @@ groceryBudgetInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") groceryBudgetInput.blur();
 });
 
-/** Calculates total grocery spending by summing "take" items and subtracting "add" items */
+// Returns total grocery spending
 function getGrocerySpent() {
   return data.groceryItems.reduce((sum, item) => {
     return sum + (item.type === "add" ? -Number(item.amount) : Number(item.amount));
   }, 0);
 }
 
-/** Updates the grocery progress bar width, color (green/yellow/red), and label based on spending vs budget */
+// Updates the grocery progress bar
 function updateGroceryBar() {
   const wrapper = document.getElementById("grocery-bar-wrapper");
   const fill = document.getElementById("grocery-bar-fill");
@@ -510,7 +495,7 @@ function updateGroceryBar() {
   }
 }
 
-/** Renders the grocery items table sorted by date, showing item name, date, and signed amount */
+// Renders the grocery items table
 function renderGroceryItems() {
   groceryTable.innerHTML = "";
 
@@ -540,10 +525,7 @@ function renderGroceryItems() {
   });
 }
 
-/**
- * Validates inputs and adds a grocery item to the list.
- * @param {string} type - "add" for income/refund or "take" for expense
- */
+// Adds a grocery item ("add" or "take")
 function addGroceryItem(type) {
   const name = grName.value.trim();
   const amount = Number(grAmount.value);
@@ -585,7 +567,7 @@ takeGroceryBtn.addEventListener("click", () => addGroceryItem("take"));
    SECOND CHOICE
 ========================= */
 
-/** Renders the second choice transactions table sorted by date, showing name, category, date, and signed amount */
+// Renders the second choice transactions table
 function renderSecondChoice() {
   scTable.innerHTML = "";
 
@@ -616,10 +598,7 @@ function renderSecondChoice() {
   });
 }
 
-/**
- * Validates inputs and adds a second choice transaction to the list.
- * @param {string} type - "add" for income or "take" for expense
- */
+// Adds a second choice transaction ("add" or "take")
 function addSecondChoice(type) {
   const name = scName.value.trim();
   const category = scCategory.value;
@@ -653,7 +632,7 @@ function addSecondChoice(type) {
 addMoneyBtn.addEventListener("click", () => addSecondChoice("add"));
 takeMoneyBtn.addEventListener("click", () => addSecondChoice("take"));
 
-// Clear error highlight on input
+// Clears error highlight on input
 document.querySelectorAll(".second-form input, .second-form select").forEach(el => {
   el.addEventListener("input", () => el.classList.remove("input-error"));
   el.addEventListener("change", () => el.classList.remove("input-error"));
@@ -663,12 +642,7 @@ document.querySelectorAll(".second-form input, .second-form select").forEach(el 
    CALCULATION
 ========================= */
 
-/**
- * Calculates the remaining balance from income minus all spending.
- * Updates the remaining display, progress bar (color-coded), budget limit marker,
- * budget warning message, grocery bar, and chart.
- */
-/** Returns the current main remaining balance as a number */
+// Returns the main remaining balance
 function getMainRemaining() {
   if (data.income === null) return 0;
 
@@ -694,6 +668,7 @@ function getMainRemaining() {
   return remaining;
 }
 
+// Recalculates and renders the remaining balance, bars, warnings, and chart
 function calculateRemaining() {
   if (data.income === null) {
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
@@ -704,7 +679,6 @@ function calculateRemaining() {
 
   remainingMoneyEl.textContent = `${cur()} ${fmt(remaining)}`;
 
-  // Progress bar
   const income = Number(data.income);
   const spent = income - remaining;
   const pct = Math.min(Math.max((spent / income) * 100, 0), 100);
@@ -723,7 +697,6 @@ function calculateRemaining() {
     fill.style.background = "#e74c3c";
   }
 
-  // Budget limit marker
   if (settings.budgetLimit && income > 0) {
     const limitSpendPct = ((income - settings.budgetLimit) / income) * 100;
     limitMark.style.left = `${Math.min(Math.max(limitSpendPct, 0), 100)}%`;
@@ -732,7 +705,6 @@ function calculateRemaining() {
     limitMark.classList.add("hidden");
   }
 
-  // Budget limit warning
   const warningEl = document.getElementById("budget-warning");
   if (warningEl) {
     if (settings.budgetLimit && remaining <= settings.budgetLimit) {
@@ -751,11 +723,7 @@ function calculateRemaining() {
    CHART
 ========================= */
 
-/**
- * Renders a donut chart on the canvas showing spending breakdown by category.
- * Segments are color-coded per CATEGORY_COLORS. Center text shows total spent.
- * A legend with category labels and amounts is rendered below the chart.
- */
+// Renders the donut chart with category breakdown
 function renderChart() {
   if (!settings.showChart || !chartCtx) return;
 
@@ -831,7 +799,6 @@ function renderChart() {
     segments.push({ label: "Remaining", amount: income, color: "#3498db" });
   }
 
-  // Draw donut chart
   const size = canvas.width;
   const center = size / 2;
   const radius = size / 2 - 10;
@@ -852,7 +819,6 @@ function renderChart() {
     startAngle += sliceAngle;
   });
 
-  // Center text
   ctx.fillStyle = "#fff";
   ctx.font = "bold 18px -apple-system, sans-serif";
   ctx.textAlign = "center";
@@ -862,7 +828,6 @@ function renderChart() {
   ctx.fillStyle = "#888";
   ctx.fillText("total spent", center, center + 12);
 
-  // Legend
   legend.innerHTML = segments.map(s => `
     <div class="legend-item">
       <div class="legend-left">
@@ -887,7 +852,7 @@ calculateRemaining();
 updatePriorityLockUI();
 renderChart();
 
-// Show/hide second wallet section based on setting
+// Hide second wallet section if disabled
 if (!settings.secondWalletEnabled) {
   document.getElementById("second-wallet-section").classList.add("hidden");
 }
@@ -906,7 +871,7 @@ settingsToggle.addEventListener("click", () => {
   settingsPanel.classList.toggle("hidden");
 });
 
-// Close settings when clicking outside
+// Closes settings when clicking outside
 document.addEventListener("click", (e) => {
   if (!settingsPanel.contains(e.target) && !settingsToggle.contains(e.target)) {
     settingsPanel.classList.add("hidden");
@@ -1047,19 +1012,18 @@ const resetModal = document.getElementById("reset-modal");
 const confirmResetBtn = document.getElementById("confirm-reset");
 const cancelResetBtn = document.getElementById("cancel-reset");
 
-// Double click header to open modal
+// Opens the reset modal on header double-click
 secretReset.addEventListener("dblclick", () => {
   resetModal.classList.remove("hidden");
 });
 
-// Cancel reset
+// Cancels the reset
 cancelResetBtn.addEventListener("click", () => {
   resetModal.classList.add("hidden");
 });
 
-// Confirm reset
+// Confirms the reset and wipes the month
 confirmResetBtn.addEventListener("click", () => {
-  // Save current priority bills as backup before wiping
   if (data.priority.length > 0) {
     localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
   }
@@ -1075,7 +1039,7 @@ confirmResetBtn.addEventListener("click", () => {
   };
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  location.reload(); // clean reset
+  location.reload();
 });
 
 /* =========================
