@@ -105,7 +105,7 @@
     <!-- MONTHLY CHART -->
     <section id="chart-section" class="hidden">
       <div class="chart-container">
-        <canvas id="summary-chart" width="300" height="300"></canvas>
+        <canvas id="summary-chart" width="300" height="300" role="img" aria-label="Monthly spending breakdown chart"></canvas>
         <div id="chart-legend"></div>
       </div>
     </section>
@@ -162,10 +162,10 @@
         <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
 
         <div class="actions">
-          <button id="add-priority">Add Priority Bill</button>
-          <button id="save-priority">Save Priority</button>
+          <button id="add-priority" aria-label="Add priority bill">Add Priority Bill</button>
+          <button id="save-priority" aria-label="Save and lock priority bills">Save Priority</button>
         </div>
-        <button id="copy-last-priority" class="copy-last-btn hidden">Copy Last Priority</button>
+        <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy priority bills from last month">Copy Last Priority</button>
       </div>
 
       <!-- PRIORITY LIST -->
@@ -200,8 +200,8 @@
         <input id="gr-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
 
         <div class="actions">
-          <button id="add-grocery">+ Add</button>
-          <button id="take-grocery">- Take</button>
+          <button id="add-grocery" aria-label="Add money to wallet">+ Add</button>
+          <button id="take-grocery" aria-label="Take money from wallet">- Take</button>
         </div>
       </div>
 
@@ -232,8 +232,8 @@
         <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
 
         <div class="actions">
-          <button id="add-money">+ Add</button>
-          <button id="take-money">- Take</button>
+          <button id="add-money" aria-label="Add to second choice">+ Add</button>
+          <button id="take-money" aria-label="Take from second choice">- Take</button>
         </div>
       </div>
 
@@ -262,8 +262,8 @@
       </p>
 
       <div class="modal-actions">
-        <button id="cancel-reset">Cancel</button>
-        <button id="confirm-reset" class="danger">Yes, Reset</button>
+        <button id="cancel-reset" aria-label="Cancel reset">Cancel</button>
+        <button id="confirm-reset" class="danger" aria-label="Confirm reset all data">Yes, Reset</button>
       </div>
     </div>
   </div>
@@ -278,8 +278,8 @@
       </p>
 
       <div class="modal-actions">
-        <button id="cancel-priority">Cancel</button>
-        <button id="confirm-priority" class="danger">Yes, Save</button>
+        <button id="cancel-priority" aria-label="Cancel saving priority bills">Cancel</button>
+        <button id="confirm-priority" class="danger" aria-label="Confirm save and lock priority bills">Yes, Save</button>
       </div>
     </div>
   </div>
@@ -287,7 +287,7 @@
   <!-- UNDO TOAST -->
   <div id="undo-toast" class="undo-toast hidden">
     <span id="undo-text">Bill deleted</span>
-    <button id="undo-btn">Undo</button>
+    <button id="undo-btn" aria-label="Undo last deletion">Undo</button>
     <div class="undo-timer"><div id="undo-bar" class="undo-bar"></div></div>
   </div>
 
