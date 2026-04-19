@@ -215,6 +215,86 @@ incomeInput.addEventListener("keydown", (e) => {
    PRIORITY BILLS
 ========================= */
 
+// Builds a single priority bill list item
+function buildPriorityItem(bill, index) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "swipe-wrapper";
+
+  const deleteLayer = document.createElement("div");
+  deleteLayer.className = "swipe-delete-bg";
+  deleteLayer.textContent = "Delete";
+
+  const li = document.createElement("li");
+  li.innerHTML = `
+    <label style="display:flex; gap:8px;">
+      <input type="checkbox" ${bill.paid ? "checked" : ""} />
+      ${bill.name} (${bill.category})
+    </label>
+    <strong>${cur()} ${fmt(bill.amount)}</strong>
+  `;
+
+  li.querySelector("input").addEventListener("change", (e) => {
+    bill.paid = e.target.checked;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    calculateRemaining();
+  });
+
+  if (!data.priorityLocked) {
+    let startX = 0;
+    let currentX = 0;
+    let swiping = false;
+
+    li.addEventListener("touchstart", (e) => {
+      startX = e.touches[0].clientX;
+      currentX = 0;
+      swiping = true;
+      li.style.transition = "none";
+    }, { passive: true });
+
+    li.addEventListener("touchmove", (e) => {
+      if (!swiping) return;
+      currentX = e.touches[0].clientX - startX;
+      if (currentX < 0) {
+        li.style.transform = `translateX(${Math.max(currentX, -120)}px)`;
+      }
+    });
+
+    li.addEventListener("touchend", () => {
+      swiping = false;
+      li.style.transition = "transform 0.3s ease";
+      if (currentX < -80) {
+        li.style.transform = "translateX(-100%)";
+        li.style.opacity = "0";
+        wrapper.style.transition = "max-height 0.3s ease, opacity 0.3s ease";
+        wrapper.style.maxHeight = "0";
+        wrapper.style.overflow = "hidden";
+
+        const removed = data.priority.splice(index, 1)[0];
+        calculateRemaining();
+
+        showUndo(
+          `"${removed.name}" deleted`,
+          () => {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          },
+          () => {
+            data.priority.splice(index, 0, removed);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            renderPriority();
+            calculateRemaining();
+          }
+        );
+      } else {
+        li.style.transform = "translateX(0)";
+      }
+    }, { passive: true });
+  }
+
+  wrapper.appendChild(deleteLayer);
+  wrapper.appendChild(li);
+  return wrapper;
+}
+
 // Renders the priority bills list
 function renderPriority() {
   priorityList.innerHTML = "";
@@ -225,81 +305,7 @@ function renderPriority() {
   }
 
   data.priority.forEach((bill, index) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "swipe-wrapper";
-
-    const deleteLayer = document.createElement("div");
-    deleteLayer.className = "swipe-delete-bg";
-    deleteLayer.textContent = "Delete";
-
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <label style="display:flex; gap:8px;">
-        <input type="checkbox" ${bill.paid ? "checked" : ""} />
-        ${bill.name} (${bill.category})
-      </label>
-      <strong>${cur()} ${fmt(bill.amount)}</strong>
-    `;
-
-    li.querySelector("input").addEventListener("change", (e) => {
-      bill.paid = e.target.checked;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      calculateRemaining();
-    });
-
-    if (!data.priorityLocked) {
-      let startX = 0;
-      let currentX = 0;
-      let swiping = false;
-
-      li.addEventListener("touchstart", (e) => {
-        startX = e.touches[0].clientX;
-        currentX = 0;
-        swiping = true;
-        li.style.transition = "none";
-      }, { passive: true });
-
-      li.addEventListener("touchmove", (e) => {
-        if (!swiping) return;
-        currentX = e.touches[0].clientX - startX;
-        if (currentX < 0) {
-          li.style.transform = `translateX(${Math.max(currentX, -120)}px)`;
-        }
-      });
-
-      li.addEventListener("touchend", () => {
-        swiping = false;
-        li.style.transition = "transform 0.3s ease";
-        if (currentX < -80) {
-          li.style.transform = "translateX(-100%)";
-          li.style.opacity = "0";
-          wrapper.style.transition = "max-height 0.3s ease, opacity 0.3s ease";
-          wrapper.style.maxHeight = "0";
-          wrapper.style.overflow = "hidden";
-
-          const removed = data.priority.splice(index, 1)[0];
-          calculateRemaining();
-
-          showUndo(
-            `"${removed.name}" deleted`,
-            () => {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            },
-            () => {
-              data.priority.splice(index, 0, removed);
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-              renderPriority();
-              calculateRemaining();
-            }
-          );
-        } else {
-          li.style.transform = "translateX(0)";
-        }
-      }, { passive: true });
-    }
-
-    wrapper.appendChild(deleteLayer);
-    wrapper.appendChild(li);
+    const wrapper = buildPriorityItem(bill, index);
     wrapper.classList.add("item-enter");
     priorityList.appendChild(wrapper);
     requestAnimationFrame(() => wrapper.classList.add("item-enter-active"));
@@ -365,7 +371,13 @@ addPriorityBtn.addEventListener("click", () => {
   pbAmount.value = "";
   fields.forEach(f => f.el.classList.remove("input-error"));
 
-  renderPriority();
+  const emptyItem = priorityList.querySelector(".empty-state");
+  if (emptyItem) emptyItem.remove();
+  const newIndex = data.priority.length - 1;
+  const wrapper = buildPriorityItem(data.priority[newIndex], newIndex);
+  wrapper.classList.add("item-enter");
+  priorityList.appendChild(wrapper);
+  requestAnimationFrame(() => wrapper.classList.add("item-enter-active"));
   calculateRemaining();
 });
 
@@ -495,6 +507,18 @@ function updateGroceryBar() {
   }
 }
 
+// Builds a single grocery table row
+function buildGroceryRow(item) {
+  const row = document.createElement("tr");
+  const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+  row.innerHTML = `
+    <td>${item.name}</td>
+    <td class="date-stamp">${dateStr}</td>
+    <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
+  `;
+  return row;
+}
+
 // Renders the grocery items table
 function renderGroceryItems() {
   groceryTable.innerHTML = "";
@@ -512,13 +536,7 @@ function renderGroceryItems() {
   }
 
   sorted.forEach(item => {
-    const row = document.createElement("tr");
-    const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
-    row.innerHTML = `
-      <td>${item.name}</td>
-      <td class="date-stamp">${dateStr}</td>
-      <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
-    `;
+    const row = buildGroceryRow(item);
     row.classList.add("item-enter");
     groceryTable.appendChild(row);
     requestAnimationFrame(() => row.classList.add("item-enter-active"));
@@ -554,8 +572,19 @@ function addGroceryItem(type) {
   grAmount.value = "";
   fields.forEach(f => f.el.classList.remove("input-error"));
 
+  const emptyGrocery = groceryTable.querySelector("td.empty-state");
+  if (emptyGrocery) emptyGrocery.closest("tr").remove();
+  const newItem = data.groceryItems[data.groceryItems.length - 1];
+  const row = buildGroceryRow(newItem);
+  row.classList.add("item-enter");
+  if (settings.sortOrder === "newest") {
+    groceryTable.prepend(row);
+  } else {
+    groceryTable.appendChild(row);
+  }
+  requestAnimationFrame(() => row.classList.add("item-enter-active"));
+
   renderGroceryBudget();
-  renderGroceryItems();
   updateGroceryBar();
   calculateRemaining();
 }
@@ -566,6 +595,19 @@ takeGroceryBtn.addEventListener("click", () => addGroceryItem("take"));
 /* =========================
    SECOND CHOICE
 ========================= */
+
+// Builds a single second choice table row
+function buildSecondChoiceRow(item) {
+  const row = document.createElement("tr");
+  const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+  row.innerHTML = `
+    <td>${item.name}</td>
+    <td>${item.category}</td>
+    <td class="date-stamp">${dateStr}</td>
+    <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
+  `;
+  return row;
+}
 
 // Renders the second choice transactions table
 function renderSecondChoice() {
@@ -584,14 +626,7 @@ function renderSecondChoice() {
   }
 
   sorted.forEach(item => {
-    const row = document.createElement("tr");
-    const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
-    row.innerHTML = `
-      <td>${item.name}</td>
-      <td>${item.category}</td>
-      <td class="date-stamp">${dateStr}</td>
-      <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
-    `;
+    const row = buildSecondChoiceRow(item);
     row.classList.add("item-enter");
     scTable.appendChild(row);
     requestAnimationFrame(() => row.classList.add("item-enter-active"));
@@ -625,7 +660,18 @@ function addSecondChoice(type) {
   scAmount.value = "";
   fields.forEach(f => f.el.classList.remove("input-error"));
 
-  renderSecondChoice();
+  const emptyRow = scTable.querySelector("td.empty-state");
+  if (emptyRow) emptyRow.closest("tr").remove();
+  const newSc = data.secondChoice[data.secondChoice.length - 1];
+  const scRow = buildSecondChoiceRow(newSc);
+  scRow.classList.add("item-enter");
+  if (settings.sortOrder === "newest") {
+    scTable.prepend(scRow);
+  } else {
+    scTable.appendChild(scRow);
+  }
+  requestAnimationFrame(() => scRow.classList.add("item-enter-active"));
+
   calculateRemaining();
 }
 
@@ -668,8 +714,8 @@ function getMainRemaining() {
   return remaining;
 }
 
-// Recalculates and renders the remaining balance, bars, warnings, and chart
-function calculateRemaining() {
+// Recalculates and renders the remaining balance, bars, and warnings
+function calculateRemaining(skipChart = false) {
   if (data.income === null) {
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
     return;
@@ -715,7 +761,7 @@ function calculateRemaining() {
     }
   }
   updateGroceryBar();
-  renderChart();
+  if (!skipChart) renderChart();
 }
 
 
@@ -848,9 +894,8 @@ renderPriority();
 renderGroceryBudget();
 renderGroceryItems();
 renderSecondChoice();
-calculateRemaining();
 updatePriorityLockUI();
-renderChart();
+calculateRemaining();
 
 // Hide second wallet section if disabled
 if (!settings.secondWalletEnabled) {
@@ -946,7 +991,7 @@ budgetLimitInput.addEventListener("change", () => {
   settings.budgetLimit = val > 0 ? val : null;
   if (!val) budgetLimitInput.value = "";
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  calculateRemaining();
+  calculateRemaining(true);
 });
 
 /* =========================
@@ -977,7 +1022,6 @@ secondWalletToggle.addEventListener("change", () => {
     secondWalletNameRow.classList.add("hidden");
   }
   calculateRemaining();
-  renderChart();
 });
 
 secondWalletNameInput.addEventListener("change", () => {
@@ -1007,6 +1051,17 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
    SECRET RESET (DOUBLE CLICK HEADER)
 ========================= */
 
+// Resets data in place to avoid stale object references
+function resetData() {
+  data.month = currentMonthKey;
+  data.income = null;
+  data.priority = [];
+  data.priorityLocked = false;
+  data.groceryBudget = null;
+  data.groceryItems = [];
+  data.secondChoice = [];
+}
+
 const secretReset = document.getElementById("secret-reset");
 const resetModal = document.getElementById("reset-modal");
 const confirmResetBtn = document.getElementById("confirm-reset");
@@ -1028,16 +1083,7 @@ confirmResetBtn.addEventListener("click", () => {
     localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
   }
 
-  data = {
-    month: currentMonthKey,
-    income: null,
-    priority: [],
-    priorityLocked: false,
-    groceryBudget: null,
-    groceryItems: [],
-    secondChoice: []
-  };
-
+  resetData();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   location.reload();
 });
