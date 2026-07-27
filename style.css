@@ -12,6 +12,11 @@ html, body {
   background: #000;
   color: #fff;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="checkbox"] {
+  accent-color: #e8e8e8;
 }
 
 /* =====================
@@ -179,7 +184,8 @@ html, body {
 }
 
 .budget-warning {
-  color: #e74c3c;
+  color: #fff;
+  font-weight: 600;
   font-size: 12px;
   text-align: center;
   margin-top: 4px;
@@ -231,10 +237,11 @@ html, body {
 }
 
 .toggle input:checked + .toggle-slider {
-  background: #1e7f43;
+  background: #e8e8e8;
 }
 
 .toggle input:checked + .toggle-slider::before {
+  background: #0a0a0a;
   transform: translateX(20px);
 }
 
@@ -276,6 +283,7 @@ header p {
 
 .card {
   background: #111;
+  border: 1px solid #232323;
   border-radius: 14px;
   padding: 16px;
 }
@@ -285,6 +293,12 @@ header p {
   font-size: 12px;
   color: #8a8a8a;
   margin-bottom: 6px;
+}
+
+.card > span {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
 }
 
 .card h2 {
@@ -313,6 +327,7 @@ h3 {
 ===================== */
 #priority-list {
   background: #0f0f0f;
+  border: 1px solid #1e1e1e;
   border-radius: 14px;
   padding: 10px 14px;
 }
@@ -328,7 +343,7 @@ h3 {
   right: 0;
   bottom: 0;
   width: 100%;
-  background: #b3261e;
+  background: #2e2e2e;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -360,6 +375,7 @@ h3 {
 ===================== */
 .second-form {
   background: #0f0f0f;
+  border: 1px solid #1e1e1e;
   border-radius: 14px;
   padding: 14px;
 }
@@ -402,7 +418,7 @@ h3 {
 }
 
 .second-form .input-error {
-  border-color: #b3261e;
+  border-color: #e8e8e8;
   animation: shake 0.3s ease;
 }
 
@@ -432,13 +448,14 @@ h3 {
 }
 
 #add-money {
-  background: #1e7f43;
-  color: #eafff2;
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 #take-money {
-  background: #7f1e1e;
-  color: #ffecec;
+  background: transparent;
+  border: 1px solid #333;
+  color: #b0b0b0;
 }
 
 .actions button:active {
@@ -558,13 +575,14 @@ td {
 }
 
 .modal-actions .danger {
-  background: #b3261e;
-  color: white;
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 .modal-actions button:not(.danger) {
-  background: #333;
-  color: white;
+  background: transparent;
+  border: 1px solid #333;
+  color: #ccc;
 }
 
 /* Prevent app from stealing clicks when modal is open */
@@ -641,7 +659,7 @@ td {
 #undo-btn {
   background: none;
   border: none;
-  color: #3498db;
+  color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -658,7 +676,7 @@ td {
 
 .undo-bar {
   height: 100%;
-  background: #3498db;
+  background: #e8e8e8;
   border-radius: 3px;
   width: 100%;
   transition: width linear;
@@ -698,13 +716,14 @@ td {
 }
 
 #add-grocery {
-  background: #1e7f43;
-  color: #eafff2;
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 #take-grocery {
-  background: #7f1e1e;
-  color: #ffecec;
+  background: transparent;
+  border: 1px solid #333;
+  color: #b0b0b0;
 }
 
 /* =====================
@@ -713,8 +732,8 @@ td {
 
 /* Add Priority */
 #add-priority {
-  background: #1e6f9f;
-  color: #e0f0ff;
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 .copy-last-btn {
@@ -735,8 +754,9 @@ td {
 
 /* Save Priority */
 #save-priority {
-  background: #144f73;
-  color: #d0e8f5;
+  background: transparent;
+  border: 1px solid #333;
+  color: #b0b0b0;
 }
 
 /* =====================
@@ -749,6 +769,7 @@ td {
 
 .chart-container {
   background: #111;
+  border: 1px solid #232323;
   border-radius: 14px;
   padding: 20px;
   display: flex;
@@ -793,4 +814,62 @@ td {
 .legend-amount {
   font-weight: 600;
   color: #fff;
+}
+
+/* =====================
+   Motion
+===================== */
+.app > * {
+  animation: section-in 0.45s ease backwards;
+}
+
+.app > *:nth-child(2) { animation-delay: 0.05s; }
+.app > *:nth-child(3) { animation-delay: 0.1s; }
+.app > *:nth-child(4) { animation-delay: 0.15s; }
+.app > *:nth-child(5) { animation-delay: 0.2s; }
+.app > *:nth-child(6) { animation-delay: 0.25s; }
+
+@keyframes section-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+.settings-panel:not(.hidden) {
+  transform-origin: top right;
+  animation: pop-in 0.15s ease;
+}
+
+.modal:not(.hidden) {
+  animation: fade-in 0.18s ease;
+}
+
+.modal:not(.hidden) .modal-card {
+  animation: pop-in 0.18s ease;
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+.card-pulse {
+  animation: card-pulse 0.6s ease;
+}
+
+@keyframes card-pulse {
+  0% { border-color: #232323; }
+  35% { border-color: #9a9a9a; }
+  100% { border-color: #232323; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app > *,
+  .settings-panel:not(.hidden),
+  .modal:not(.hidden),
+  .modal:not(.hidden) .modal-card,
+  .card-pulse {
+    animation: none;
+  }
 }

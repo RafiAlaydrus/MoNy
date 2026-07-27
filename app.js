@@ -92,11 +92,11 @@ const chartCtx = chartCanvas ? chartCanvas.getContext("2d") : null;
 const chartLegend = document.getElementById("chart-legend");
 
 const CATEGORY_COLORS = {
-  "Bills": "#e74c3c",
-  "Subscription": "#e67e22",
-  "Food / Drink": "#9b59b6",
-  "Transport": "#1abc9c",
-  "Others": "#7f8c8d",
+  "Bills": "#f2f2f2",
+  "Subscription": "#c9c9c9",
+  "Food / Drink": "#a1a1a1",
+  "Transport": "#797979",
+  "Others": "#515151",
 };
 
 // Returns the Second Wallet name
@@ -499,12 +499,13 @@ function updateGroceryBar() {
   label.textContent = `${Math.round(pct)}% spent`;
 
   if (pct < 50) {
-    fill.style.background = "#1e7f43";
+    fill.style.background = "#6f6f6f";
   } else if (pct < 75) {
-    fill.style.background = "#e6a817";
+    fill.style.background = "#b0b0b0";
   } else {
-    fill.style.background = "#e74c3c";
+    fill.style.background = "#ffffff";
   }
+  label.style.color = pct >= 75 ? "#e8e8e8" : "";
 }
 
 // Builds a single grocery table row
@@ -714,16 +715,48 @@ function getMainRemaining() {
   return remaining;
 }
 
+let displayedRemaining = null;
+let remainingAnim = 0;
+const remainingCard = remainingMoneyEl.closest(".card");
+
+// Animates the remaining balance toward a new value and pulses the card
+function updateRemainingDisplay(to) {
+  const from = displayedRemaining;
+  displayedRemaining = to;
+
+  if (from === null || from === to) {
+    remainingMoneyEl.textContent = `${cur()} ${fmt(to)}`;
+    return;
+  }
+
+  remainingCard.classList.remove("card-pulse");
+  void remainingCard.offsetWidth;
+  remainingCard.classList.add("card-pulse");
+
+  const token = ++remainingAnim;
+  const start = performance.now();
+  const duration = 350;
+  function tick(now) {
+    if (token !== remainingAnim) return;
+    const p = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    remainingMoneyEl.textContent = `${cur()} ${fmt(from + (to - from) * eased)}`;
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
 // Recalculates and renders the remaining balance, bars, and warnings
 function calculateRemaining(skipChart = false) {
   if (data.income === null) {
+    displayedRemaining = 0;
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
     return;
   }
 
   let remaining = getMainRemaining();
 
-  remainingMoneyEl.textContent = `${cur()} ${fmt(remaining)}`;
+  updateRemainingDisplay(remaining);
 
   const income = Number(data.income);
   const spent = income - remaining;
@@ -736,12 +769,13 @@ function calculateRemaining(skipChart = false) {
   label.textContent = `${Math.round(pct)}% spent`;
 
   if (pct < 50) {
-    fill.style.background = "#1e7f43";
+    fill.style.background = "#6f6f6f";
   } else if (pct < 75) {
-    fill.style.background = "#e6a817";
+    fill.style.background = "#b0b0b0";
   } else {
-    fill.style.background = "#e74c3c";
+    fill.style.background = "#ffffff";
   }
+  label.style.color = pct >= 75 ? "#e8e8e8" : "";
 
   if (settings.budgetLimit && income > 0) {
     const limitSpendPct = ((income - settings.budgetLimit) / income) * 100;
@@ -834,15 +868,15 @@ function renderChart() {
   const segments = Object.entries(categoryTotals).map(([label, amount]) => ({
     label,
     amount,
-    color: CATEGORY_COLORS[label] || (label === walletName() ? "#f1c40f" : "#7f8c8d"),
+    color: CATEGORY_COLORS[label] || (label === walletName() ? "#b5b5b5" : "#6a6a6a"),
   }));
 
   if (remaining > 0) {
-    segments.push({ label: "Remaining", amount: remaining, color: "#3498db" });
+    segments.push({ label: "Remaining", amount: remaining, color: "#383838" });
   }
 
   if (segments.length === 0) {
-    segments.push({ label: "Remaining", amount: income, color: "#3498db" });
+    segments.push({ label: "Remaining", amount: income, color: "#383838" });
   }
 
   const size = canvas.width;
