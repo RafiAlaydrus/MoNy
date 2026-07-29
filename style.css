@@ -422,6 +422,59 @@ h3 {
   animation: shake 0.3s ease;
 }
 
+/* Optional date field: greyed while empty so it reads as a placeholder */
+.second-form input[type="date"] {
+  text-align: left;
+  min-height: 45px;
+}
+
+.second-form input[type="date"].is-empty {
+  color: #777;
+}
+
+.second-form input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+  cursor: pointer;
+}
+
+/* =====================
+   Collapsible History
+===================== */
+.table-toggle {
+  width: 100%;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #1f1f1f;
+  padding: 8px 0;
+  color: #7a7a7a;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.table-toggle:active {
+  color: #b0b0b0;
+}
+
+.table-toggle .chev {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.table-toggle.collapsed .chev {
+  transform: rotate(-90deg);
+}
+
+.table-toggle + table {
+  margin-top: 4px;
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-4px); }

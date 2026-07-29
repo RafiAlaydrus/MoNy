@@ -19,8 +19,16 @@ let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
 };
 // Default missing settings
 if (!settings.currency) settings.currency = "RM";
-if (!settings.sortOrder) settings.sortOrder = "newest";
+if (!settings.sortOrder) settings.sortOrder = "oldest";
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
+if (!settings.collapsed) settings.collapsed = {};
+// Backdating made date order meaningful, so switch existing installs to
+// oldest-first once. The Sort transactions setting still overrides it.
+if (!settings.dateOrderMigrated) {
+  settings.sortOrder = "oldest";
+  settings.dateOrderMigrated = true;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
 // The archive replaced the old keep-data option
 if ("keepData" in settings) {
   delete settings.keepData;
@@ -136,6 +144,7 @@ const walletsContainer = document.getElementById("wallets-container");
 const scName = document.getElementById("sc-name");
 const scCategory = document.getElementById("sc-category");
 const scAmount = document.getElementById("sc-amount");
+const scDate = document.getElementById("sc-date");
 const addMoneyBtn = document.getElementById("add-money");
 const takeMoneyBtn = document.getElementById("take-money");
 const scTable = document.getElementById("sc-table");
@@ -163,6 +172,60 @@ function fmt(n) { return Number(n).toLocaleString("en", { minimumFractionDigits:
 
 // Formats a number as a whole integer
 function fmtInt(n) { return Number(n).toLocaleString("en"); }
+
+// Turns an optional YYYY-MM-DD picker value into a stored timestamp. Empty
+// means now; a picked day keeps the current time of day so several entries
+// backdated to the same day still order by when they were added. The date is
+// built in local time so it renders as the day the user actually picked.
+function resolveDate(value) {
+  const now = new Date();
+  if (!value) return now.toISOString();
+
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return now.toISOString();
+
+  return new Date(
+    y, m - 1, d,
+    now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()
+  ).toISOString();
+}
+
+// Greys out a date input while it is empty so it reads as a placeholder
+function wireDateInput(el) {
+  const sync = () => el.classList.toggle("is-empty", !el.value);
+  el.addEventListener("input", sync);
+  el.addEventListener("change", sync);
+  sync();
+}
+
+// Builds the bar that shows or hides a transaction table, remembering the choice
+function buildTableToggle(key, table) {
+  const bar = document.createElement("button");
+  bar.className = "table-toggle";
+  bar.innerHTML = `
+    <span>History</span>
+    <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M3.5 5.25 7 8.75l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  `;
+
+  function apply() {
+    const collapsed = !!settings.collapsed[key];
+    table.classList.toggle("hidden", collapsed);
+    bar.classList.toggle("collapsed", collapsed);
+    bar.setAttribute("aria-expanded", String(!collapsed));
+    bar.setAttribute("aria-label", collapsed ? "Show history" : "Hide history");
+  }
+
+  bar.addEventListener("click", () => {
+    settings.collapsed[key] = !settings.collapsed[key];
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    apply();
+  });
+
+  apply();
+  return bar;
+}
 
 /* =========================
    UNDO TOAST
@@ -609,6 +672,7 @@ function buildWalletSection(wallet) {
     <div class="second-form wallet-form">
       <input type="text" data-role="item-name" placeholder="Item name" />
       <input type="number" inputmode="decimal" data-role="item-amount" placeholder="Amount (${cur()})" />
+      <input type="date" data-role="item-date" class="is-empty" aria-label="Date, optional, defaults to today" />
       <div class="actions">
         <button data-role="add-btn" aria-label="Add money to ${wallet.name}">+ Add</button>
         <button data-role="take-btn" aria-label="Take money from ${wallet.name}">- Take</button>
@@ -625,7 +689,13 @@ function buildWalletSection(wallet) {
   const budgetInput = section.querySelector("[data-role='budget-input']");
   const nameInput = section.querySelector("[data-role='item-name']");
   const amountInput = section.querySelector("[data-role='item-amount']");
+  const dateInput = section.querySelector("[data-role='item-date']");
   const tbody = section.querySelector("[data-role='table']");
+
+  wireDateInput(dateInput);
+
+  const tableEl = section.querySelector("table");
+  tableEl.parentNode.insertBefore(buildTableToggle(wallet.id, tableEl), tableEl);
 
   card.addEventListener("click", (e) => {
     if (e.target === budgetInput) return;
@@ -677,25 +747,33 @@ function buildWalletSection(wallet) {
       return;
     }
 
+    const backdated = !!dateInput.value;
     const wd = ensureWalletData(wallet.id);
-    wd.items.push({ name, amount, type, date: new Date().toISOString() });
+    wd.items.push({ name, amount, type, date: resolveDate(dateInput.value) });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
     nameInput.value = "";
     amountInput.value = "";
+    dateInput.value = "";
+    dateInput.classList.add("is-empty");
     fields.forEach(f => f.el.classList.remove("input-error"));
 
-    const emptyRow = tbody.querySelector("td.empty-state");
-    if (emptyRow) emptyRow.closest("tr").remove();
-    const newItem = wd.items[wd.items.length - 1];
-    const row = buildWalletItemRow(newItem);
-    row.classList.add("item-enter");
-    if (settings.sortOrder === "newest") {
-      tbody.prepend(row);
+    if (backdated) {
+      // A picked date can belong anywhere in the list, so re-sort the table
+      renderWalletItemsTable(wallet, tbody);
     } else {
-      tbody.appendChild(row);
+      const emptyRow = tbody.querySelector("td.empty-state");
+      if (emptyRow) emptyRow.closest("tr").remove();
+      const newItem = wd.items[wd.items.length - 1];
+      const row = buildWalletItemRow(newItem);
+      row.classList.add("item-enter");
+      if (settings.sortOrder === "newest") {
+        tbody.prepend(row);
+      } else {
+        tbody.appendChild(row);
+      }
+      requestAnimationFrame(() => row.classList.add("item-enter-active"));
     }
-    requestAnimationFrame(() => row.classList.add("item-enter-active"));
 
     renderWalletCard(wallet, section);
     calculateRemaining();
@@ -724,9 +802,11 @@ function buildWalletSection(wallet) {
       return;
     }
 
-    openTransferModal(wallet, name, amount, () => {
+    openTransferModal(wallet, name, amount, resolveDate(dateInput.value), () => {
       nameInput.value = "";
       amountInput.value = "";
+      dateInput.value = "";
+      dateInput.classList.add("is-empty");
     });
   });
   [nameInput, amountInput].forEach(el => {
@@ -757,8 +837,7 @@ const transferDestinations = document.getElementById("transfer-destinations");
 const cancelTransferBtn = document.getElementById("cancel-transfer");
 
 // Moves money out of a wallet into Main or another wallet
-function executeTransfer(sourceWallet, destId, name, amount) {
-  const date = new Date().toISOString();
+function executeTransfer(sourceWallet, destId, name, amount, date) {
   const destName = transferPartyName(destId);
 
   ensureWalletData(sourceWallet.id).items.push({
@@ -782,7 +861,7 @@ function executeTransfer(sourceWallet, destId, name, amount) {
 }
 
 // Opens the destination picker for a pending transfer
-function openTransferModal(wallet, name, amount, onDone) {
+function openTransferModal(wallet, name, amount, date, onDone) {
   transferSummary.textContent = `Move ${cur()} ${fmt(amount)} from ${wallet.name} to:`;
   transferDestinations.innerHTML = "";
 
@@ -799,7 +878,7 @@ function openTransferModal(wallet, name, amount, onDone) {
     btn.setAttribute("aria-label", `Transfer to ${dest.name}`);
     btn.innerHTML = `${dest.name}<span class="transfer-dest-sub">${dest.sub}</span>`;
     btn.addEventListener("click", () => {
-      executeTransfer(wallet, dest.id, name, amount);
+      executeTransfer(wallet, dest.id, name, amount, date);
       transferModal.classList.add("hidden");
       onDone();
     });
@@ -873,25 +952,33 @@ function addSecondChoice(type) {
   });
   if (hasError) return;
 
-  data.secondChoice.push({ name, category, amount, type, date: new Date().toISOString() });
+  const backdated = !!scDate.value;
+  data.secondChoice.push({ name, category, amount, type, date: resolveDate(scDate.value) });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
   scName.value = "";
   scCategory.selectedIndex = 0;
   scAmount.value = "";
+  scDate.value = "";
+  scDate.classList.add("is-empty");
   fields.forEach(f => f.el.classList.remove("input-error"));
 
-  const emptyRow = scTable.querySelector("td.empty-state");
-  if (emptyRow) emptyRow.closest("tr").remove();
-  const newSc = data.secondChoice[data.secondChoice.length - 1];
-  const scRow = buildSecondChoiceRow(newSc);
-  scRow.classList.add("item-enter");
-  if (settings.sortOrder === "newest") {
-    scTable.prepend(scRow);
+  if (backdated) {
+    // A picked date can belong anywhere in the list, so re-sort the table
+    renderSecondChoice();
   } else {
-    scTable.appendChild(scRow);
+    const emptyRow = scTable.querySelector("td.empty-state");
+    if (emptyRow) emptyRow.closest("tr").remove();
+    const newSc = data.secondChoice[data.secondChoice.length - 1];
+    const scRow = buildSecondChoiceRow(newSc);
+    scRow.classList.add("item-enter");
+    if (settings.sortOrder === "newest") {
+      scTable.prepend(scRow);
+    } else {
+      scTable.appendChild(scRow);
+    }
+    requestAnimationFrame(() => scRow.classList.add("item-enter-active"));
   }
-  requestAnimationFrame(() => scRow.classList.add("item-enter-active"));
 
   calculateRemaining();
 }
@@ -1153,6 +1240,11 @@ function renderChart() {
 /* =========================
    INITIAL RENDER
 ========================= */
+
+wireDateInput(scDate);
+
+const scTableEl = scTable.closest("table");
+scTableEl.parentNode.insertBefore(buildTableToggle("secondChoice", scTableEl), scTableEl);
 
 renderIncome();
 renderPriority();
