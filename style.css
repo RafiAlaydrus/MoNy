@@ -817,6 +817,166 @@ td {
 }
 
 /* =====================
+   History View
+===================== */
+.history-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-header-left h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+#trend-chart {
+  width: 100%;
+  max-width: 440px;
+}
+
+.stat-grid {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+}
+
+.stat-cell {
+  flex: 1;
+  background: #0f0f0f;
+  border: 1px solid #1e1e1e;
+  border-radius: 10px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.stat-label {
+  display: block;
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e8e8e8;
+}
+
+.stat-sub {
+  display: block;
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.trend-empty {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: #555;
+  margin: 0;
+}
+
+.history-row {
+  background: #111;
+  border: 1px solid #232323;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.history-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.history-month {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.history-sub {
+  font-size: 11px;
+  color: #666;
+  margin-top: 3px;
+}
+
+.history-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.history-remaining {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.history-delete {
+  background: none;
+  border: 1px solid #333;
+  color: #8a8a8a;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.history-delete:active {
+  background: #1a1a1a;
+}
+
+.history-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid #1f1f1f;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.history-meta {
+  font-size: 11px;
+  color: #555;
+  margin-top: 2px;
+}
+
+.delete-all-btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: #e8e8e8;
+  color: #0a0a0a;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-all-btn:active {
+  transform: scale(0.98);
+}
+
+.storage-line {
+  text-align: center;
+  font-size: 11px;
+  color: #555;
+  margin-top: 14px;
+}
+
+/* =====================
    Motion
 ===================== */
 .app > * {

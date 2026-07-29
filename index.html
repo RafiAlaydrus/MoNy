@@ -28,13 +28,19 @@
     <span id="pull-text">Pull to refresh</span>
   </div>
 
-  <main class="app">
+  <main class="app" id="app-view">
 
     <!-- HEADER + SETTINGS -->
     <header>
       <div class="header-row">
         <h1 id="secret-reset">MONTHLY SPENT</h1>
         <section class="settings-bar">
+          <button id="history-toggle" class="settings-btn" aria-label="History">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="10" r="7.5" stroke="#888" stroke-width="1.3"/>
+              <path d="M10 6v4l2.8 1.6" stroke="#888" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
           <button id="settings-toggle" class="settings-btn" aria-label="Settings">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M8.325 2.317a1.5 1.5 0 0 1 3.35 0l.09.54a1.05 1.05 0 0 0 1.57.71l.46-.27a1.5 1.5 0 0 1 1.675 2.49l-.37.44a1.05 1.05 0 0 0 .26 1.72l.5.22a1.5 1.5 0 0 1 0 2.87l-.5.22a1.05 1.05 0 0 0-.26 1.72l.37.44a1.5 1.5 0 0 1-1.675 2.49l-.46-.27a1.05 1.05 0 0 0-1.57.71l-.09.54a1.5 1.5 0 0 1-3.35 0l-.09-.54a1.05 1.05 0 0 0-1.57-.71l-.46.27a1.5 1.5 0 0 1-1.675-2.49l.37-.44a1.05 1.05 0 0 0-.26-1.72l-.5-.22a1.5 1.5 0 0 1 0-2.87l.5-.22a1.05 1.05 0 0 0 .26-1.72l-.37-.44a1.5 1.5 0 0 1 1.675-2.49l.46.27a1.05 1.05 0 0 0 1.57-.71l.09-.54Z" stroke="#888" stroke-width="1.3"/>
@@ -43,13 +49,6 @@
           </button>
 
           <div id="settings-panel" class="settings-panel hidden">
-            <div class="setting-row">
-              <span>Keep data every 1st of the month</span>
-              <label class="toggle">
-                <input type="checkbox" id="keep-data-toggle" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
             <div class="setting-row">
               <span>Show monthly chart</span>
               <label class="toggle">
@@ -95,7 +94,7 @@
             <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.6.0</div>
+            <div class="setting-version">v1.7.0</div>
           </div>
         </section>
       </div>
@@ -251,6 +250,50 @@
     </section>
 
   </main>
+
+  <!-- HISTORY VIEW -->
+  <main class="app hidden" id="history-view">
+    <header>
+      <div class="header-row">
+        <div class="history-header-left">
+          <button id="history-back" class="settings-btn" aria-label="Back to tracker">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M12.5 4 6.5 10l6 6" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <h1>HISTORY</h1>
+        </div>
+      </div>
+      <p id="history-count"></p>
+    </header>
+
+    <section>
+      <div class="chart-container">
+        <canvas id="trend-chart" width="440" height="190" role="img" aria-label="Spending per month trend chart"></canvas>
+        <div id="trend-stats" class="stat-grid"></div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Months</h3>
+      <div id="history-list"></div>
+      <button id="delete-archive-btn" class="delete-all-btn hidden" aria-label="Delete all archived history">Delete All History</button>
+      <p id="storage-line" class="storage-line"></p>
+    </section>
+  </main>
+
+  <!-- DELETE ALL HISTORY MODAL -->
+  <div id="archive-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Delete All History?</h3>
+      <p id="archive-modal-text"></p>
+
+      <div class="modal-actions">
+        <button id="cancel-archive-delete" aria-label="Cancel deleting history">Cancel</button>
+        <button id="confirm-archive-delete" class="danger" aria-label="Confirm delete all history">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
 
   <!-- SECRET RESET MODAL -->
   <div id="reset-modal" class="modal hidden">

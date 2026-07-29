@@ -5,12 +5,12 @@
 const STORAGE_KEY = "monthly-money-tracker";
 const SETTINGS_KEY = "monthly-money-tracker-settings";
 const BACKUP_PRIORITY_KEY = "monthly-money-tracker-priority-backup";
+const ARCHIVE_KEY = "monthly-money-tracker-archive";
 
 const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
 let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
-  keepData: false,
   showChart: false,
   currency: "RM",
   sortOrder: "newest",
@@ -22,29 +22,53 @@ if (!settings.sortOrder) settings.sortOrder = "newest";
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
 if (settings.secondWalletEnabled === undefined) settings.secondWalletEnabled = true;
 if (!settings.secondWalletName) settings.secondWalletName = "Second Wallet";
+// The archive replaced the old keep-data option
+if ("keepData" in settings) {
+  delete settings.keepData;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+let archive = JSON.parse(localStorage.getItem(ARCHIVE_KEY)) || {};
+
+function freshMonthData() {
+  return {
+    month: currentMonthKey,
+    income: null,
+    priority: [],
+    priorityLocked: false,
+    groceryBudget: null,
+    groceryItems: [],
+    secondChoice: []
+  };
+}
+
+// Returns true if a month holds anything worth archiving
+function monthHasContent(d) {
+  return d.income !== null ||
+    (d.priority || []).length > 0 ||
+    (d.groceryItems || []).length > 0 ||
+    (d.secondChoice || []).length > 0;
+}
 
 let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
 
 if (!data) {
-  data = {
-    month: currentMonthKey,
-    income: null,
-    priority: [],
-    priorityLocked: false,
-    groceryBudget: null,
-    groceryItems: [],
-    secondChoice: []
-  };
-} else if (!settings.keepData && data.month !== currentMonthKey) {
-  data = {
-    month: currentMonthKey,
-    income: null,
-    priority: [],
-    priorityLocked: false,
-    groceryBudget: null,
-    groceryItems: [],
-    secondChoice: []
-  };
+  data = freshMonthData();
+} else if (data.month !== currentMonthKey) {
+  if (monthHasContent(data)) {
+    archive[data.month] = {
+      data,
+      walletName: settings.secondWalletName || "Second Wallet",
+      walletEnabled: settings.secondWalletEnabled !== false,
+      currency: settings.currency,
+      closedAt: new Date().toISOString()
+    };
+    localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive));
+  }
+  if ((data.priority || []).length > 0) {
+    localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
+  }
+  data = freshMonthData();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
@@ -803,6 +827,38 @@ function calculateRemaining(skipChart = false) {
    CHART
 ========================= */
 
+// Aggregates spending per category for any month's data
+function categoryTotalsOf(d, wName, walletEnabled) {
+  const totals = {};
+
+  (d.priority || []).forEach(bill => {
+    if (bill.paid) {
+      const cat = bill.category || "Others";
+      totals[cat] = (totals[cat] || 0) + Number(bill.amount);
+    }
+  });
+
+  if (walletEnabled) {
+    const budget = Number(d.groceryBudget) || 0;
+    const adds = (d.groceryItems || [])
+      .filter(i => i.type === "add")
+      .reduce((s, i) => s + Number(i.amount), 0);
+    const walletTotal = budget + adds;
+    if (walletTotal > 0) {
+      totals[wName] = (totals[wName] || 0) + walletTotal;
+    }
+  }
+
+  (d.secondChoice || []).forEach(item => {
+    if (item.type === "take") {
+      const cat = item.category || "Others";
+      totals[cat] = (totals[cat] || 0) + Number(item.amount);
+    }
+  });
+
+  return totals;
+}
+
 // Renders the donut chart with category breakdown
 function renderChart() {
   if (!settings.showChart || !chartCtx) return;
@@ -834,33 +890,7 @@ function renderChart() {
     return;
   }
 
-  const categoryTotals = {};
-
-  data.priority.forEach(bill => {
-    if (bill.paid) {
-      const cat = bill.category || "Others";
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(bill.amount);
-    }
-  });
-
-  if (settings.secondWalletEnabled) {
-    const wName = walletName();
-    const budget = Number(data.groceryBudget) || 0;
-    const adds = data.groceryItems
-      .filter(i => i.type === "add")
-      .reduce((s, i) => s + Number(i.amount), 0);
-    const walletTotal = budget + adds;
-    if (walletTotal > 0) {
-      categoryTotals[wName] = (categoryTotals[wName] || 0) + walletTotal;
-    }
-  }
-
-  data.secondChoice.forEach(item => {
-    if (item.type === "take") {
-      const cat = item.category || "Others";
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(item.amount);
-    }
-  });
+  const categoryTotals = categoryTotalsOf(data, walletName(), settings.secondWalletEnabled);
 
   const spent = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
   const remaining = Math.max(income - spent, 0);
@@ -942,9 +972,6 @@ if (!settings.secondWalletEnabled) {
 
 const settingsToggle = document.getElementById("settings-toggle");
 const settingsPanel = document.getElementById("settings-panel");
-const keepDataToggle = document.getElementById("keep-data-toggle");
-
-keepDataToggle.checked = settings.keepData;
 
 settingsToggle.addEventListener("click", () => {
   settingsPanel.classList.toggle("hidden");
@@ -955,11 +982,6 @@ document.addEventListener("click", (e) => {
   if (!settingsPanel.contains(e.target) && !settingsToggle.contains(e.target)) {
     settingsPanel.classList.add("hidden");
   }
-});
-
-keepDataToggle.addEventListener("change", () => {
-  settings.keepData = keepDataToggle.checked;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 });
 
 const chartToggle = document.getElementById("chart-toggle");
@@ -1071,7 +1093,7 @@ secondWalletNameInput.addEventListener("change", () => {
 ========================= */
 
 document.getElementById("export-data-btn").addEventListener("click", () => {
-  const exportObj = { data, settings };
+  const exportObj = { data, settings, archive };
   const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1079,6 +1101,350 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
   a.download = `money-tracker-${currentMonthKey}.json`;
   a.click();
   URL.revokeObjectURL(url);
+});
+
+/* =========================
+   HISTORY (ARCHIVE VIEW)
+========================= */
+
+const appView = document.getElementById("app-view");
+const historyView = document.getElementById("history-view");
+const historyToggle = document.getElementById("history-toggle");
+const historyBack = document.getElementById("history-back");
+const historyList = document.getElementById("history-list");
+const historyCount = document.getElementById("history-count");
+const trendStats = document.getElementById("trend-stats");
+const trendCanvas = document.getElementById("trend-chart");
+const trendCtx = trendCanvas ? trendCanvas.getContext("2d") : null;
+const storageLine = document.getElementById("storage-line");
+const deleteArchiveBtn = document.getElementById("delete-archive-btn");
+
+// Formats a byte count for display
+function fmtBytes(b) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+// localStorage stores UTF-16, so ~2 bytes per character
+function bytesOfString(str) {
+  return str ? str.length * 2 : 0;
+}
+
+function bytesOfKey(key) {
+  return bytesOfString(localStorage.getItem(key));
+}
+
+// "2026-7" -> "July 2026"
+function monthLabel(key) {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" });
+}
+
+// "2026-7" -> "Jul"
+function monthShort(key) {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString("default", { month: "short" });
+}
+
+// Archive keys in chronological order
+function sortedArchiveKeys() {
+  return Object.keys(archive).sort((a, b) => {
+    const [ay, am] = a.split("-").map(Number);
+    const [by, bm] = b.split("-").map(Number);
+    return ay - by || am - bm;
+  });
+}
+
+// Main remaining balance for an archived month
+function remainingOf(entry) {
+  const d = entry.data;
+  if (d.income === null) return 0;
+
+  let remaining = Number(d.income);
+  (d.priority || []).forEach(b => {
+    if (b.paid) remaining -= Number(b.amount);
+  });
+  if (entry.walletEnabled) {
+    if (d.groceryBudget) remaining -= Number(d.groceryBudget);
+    (d.groceryItems || []).forEach(i => {
+      if (i.type === "add") remaining -= Number(i.amount);
+    });
+  }
+  (d.secondChoice || []).forEach(i => {
+    remaining += i.type === "add" ? Number(i.amount) : -Number(i.amount);
+  });
+  return remaining;
+}
+
+// Income, gross spending, remaining, and category totals for an archived month
+function summarizeEntry(entry) {
+  const totals = categoryTotalsOf(entry.data, entry.walletName || "Second Wallet", entry.walletEnabled);
+  const spent = Object.values(totals).reduce((a, b) => a + b, 0);
+  return {
+    income: entry.data.income,
+    spent,
+    remaining: remainingOf(entry),
+    totals
+  };
+}
+
+// Draws the monthly spending bar chart
+function drawTrendChart(entries) {
+  if (!trendCtx) return;
+  const W = trendCanvas.width;
+  const H = trendCanvas.height;
+  const padTop = 22;
+  const padBottom = 26;
+  const padSide = 14;
+  const chartH = H - padTop - padBottom;
+  const baseY = H - padBottom;
+
+  trendCtx.clearRect(0, 0, W, H);
+
+  trendCtx.strokeStyle = "#2a2a2a";
+  trendCtx.lineWidth = 1;
+  trendCtx.beginPath();
+  trendCtx.moveTo(padSide, baseY + 0.5);
+  trendCtx.lineTo(W - padSide, baseY + 0.5);
+  trendCtx.stroke();
+
+  if (entries.length === 0) return;
+
+  const max = Math.max(...entries.map(e => e.spent), 1);
+  const maxArchived = Math.max(...entries.filter(e => !e.live).map(e => e.spent), 0);
+  const slot = (W - padSide * 2) / entries.length;
+  const barW = Math.min(slot * 0.6, 44);
+
+  entries.forEach((e, i) => {
+    const h = Math.round((e.spent / max) * chartH);
+    const x = padSide + slot * i + (slot - barW) / 2;
+    const y = baseY - h;
+
+    if (e.live) {
+      trendCtx.fillStyle = "#4a4a4a";
+    } else if (e.spent === maxArchived && maxArchived > 0) {
+      trendCtx.fillStyle = "#ffffff";
+    } else {
+      trendCtx.fillStyle = "#8a8a8a";
+    }
+    trendCtx.fillRect(x, y, barW, h);
+
+    trendCtx.fillStyle = "#666";
+    trendCtx.font = "11px -apple-system, sans-serif";
+    trendCtx.textAlign = "center";
+    trendCtx.textBaseline = "top";
+    trendCtx.fillText(monthShort(e.key), x + barW / 2, baseY + 7);
+
+    if (entries.length <= 6) {
+      trendCtx.fillStyle = e.live ? "#666" : "#aaa";
+      trendCtx.font = "10px -apple-system, sans-serif";
+      trendCtx.textBaseline = "bottom";
+      trendCtx.fillText(fmtInt(e.spent), x + barW / 2, y - 4);
+    }
+  });
+}
+
+// Renders the trends card (chart + stats)
+function renderTrends(keys) {
+  const archivedEntries = keys.slice(-11).map(key => ({
+    key,
+    spent: summarizeEntry(archive[key]).spent,
+    live: false
+  }));
+
+  const liveTotals = categoryTotalsOf(data, walletName(), settings.secondWalletEnabled);
+  const liveSpent = Object.values(liveTotals).reduce((a, b) => a + b, 0);
+  const entries = [...archivedEntries, { key: currentMonthKey, spent: liveSpent, live: true }];
+
+  drawTrendChart(entries);
+
+  if (keys.length === 0) {
+    trendStats.innerHTML = '<p class="trend-empty">History appears after your first month ends. The dim bar is this month so far.</p>';
+    return;
+  }
+
+  const spents = keys.map(key => ({ key, spent: summarizeEntry(archive[key]).spent }));
+  const avg = spents.reduce((s, e) => s + e.spent, 0) / spents.length;
+  const lowest = spents.reduce((a, b) => (b.spent < a.spent ? b : a));
+  const highest = spents.reduce((a, b) => (b.spent > a.spent ? b : a));
+
+  trendStats.innerHTML = `
+    <div class="stat-cell">
+      <span class="stat-label">Avg Spent</span>
+      <span class="stat-value">${cur()} ${fmtInt(Math.round(avg))}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Lowest</span>
+      <span class="stat-value">${cur()} ${fmtInt(lowest.spent)}</span>
+      <span class="stat-sub">${monthShort(lowest.key)}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Highest</span>
+      <span class="stat-value">${cur()} ${fmtInt(highest.spent)}</span>
+      <span class="stat-sub">${monthShort(highest.key)}</span>
+    </div>
+  `;
+}
+
+// Builds one archived month row (summary + expandable detail)
+function buildHistoryRow(key) {
+  const entry = archive[key];
+  const s = summarizeEntry(entry);
+  const c = entry.currency || cur();
+  const size = fmtBytes(bytesOfString(JSON.stringify(entry)));
+  const d = entry.data;
+
+  const row = document.createElement("div");
+  row.className = "history-row";
+
+  const incomeText = s.income !== null ? `${c} ${fmtInt(s.income)} in` : "no income set";
+
+  const detailRows = Object.entries(s.totals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, amount]) => {
+      const color = CATEGORY_COLORS[label] || (label === (entry.walletName || "Second Wallet") ? "#b5b5b5" : "#6a6a6a");
+      return `
+        <div class="legend-item">
+          <div class="legend-left">
+            <span class="legend-dot" style="background:${color}"></span>
+            <span>${label}</span>
+          </div>
+          <span class="legend-amount">${c} ${fmt(amount)}</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  const remainingRow = s.income !== null ? `
+    <div class="legend-item">
+      <div class="legend-left">
+        <span class="legend-dot" style="background:#383838"></span>
+        <span>Remaining</span>
+      </div>
+      <span class="legend-amount">${c} ${fmt(s.remaining)}</span>
+    </div>
+  ` : "";
+
+  const counts = `${(d.priority || []).length} bills · ${(d.groceryItems || []).length} wallet items · ${(d.secondChoice || []).length} transactions`;
+
+  row.innerHTML = `
+    <div class="history-row-main">
+      <div>
+        <div class="history-month">${monthLabel(key)}</div>
+        <div class="history-sub">${incomeText} · ${c} ${fmtInt(s.spent)} spent · ${size}</div>
+      </div>
+      <div class="history-right">
+        <strong class="history-remaining">${c} ${fmtInt(s.remaining)}</strong>
+        <button class="history-delete" aria-label="Delete ${monthLabel(key)}">✕</button>
+      </div>
+    </div>
+    <div class="history-detail hidden">
+      ${detailRows || '<span class="history-sub">No spending recorded.</span>'}
+      ${remainingRow}
+      <span class="history-meta">${counts}</span>
+    </div>
+  `;
+
+  row.querySelector(".history-row-main").addEventListener("click", (e) => {
+    if (e.target.closest(".history-delete")) return;
+    row.querySelector(".history-detail").classList.toggle("hidden");
+  });
+
+  row.querySelector(".history-delete").addEventListener("click", () => {
+    deleteArchivedMonth(key);
+  });
+
+  return row;
+}
+
+// Deletes one archived month with undo
+function deleteArchivedMonth(key) {
+  const removed = archive[key];
+  delete archive[key];
+  renderHistory();
+
+  showUndo(
+    `${monthLabel(key)} deleted`,
+    () => {
+      localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive));
+    },
+    () => {
+      archive[key] = removed;
+      localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive));
+      renderHistory();
+    }
+  );
+}
+
+// Total app storage across all keys
+function totalStorageBytes() {
+  return bytesOfKey(STORAGE_KEY) + bytesOfKey(SETTINGS_KEY) +
+    bytesOfKey(BACKUP_PRIORITY_KEY) + bytesOfKey(ARCHIVE_KEY);
+}
+
+// Renders the whole history view
+function renderHistory() {
+  const keys = sortedArchiveKeys();
+
+  historyCount.textContent = keys.length === 1
+    ? "1 archived month"
+    : `${keys.length} archived months`;
+
+  renderTrends(keys);
+
+  historyList.innerHTML = "";
+  if (keys.length === 0) {
+    historyList.innerHTML = '<div class="empty-state">No archived months yet.</div>';
+  } else {
+    [...keys].reverse().forEach(key => {
+      historyList.appendChild(buildHistoryRow(key));
+    });
+  }
+
+  deleteArchiveBtn.classList.toggle("hidden", keys.length === 0);
+  storageLine.textContent = `Storage used: ${fmtBytes(totalStorageBytes())} of ~5 MB`;
+}
+
+historyToggle.addEventListener("click", () => {
+  renderHistory();
+  appView.classList.add("hidden");
+  historyView.classList.remove("hidden");
+  window.scrollTo(0, 0);
+});
+
+historyBack.addEventListener("click", () => {
+  historyView.classList.add("hidden");
+  appView.classList.remove("hidden");
+  window.scrollTo(0, 0);
+});
+
+/* =========================
+   DELETE ALL HISTORY
+========================= */
+
+const archiveModal = document.getElementById("archive-modal");
+const archiveModalText = document.getElementById("archive-modal-text");
+const confirmArchiveDeleteBtn = document.getElementById("confirm-archive-delete");
+const cancelArchiveDeleteBtn = document.getElementById("cancel-archive-delete");
+
+deleteArchiveBtn.addEventListener("click", () => {
+  const n = Object.keys(archive).length;
+  const size = fmtBytes(bytesOfKey(ARCHIVE_KEY));
+  archiveModalText.textContent =
+    `This will erase ${n === 1 ? "1 archived month" : `${n} archived months`} (${size}). This action cannot be undone.`;
+  archiveModal.classList.remove("hidden");
+});
+
+cancelArchiveDeleteBtn.addEventListener("click", () => {
+  archiveModal.classList.add("hidden");
+});
+
+confirmArchiveDeleteBtn.addEventListener("click", () => {
+  archive = {};
+  localStorage.removeItem(ARCHIVE_KEY);
+  archiveModal.classList.add("hidden");
+  renderHistory();
 });
 
 /* =========================
@@ -1142,6 +1508,7 @@ confirmResetBtn.addEventListener("click", () => {
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON" || tag === "LABEL") return;
     if (document.querySelector(".modal:not(.hidden)")) return;
+    if (!historyView.classList.contains("hidden")) return;
     if (window.scrollY === 0) {
       startY = e.touches[0].clientY;
       pulling = true;
