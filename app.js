@@ -153,15 +153,19 @@ const chartCanvas = document.getElementById("summary-chart");
 const chartCtx = chartCanvas ? chartCanvas.getContext("2d") : null;
 const chartLegend = document.getElementById("chart-legend");
 
+// Only the chart and its legend use color - the rest of the app stays monochrome
 const CATEGORY_COLORS = {
-  "Bills": "#f2f2f2",
-  "Subscription": "#c9c9c9",
-  "Food / Drink": "#a1a1a1",
-  "Transport": "#797979",
-  "Others": "#515151",
+  "Bills": "#e74c3c",
+  "Subscription": "#e67e22",
+  "Food / Drink": "#9b59b6",
+  "Transport": "#16a085",
+  "Others": "#8a8a8a",
 };
 
-const WALLET_COLOR_RAMP = ["#d9d9d9", "#b5b5b5", "#919191", "#6d6d6d", "#4a4a4a"];
+const CHART_IN_WALLETS_COLOR = "#f1c40f";
+const CHART_REMAINING_COLOR = "#3498db";
+
+const WALLET_COLOR_RAMP = ["#2ecc71", "#e84393", "#00b8d9", "#a29bfe", "#fdcb6e"];
 function walletColor(index) { return WALLET_COLOR_RAMP[index % WALLET_COLOR_RAMP.length]; }
 
 // Returns the current currency symbol
@@ -172,6 +176,17 @@ function fmt(n) { return Number(n).toLocaleString("en", { minimumFractionDigits:
 
 // Formats a number as a whole integer
 function fmtInt(n) { return Number(n).toLocaleString("en"); }
+
+// Total income: the amount set on the income card plus any money received
+// through Second choice "add" entries, so extra income you log there counts
+// toward the total instead of only ever showing up in what's left over.
+function totalIncomeOf(d) {
+  if (d.income === null) return null;
+  const adds = (d.secondChoice || []).reduce((sum, item) => {
+    return sum + (item.type === "add" ? Number(item.amount) : 0);
+  }, 0);
+  return Number(d.income) + adds;
+}
 
 // Turns an optional YYYY-MM-DD picker value into a stored timestamp. Empty
 // means now; a picked day keeps the current time of day so several entries
@@ -295,8 +310,8 @@ monthText.textContent = now.toLocaleString("default", {
 
 // Renders the income display
 function renderIncome() {
-  incomeDisplay.textContent =
-    data.income !== null ? `${cur()} ${fmtInt(data.income)}` : `${cur()} 0`;
+  const total = totalIncomeOf(data);
+  incomeDisplay.textContent = total !== null ? `${cur()} ${fmtInt(total)}` : `${cur()} 0`;
 }
 
 incomeCard.addEventListener("click", () => {
@@ -1060,6 +1075,8 @@ function updateRemainingDisplay(to) {
 
 // Recalculates and renders the remaining balance, bars, and warnings
 function calculateRemaining(skipChart = false) {
+  renderIncome();
+
   if (data.income === null) {
     displayedRemaining = 0;
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
@@ -1070,7 +1087,7 @@ function calculateRemaining(skipChart = false) {
 
   updateRemainingDisplay(remaining);
 
-  const income = Number(data.income);
+  const income = totalIncomeOf(data);
   const spent = income - remaining;
   const pct = Math.min(Math.max((spent / income) * 100, 0), 100);
   const fill = document.getElementById("spend-bar-fill");
@@ -1164,7 +1181,7 @@ function renderChart() {
   const ctx = chartCtx;
   const legend = chartLegend;
 
-  const income = Number(data.income) || 0;
+  const income = totalIncomeOf(data) || 0;
   if (income === 0) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const size = canvas.width;
@@ -1205,15 +1222,15 @@ function renderChart() {
 
   // Money budgeted to a wallet has left the main balance but is not spent yet
   if (inWallets > 0) {
-    segments.push({ label: "In wallets", amount: inWallets, color: "#5f5f5f" });
+    segments.push({ label: "In wallets", amount: inWallets, color: CHART_IN_WALLETS_COLOR });
   }
 
   if (remaining > 0) {
-    segments.push({ label: "Remaining", amount: remaining, color: "#2e2e2e" });
+    segments.push({ label: "Remaining", amount: remaining, color: CHART_REMAINING_COLOR });
   }
 
   if (segments.length === 0) {
-    segments.push({ label: "Remaining", amount: income, color: "#2e2e2e" });
+    segments.push({ label: "Remaining", amount: income, color: CHART_REMAINING_COLOR });
   }
 
   const size = canvas.width;
@@ -1613,7 +1630,7 @@ function summarizeEntry(rawEntry) {
   const entry = normalizeArchiveEntry(rawEntry);
   const b = spendingBreakdownOf(entry.data, entry.wallets);
   return {
-    income: entry.data.income,
+    income: totalIncomeOf(entry.data),
     spent: b.spent,
     inWallets: b.inWallets,
     remaining: remainingOf(rawEntry),
@@ -1754,7 +1771,7 @@ function buildHistoryRow(key) {
   const inWalletsRow = s.inWallets > 0 ? `
     <div class="legend-item">
       <div class="legend-left">
-        <span class="legend-dot" style="background:#5f5f5f"></span>
+        <span class="legend-dot" style="background:${CHART_IN_WALLETS_COLOR}"></span>
         <span>In wallets</span>
       </div>
       <span class="legend-amount">${c} ${fmt(s.inWallets)}</span>
@@ -1764,7 +1781,7 @@ function buildHistoryRow(key) {
   const remainingRow = s.income !== null ? `
     <div class="legend-item">
       <div class="legend-left">
-        <span class="legend-dot" style="background:#2e2e2e"></span>
+        <span class="legend-dot" style="background:${CHART_REMAINING_COLOR}"></span>
         <span>Remaining</span>
       </div>
       <span class="legend-amount">${c} ${fmt(s.remaining)}</span>
