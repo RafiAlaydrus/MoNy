@@ -1,4 +1,4 @@
-const CACHE_NAME = "mmt-v11";
+const CACHE_NAME = "mmt-v12";
 const ASSETS = [
   "./",
   "./index.html",

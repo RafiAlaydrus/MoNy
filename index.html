@@ -89,7 +89,7 @@
             <div class="setting-row" style="margin-top:10px;">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.8.0</div>
+            <div class="setting-version">v1.9.0</div>
           </div>
         </section>
       </div>
@@ -166,9 +166,6 @@
       <ul id="priority-list"></ul>
     </section>
 
-    <!-- WALLETS -->
-    <div id="wallets-container"></div>
-
     <!-- SECOND CHOICE -->
     <section>
       <h3>Second choice</h3>
@@ -201,6 +198,9 @@
         <tbody id="sc-table"></tbody>
       </table>
     </section>
+
+    <!-- WALLETS -->
+    <div id="wallets-container"></div>
 
   </main>
 
@@ -258,6 +258,19 @@
       <div class="modal-actions">
         <button id="cancel-add-wallet" aria-label="Cancel adding wallet">Cancel</button>
         <button id="confirm-add-wallet" class="danger" aria-label="Confirm add wallet">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSFER MODAL -->
+  <div id="transfer-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Transfer To</h3>
+      <p id="transfer-summary"></p>
+      <div id="transfer-destinations" class="transfer-list"></div>
+
+      <div class="modal-actions">
+        <button id="cancel-transfer" aria-label="Cancel transfer">Cancel</button>
       </div>
     </div>
   </div>

@@ -476,12 +476,17 @@ function ensureWalletData(id) {
   return data.walletData[id];
 }
 
+// True for items that raise a wallet's balance ("add" from main, "in" from a transfer)
+function isWalletInflow(item) {
+  return item.type === "add" || item.type === "in";
+}
+
 // Returns a wallet's live balance
 function getWalletBalance(id) {
   const wd = ensureWalletData(id);
   const budget = Number(wd.budget) || 0;
   return wd.items.reduce((bal, item) => {
-    return bal + (item.type === "add" ? Number(item.amount) : -Number(item.amount));
+    return bal + (isWalletInflow(item) ? Number(item.amount) : -Number(item.amount));
   }, budget);
 }
 
@@ -489,18 +494,34 @@ function getWalletBalance(id) {
 function getWalletSpent(id) {
   const wd = ensureWalletData(id);
   return wd.items.reduce((sum, item) => {
-    return sum + (item.type === "add" ? -Number(item.amount) : Number(item.amount));
+    return sum + (isWalletInflow(item) ? -Number(item.amount) : Number(item.amount));
   }, 0);
+}
+
+// Resolves a transfer counterparty's current name, falling back to the stored one
+function transferPartyName(id, fallback) {
+  if (id === "main") return "Main";
+  const w = settings.wallets.find(w => w.id === id);
+  if (w) return w.name;
+  return fallback || "deleted wallet";
 }
 
 // Builds a single wallet transaction row
 function buildWalletItemRow(item) {
   const row = document.createElement("tr");
   const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+
+  let label = item.name;
+  if (item.type === "out") {
+    label = `${item.name} → ${transferPartyName(item.toId, item.toName)}`;
+  } else if (item.type === "in") {
+    label = `${item.name} ← ${transferPartyName(item.fromId, item.fromName)}`;
+  }
+
   row.innerHTML = `
-    <td>${item.name}</td>
+    <td>${label}</td>
     <td class="date-stamp">${dateStr}</td>
-    <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
+    <td>${isWalletInflow(item) ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
   `;
   return row;
 }
@@ -592,6 +613,7 @@ function buildWalletSection(wallet) {
         <button data-role="add-btn" aria-label="Add money to ${wallet.name}">+ Add</button>
         <button data-role="take-btn" aria-label="Take money from ${wallet.name}">- Take</button>
       </div>
+      <button data-role="transfer-btn" class="transfer-btn" aria-label="Transfer money from ${wallet.name}">Transfer</button>
     </div>
     <table>
       <thead><tr><th>Item</th><th>Date</th><th>Amount</th></tr></thead>
@@ -681,6 +703,32 @@ function buildWalletSection(wallet) {
 
   section.querySelector("[data-role='add-btn']").addEventListener("click", () => addItem("add"));
   section.querySelector("[data-role='take-btn']").addEventListener("click", () => addItem("take"));
+  section.querySelector("[data-role='transfer-btn']").addEventListener("click", () => {
+    const name = nameInput.value.trim();
+    const amount = Number(amountInput.value);
+
+    const fields = [
+      { el: nameInput, valid: !!name },
+      { el: amountInput, valid: !!amount },
+    ];
+    let hasError = false;
+    fields.forEach(f => {
+      if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
+      else f.el.classList.remove("input-error");
+    });
+    if (hasError) return;
+
+    // A transfer credits the destination, so it cannot exceed what this wallet holds
+    if (amount > getWalletBalance(wallet.id)) {
+      amountInput.classList.add("input-error");
+      return;
+    }
+
+    openTransferModal(wallet, name, amount, () => {
+      nameInput.value = "";
+      amountInput.value = "";
+    });
+  });
   [nameInput, amountInput].forEach(el => {
     el.addEventListener("input", () => el.classList.remove("input-error"));
   });
@@ -698,6 +746,72 @@ function renderWallets() {
     walletsContainer.appendChild(buildWalletSection(wallet));
   });
 }
+
+/* =========================
+   WALLET TRANSFER
+========================= */
+
+const transferModal = document.getElementById("transfer-modal");
+const transferSummary = document.getElementById("transfer-summary");
+const transferDestinations = document.getElementById("transfer-destinations");
+const cancelTransferBtn = document.getElementById("cancel-transfer");
+
+// Moves money out of a wallet into Main or another wallet
+function executeTransfer(sourceWallet, destId, name, amount) {
+  const date = new Date().toISOString();
+  const destName = transferPartyName(destId);
+
+  ensureWalletData(sourceWallet.id).items.push({
+    name, amount, type: "out", toId: destId, toName: destName, date
+  });
+
+  if (destId === "main") {
+    // Returned money re-enters the main balance and shows in Second choice
+    data.secondChoice.push({ name, category: "Transfer", amount, type: "add", date });
+  } else {
+    // Wallet-to-wallet money already left main, so it must not be deducted again
+    ensureWalletData(destId).items.push({
+      name, amount, type: "in", fromId: sourceWallet.id, fromName: sourceWallet.name, date
+    });
+  }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  renderWallets();
+  renderSecondChoice();
+  calculateRemaining();
+}
+
+// Opens the destination picker for a pending transfer
+function openTransferModal(wallet, name, amount, onDone) {
+  transferSummary.textContent = `Move ${cur()} ${fmt(amount)} from ${wallet.name} to:`;
+  transferDestinations.innerHTML = "";
+
+  const destinations = [
+    { id: "main", name: "Main wallet", sub: "Shows in Second choice" },
+    ...settings.wallets
+      .filter(w => w.id !== wallet.id)
+      .map(w => ({ id: w.id, name: w.name, sub: `Balance ${cur()} ${fmtInt(getWalletBalance(w.id))}` }))
+  ];
+
+  destinations.forEach(dest => {
+    const btn = document.createElement("button");
+    btn.className = "transfer-dest-btn";
+    btn.setAttribute("aria-label", `Transfer to ${dest.name}`);
+    btn.innerHTML = `${dest.name}<span class="transfer-dest-sub">${dest.sub}</span>`;
+    btn.addEventListener("click", () => {
+      executeTransfer(wallet, dest.id, name, amount);
+      transferModal.classList.add("hidden");
+      onDone();
+    });
+    transferDestinations.appendChild(btn);
+  });
+
+  transferModal.classList.remove("hidden");
+}
+
+cancelTransferBtn.addEventListener("click", () => {
+  transferModal.classList.add("hidden");
+});
 
 /* =========================
    SECOND CHOICE
