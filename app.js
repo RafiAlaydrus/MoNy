@@ -1114,38 +1114,46 @@ function calculateRemaining(skipChart = false) {
    CHART
 ========================= */
 
-// Aggregates spending per category for any month's data
-function categoryTotalsOf(d, walletsList) {
-  const totals = {};
+// Breaks a month into what was actually spent per category, plus whatever is
+// still sitting in wallets. Budgeting money into a wallet only moves it, so it
+// counts as spending once it is taken out of that wallet, not before.
+function spendingBreakdownOf(d, walletsList) {
+  const categories = {};
 
   (d.priority || []).forEach(bill => {
     if (bill.paid) {
       const cat = bill.category || "Others";
-      totals[cat] = (totals[cat] || 0) + Number(bill.amount);
-    }
-  });
-
-  (walletsList || []).forEach(w => {
-    const wd = (d.walletData || {})[w.id];
-    if (!wd) return;
-    const budget = Number(wd.budget) || 0;
-    const adds = (wd.items || [])
-      .filter(i => i.type === "add")
-      .reduce((s, i) => s + Number(i.amount), 0);
-    const walletTotal = budget + adds;
-    if (walletTotal > 0) {
-      totals[w.name] = (totals[w.name] || 0) + walletTotal;
+      categories[cat] = (categories[cat] || 0) + Number(bill.amount);
     }
   });
 
   (d.secondChoice || []).forEach(item => {
     if (item.type === "take") {
       const cat = item.category || "Others";
-      totals[cat] = (totals[cat] || 0) + Number(item.amount);
+      categories[cat] = (categories[cat] || 0) + Number(item.amount);
     }
   });
 
-  return totals;
+  let inWallets = 0;
+  (walletsList || []).forEach(w => {
+    const wd = (d.walletData || {})[w.id];
+    if (!wd) return;
+
+    let balance = Number(wd.budget) || 0;
+    let spentHere = 0;
+    (wd.items || []).forEach(i => {
+      const amount = Number(i.amount);
+      balance += isWalletInflow(i) ? amount : -amount;
+      // Transfers out move money elsewhere, so only takes are spending
+      if (i.type === "take") spentHere += amount;
+    });
+
+    if (spentHere > 0) categories[w.name] = (categories[w.name] || 0) + spentHere;
+    inWallets += balance;
+  });
+
+  const spent = Object.values(categories).reduce((a, b) => a + b, 0);
+  return { categories, inWallets, spent };
 }
 
 // Renders the donut chart with category breakdown
@@ -1179,25 +1187,33 @@ function renderChart() {
     return;
   }
 
-  const categoryTotals = categoryTotalsOf(data, settings.wallets);
+  const breakdown = spendingBreakdownOf(data, settings.wallets);
   const walletColorMap = {};
   settings.wallets.forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
 
-  const spent = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
-  const remaining = Math.max(income - spent, 0);
+  const spent = breakdown.spent;
+  const inWallets = Math.max(breakdown.inWallets, 0);
+  const remaining = Math.max(getMainRemaining(), 0);
 
-  const segments = Object.entries(categoryTotals).map(([label, amount]) => ({
-    label,
-    amount,
-    color: CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a",
-  }));
+  const segments = Object.entries(breakdown.categories)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, amount]) => ({
+      label,
+      amount,
+      color: CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a",
+    }));
+
+  // Money budgeted to a wallet has left the main balance but is not spent yet
+  if (inWallets > 0) {
+    segments.push({ label: "In wallets", amount: inWallets, color: "#5f5f5f" });
+  }
 
   if (remaining > 0) {
-    segments.push({ label: "Remaining", amount: remaining, color: "#383838" });
+    segments.push({ label: "Remaining", amount: remaining, color: "#2e2e2e" });
   }
 
   if (segments.length === 0) {
-    segments.push({ label: "Remaining", amount: income, color: "#383838" });
+    segments.push({ label: "Remaining", amount: income, color: "#2e2e2e" });
   }
 
   const size = canvas.width;
@@ -1224,7 +1240,7 @@ function renderChart() {
   ctx.font = "bold 18px -apple-system, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(`${cur()} ${fmtInt(spent)}`, center, center - 8);
+  ctx.fillText(`${cur()} ${fmt(spent)}`, center, center - 8);
   ctx.font = "12px -apple-system, sans-serif";
   ctx.fillStyle = "#888";
   ctx.fillText("total spent", center, center + 12);
@@ -1595,13 +1611,13 @@ function remainingOf(rawEntry) {
 // Income, gross spending, remaining, and category totals for an archived month
 function summarizeEntry(rawEntry) {
   const entry = normalizeArchiveEntry(rawEntry);
-  const totals = categoryTotalsOf(entry.data, entry.wallets);
-  const spent = Object.values(totals).reduce((a, b) => a + b, 0);
+  const b = spendingBreakdownOf(entry.data, entry.wallets);
   return {
     income: entry.data.income,
-    spent,
+    spent: b.spent,
+    inWallets: b.inWallets,
     remaining: remainingOf(rawEntry),
-    totals
+    totals: b.categories
   };
 }
 
@@ -1669,8 +1685,7 @@ function renderTrends(keys) {
     live: false
   }));
 
-  const liveTotals = categoryTotalsOf(data, settings.wallets);
-  const liveSpent = Object.values(liveTotals).reduce((a, b) => a + b, 0);
+  const liveSpent = spendingBreakdownOf(data, settings.wallets).spent;
   const entries = [...archivedEntries, { key: currentMonthKey, spent: liveSpent, live: true }];
 
   drawTrendChart(entries);
@@ -1736,10 +1751,20 @@ function buildHistoryRow(key) {
     })
     .join("");
 
+  const inWalletsRow = s.inWallets > 0 ? `
+    <div class="legend-item">
+      <div class="legend-left">
+        <span class="legend-dot" style="background:#5f5f5f"></span>
+        <span>In wallets</span>
+      </div>
+      <span class="legend-amount">${c} ${fmt(s.inWallets)}</span>
+    </div>
+  ` : "";
+
   const remainingRow = s.income !== null ? `
     <div class="legend-item">
       <div class="legend-left">
-        <span class="legend-dot" style="background:#383838"></span>
+        <span class="legend-dot" style="background:#2e2e2e"></span>
         <span>Remaining</span>
       </div>
       <span class="legend-amount">${c} ${fmt(s.remaining)}</span>
@@ -1762,6 +1787,7 @@ function buildHistoryRow(key) {
     </div>
     <div class="history-detail hidden">
       ${detailRows || '<span class="history-sub">No spending recorded.</span>'}
+      ${inWalletsRow}
       ${remainingRow}
       <span class="history-meta">${counts}</span>
     </div>
