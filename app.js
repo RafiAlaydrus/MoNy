@@ -1814,6 +1814,25 @@ confirmResetBtn.addEventListener("click", () => {
 });
 
 /* =========================
+   KEYBOARD-AWARE MODALS
+========================= */
+
+// Tracks the visible viewport so modals stay centred above an open keyboard
+(function () {
+  const vv = window.visualViewport;
+  if (!vv) return;
+
+  function syncViewport() {
+    document.documentElement.style.setProperty("--vv-top", `${vv.offsetTop}px`);
+    document.documentElement.style.setProperty("--vv-height", `${vv.height}px`);
+  }
+
+  vv.addEventListener("resize", syncViewport);
+  vv.addEventListener("scroll", syncViewport);
+  syncViewport();
+})();
+
+/* =========================
    PULL TO REFRESH
 ========================= */
 
