@@ -697,33 +697,118 @@ td {
 }
 
 /* =====================
-   Grocery Section
+   Wallet Sections
 ===================== */
-#grocery-card {
+.wallet-section + .wallet-section {
+  margin-top: 24px;
+}
+
+.wallet-card {
   cursor: pointer;
   margin-bottom: 12px;
 }
 
-#grocery-card input {
+.wallet-card input {
   width: 100%;
   margin-top: 10px;
   padding: 12px;
   border-radius: 12px;
 }
 
-.grocery-form {
+.wallet-form {
   margin-top: 12px;
 }
 
-#add-grocery {
+[data-role="add-btn"] {
   background: #e8e8e8;
   color: #0a0a0a;
 }
 
-#take-grocery {
+[data-role="take-btn"] {
   background: transparent;
   border: 1px solid #333;
   color: #b0b0b0;
+}
+
+/* =====================
+   Wallets Settings
+===================== */
+.wallets-header {
+  margin-bottom: 2px;
+}
+
+.wallets-count {
+  color: #666;
+  font-size: 12px;
+}
+
+.wallets-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.wallets-empty {
+  color: #555;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px 0;
+  margin: 0;
+}
+
+.wallet-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-input-wide {
+  flex: 1;
+  min-width: 0;
+  background: #111;
+  color: #fff;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.setting-input-wide::placeholder {
+  color: #555;
+}
+
+.wallet-delete-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid #333;
+  color: #8a8a8a;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.wallet-delete-btn:active {
+  background: #1a1a1a;
+}
+
+.modal-input {
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.modal-error {
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 /* =====================

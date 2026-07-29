@@ -14,14 +14,13 @@ let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
   showChart: false,
   currency: "RM",
   sortOrder: "newest",
-  budgetLimit: null
+  budgetLimit: null,
+  wallets: []
 };
 // Default missing settings
 if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "newest";
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
-if (settings.secondWalletEnabled === undefined) settings.secondWalletEnabled = true;
-if (!settings.secondWalletName) settings.secondWalletName = "Second Wallet";
 // The archive replaced the old keep-data option
 if ("keepData" in settings) {
   delete settings.keepData;
@@ -30,27 +29,69 @@ if ("keepData" in settings) {
 
 let archive = JSON.parse(localStorage.getItem(ARCHIVE_KEY)) || {};
 
+function genWalletId() {
+  return "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
 function freshMonthData() {
   return {
     month: currentMonthKey,
     income: null,
     priority: [],
     priorityLocked: false,
-    groceryBudget: null,
-    groceryItems: [],
+    walletData: {},
     secondChoice: []
   };
 }
 
+// Number of wallet transactions in a month (new or legacy shape)
+function walletItemsCount(d) {
+  if (d.walletData) {
+    return Object.values(d.walletData).reduce((n, wd) => n + (wd.items || []).length, 0);
+  }
+  return (d.groceryItems || []).length;
+}
+
 // Returns true if a month holds anything worth archiving
 function monthHasContent(d) {
+  const hasBudgets = d.walletData
+    ? Object.values(d.walletData).some(wd => Number(wd.budget) > 0)
+    : Number(d.groceryBudget) > 0;
   return d.income !== null ||
     (d.priority || []).length > 0 ||
-    (d.groceryItems || []).length > 0 ||
+    walletItemsCount(d) > 0 ||
+    hasBudgets ||
     (d.secondChoice || []).length > 0;
 }
 
 let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+
+// Migrate the old single Second Wallet into the wallets list
+if (!settings.wallets) {
+  settings.wallets = [];
+  const hadWalletData = data &&
+    (Number(data.groceryBudget) > 0 || (data.groceryItems || []).length > 0);
+  if (settings.secondWalletEnabled !== false || hadWalletData) {
+    settings.wallets.push({ id: genWalletId(), name: settings.secondWalletName || "Second Wallet" });
+  }
+  delete settings.secondWalletEnabled;
+  delete settings.secondWalletName;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+if (data && !data.walletData) {
+  data.walletData = {};
+  const first = settings.wallets[0];
+  if (first && (Number(data.groceryBudget) > 0 || (data.groceryItems || []).length > 0)) {
+    data.walletData[first.id] = {
+      budget: data.groceryBudget !== undefined ? data.groceryBudget : null,
+      items: data.groceryItems || []
+    };
+  }
+  delete data.groceryBudget;
+  delete data.groceryItems;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
 
 if (!data) {
   data = freshMonthData();
@@ -58,8 +99,7 @@ if (!data) {
   if (monthHasContent(data)) {
     archive[data.month] = {
       data,
-      walletName: settings.secondWalletName || "Second Wallet",
-      walletEnabled: settings.secondWalletEnabled !== false,
+      wallets: settings.wallets.map(w => ({ id: w.id, name: w.name })),
       currency: settings.currency,
       closedAt: new Date().toISOString()
     };
@@ -71,10 +111,6 @@ if (!data) {
   data = freshMonthData();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
-
-// Default missing wallet fields
-if (!data.groceryItems) data.groceryItems = [];
-if (data.groceryBudget === undefined) data.groceryBudget = null;
 
 /* =========================
    DOM REFERENCES (SAFE)
@@ -95,14 +131,7 @@ const priorityModal = document.getElementById("priority-modal");
 const confirmPriorityBtn = document.getElementById("confirm-priority");
 const cancelPriorityBtn = document.getElementById("cancel-priority");
 
-const groceryCard = document.getElementById("grocery-card");
-const groceryBudgetDisplay = document.getElementById("grocery-budget-display");
-const groceryBudgetInput = document.getElementById("grocery-budget-input");
-const grName = document.getElementById("gr-name");
-const grAmount = document.getElementById("gr-amount");
-const addGroceryBtn = document.getElementById("add-grocery");
-const takeGroceryBtn = document.getElementById("take-grocery");
-const groceryTable = document.getElementById("grocery-table");
+const walletsContainer = document.getElementById("wallets-container");
 
 const scName = document.getElementById("sc-name");
 const scCategory = document.getElementById("sc-category");
@@ -123,8 +152,8 @@ const CATEGORY_COLORS = {
   "Others": "#515151",
 };
 
-// Returns the Second Wallet name
-function walletName() { return settings.secondWalletName || "Second Wallet"; }
+const WALLET_COLOR_RAMP = ["#d9d9d9", "#b5b5b5", "#919191", "#6d6d6d", "#4a4a4a"];
+function walletColor(index) { return WALLET_COLOR_RAMP[index % WALLET_COLOR_RAMP.length]; }
 
 // Returns the current currency symbol
 function cur() { return settings.currency; }
@@ -438,85 +467,84 @@ copyLastBtn.addEventListener("click", () => {
 updateCopyLastBtn();
 
 /* =========================
-   GROCERY
+   WALLETS (MULTIPLE)
 ========================= */
 
-// Returns the live wallet balance
-function getWalletBalance() {
-  const budget = Number(data.groceryBudget) || 0;
-  return data.groceryItems.reduce((bal, item) => {
+// Ensures a wallet has a data slot for this month
+function ensureWalletData(id) {
+  if (!data.walletData[id]) data.walletData[id] = { budget: null, items: [] };
+  return data.walletData[id];
+}
+
+// Returns a wallet's live balance
+function getWalletBalance(id) {
+  const wd = ensureWalletData(id);
+  const budget = Number(wd.budget) || 0;
+  return wd.items.reduce((bal, item) => {
     return bal + (item.type === "add" ? Number(item.amount) : -Number(item.amount));
   }, budget);
 }
 
-// Renders the second wallet display
-function renderGroceryBudget() {
-  const balance = getWalletBalance();
-  groceryBudgetDisplay.textContent = `${cur()} ${fmtInt(balance)}`;
-  document.getElementById("second-wallet-title").textContent = walletName();
-  document.getElementById("second-wallet-budget-label").textContent = `${walletName()} Balance`;
-}
-
-groceryCard.addEventListener("click", (e) => {
-  if (e.target === groceryBudgetInput) return;
-  groceryBudgetInput.classList.remove("hidden");
-  groceryBudgetInput.value = data.groceryBudget ?? "";
-  groceryBudgetInput.focus();
-});
-
-// Saves the grocery budget input
-function saveGroceryBudget() {
-  const value = Number(groceryBudgetInput.value);
-
-  if (!value || value <= 0) {
-    groceryBudgetInput.classList.add("hidden");
-    return;
-  }
-
-  const oldBudget = Number(data.groceryBudget) || 0;
-  const available = getMainRemaining() + oldBudget;
-  if (value > available) {
-    groceryBudgetInput.classList.add("input-error");
-    return;
-  }
-  groceryBudgetInput.classList.remove("input-error");
-
-  data.groceryBudget = value;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-
-  groceryBudgetInput.classList.add("hidden");
-  renderGroceryBudget();
-  updateGroceryBar();
-  calculateRemaining();
-}
-
-groceryBudgetInput.addEventListener("blur", saveGroceryBudget);
-groceryBudgetInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") groceryBudgetInput.blur();
-});
-
-// Returns total grocery spending
-function getGrocerySpent() {
-  return data.groceryItems.reduce((sum, item) => {
+// Returns a wallet's net spending (for its progress bar)
+function getWalletSpent(id) {
+  const wd = ensureWalletData(id);
+  return wd.items.reduce((sum, item) => {
     return sum + (item.type === "add" ? -Number(item.amount) : Number(item.amount));
   }, 0);
 }
 
-// Updates the grocery progress bar
-function updateGroceryBar() {
-  const wrapper = document.getElementById("grocery-bar-wrapper");
-  const fill = document.getElementById("grocery-bar-fill");
-  const label = document.getElementById("grocery-bar-label");
+// Builds a single wallet transaction row
+function buildWalletItemRow(item) {
+  const row = document.createElement("tr");
+  const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+  row.innerHTML = `
+    <td>${item.name}</td>
+    <td class="date-stamp">${dateStr}</td>
+    <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
+  `;
+  return row;
+}
 
-  if (!data.groceryBudget || data.groceryBudget <= 0) {
+// Renders a wallet's transaction table
+function renderWalletItemsTable(wallet, tbody) {
+  tbody.innerHTML = "";
+  const wd = ensureWalletData(wallet.id);
+
+  if (wd.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No items yet.</td></tr>';
+    return;
+  }
+
+  const sorted = [...wd.items];
+  if (settings.sortOrder === "newest") {
+    sorted.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  } else {
+    sorted.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  }
+
+  sorted.forEach(item => {
+    const row = buildWalletItemRow(item);
+    row.classList.add("item-enter");
+    tbody.appendChild(row);
+    requestAnimationFrame(() => row.classList.add("item-enter-active"));
+  });
+}
+
+// Updates a wallet's progress bar
+function updateWalletBar(wallet, section) {
+  const wrapper = section.querySelector("[data-role='bar-wrapper']");
+  const fill = section.querySelector("[data-role='bar-fill']");
+  const label = section.querySelector("[data-role='bar-label']");
+  const wd = ensureWalletData(wallet.id);
+
+  if (!wd.budget || wd.budget <= 0) {
     wrapper.classList.add("hidden");
     return;
   }
 
   wrapper.classList.remove("hidden");
-  const budget = Number(data.groceryBudget);
-  const spent = getGrocerySpent();
-  const remaining = budget - spent;
+  const budget = Number(wd.budget);
+  const spent = getWalletSpent(wallet.id);
   const pct = Math.min(Math.max((spent / budget) * 100, 0), 100);
 
   fill.style.width = `${pct}%`;
@@ -532,90 +560,144 @@ function updateGroceryBar() {
   label.style.color = pct >= 75 ? "#e8e8e8" : "";
 }
 
-// Builds a single grocery table row
-function buildGroceryRow(item) {
-  const row = document.createElement("tr");
-  const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
-  row.innerHTML = `
-    <td>${item.name}</td>
-    <td class="date-stamp">${dateStr}</td>
-    <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
+// Refreshes a wallet's balance card and bar
+function renderWalletCard(wallet, section) {
+  const balance = getWalletBalance(wallet.id);
+  section.querySelector("[data-role='balance']").textContent = `${cur()} ${fmtInt(balance)}`;
+  section.querySelector("[data-role='budget-label']").textContent = `${wallet.name} Balance`;
+  section.querySelector(".wallet-section-title").textContent = wallet.name;
+  updateWalletBar(wallet, section);
+}
+
+// Builds one wallet's full section (card, form, table) and wires its events
+function buildWalletSection(wallet) {
+  const section = document.createElement("section");
+  section.className = "wallet-section";
+  section.dataset.walletId = wallet.id;
+  section.innerHTML = `
+    <h3 class="wallet-section-title">${wallet.name}</h3>
+    <div class="card wallet-card" data-role="card">
+      <span data-role="budget-label">${wallet.name} Balance</span>
+      <h2 data-role="balance">${cur()} 0</h2>
+      <input type="number" inputmode="decimal" data-role="budget-input" placeholder="Set budget (${cur()})" class="hidden" />
+      <div class="spend-bar-wrapper hidden" data-role="bar-wrapper">
+        <div class="spend-bar-track"><div class="spend-bar-fill" data-role="bar-fill"></div></div>
+        <span class="spend-bar-label" data-role="bar-label">0% spent</span>
+      </div>
+    </div>
+    <div class="second-form wallet-form">
+      <input type="text" data-role="item-name" placeholder="Item name" />
+      <input type="number" inputmode="decimal" data-role="item-amount" placeholder="Amount (${cur()})" />
+      <div class="actions">
+        <button data-role="add-btn" aria-label="Add money to ${wallet.name}">+ Add</button>
+        <button data-role="take-btn" aria-label="Take money from ${wallet.name}">- Take</button>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Item</th><th>Date</th><th>Amount</th></tr></thead>
+      <tbody data-role="table"></tbody>
+    </table>
   `;
-  return row;
-}
 
-// Renders the grocery items table
-function renderGroceryItems() {
-  groceryTable.innerHTML = "";
+  const card = section.querySelector("[data-role='card']");
+  const budgetInput = section.querySelector("[data-role='budget-input']");
+  const nameInput = section.querySelector("[data-role='item-name']");
+  const amountInput = section.querySelector("[data-role='item-amount']");
+  const tbody = section.querySelector("[data-role='table']");
 
-  if (data.groceryItems.length === 0) {
-    groceryTable.innerHTML = '<tr><td colspan="3" class="empty-state">No grocery items yet.</td></tr>';
-    return;
+  card.addEventListener("click", (e) => {
+    if (e.target === budgetInput) return;
+    budgetInput.classList.remove("hidden");
+    budgetInput.value = ensureWalletData(wallet.id).budget ?? "";
+    budgetInput.focus();
+  });
+
+  function saveBudget() {
+    const value = Number(budgetInput.value);
+    if (!value || value <= 0) {
+      budgetInput.classList.add("hidden");
+      return;
+    }
+    const wd = ensureWalletData(wallet.id);
+    const oldBudget = Number(wd.budget) || 0;
+    const available = getMainRemaining() + oldBudget;
+    if (value > available) {
+      budgetInput.classList.add("input-error");
+      return;
+    }
+    budgetInput.classList.remove("input-error");
+    wd.budget = value;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    budgetInput.classList.add("hidden");
+    renderWalletCard(wallet, section);
+    calculateRemaining();
   }
+  budgetInput.addEventListener("blur", saveBudget);
+  budgetInput.addEventListener("keydown", (e) => { if (e.key === "Enter") budgetInput.blur(); });
 
-  const sorted = [...data.groceryItems];
-  if (settings.sortOrder === "newest") {
-    sorted.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  } else {
-    sorted.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  }
+  function addItem(type) {
+    const name = nameInput.value.trim();
+    const amount = Number(amountInput.value);
 
-  sorted.forEach(item => {
-    const row = buildGroceryRow(item);
+    const fields = [
+      { el: nameInput, valid: !!name },
+      { el: amountInput, valid: !!amount },
+    ];
+    let hasError = false;
+    fields.forEach(f => {
+      if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
+      else f.el.classList.remove("input-error");
+    });
+    if (hasError) return;
+
+    if (type === "add" && amount > getMainRemaining()) {
+      amountInput.classList.add("input-error");
+      return;
+    }
+
+    const wd = ensureWalletData(wallet.id);
+    wd.items.push({ name, amount, type, date: new Date().toISOString() });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+    nameInput.value = "";
+    amountInput.value = "";
+    fields.forEach(f => f.el.classList.remove("input-error"));
+
+    const emptyRow = tbody.querySelector("td.empty-state");
+    if (emptyRow) emptyRow.closest("tr").remove();
+    const newItem = wd.items[wd.items.length - 1];
+    const row = buildWalletItemRow(newItem);
     row.classList.add("item-enter");
-    groceryTable.appendChild(row);
+    if (settings.sortOrder === "newest") {
+      tbody.prepend(row);
+    } else {
+      tbody.appendChild(row);
+    }
     requestAnimationFrame(() => row.classList.add("item-enter-active"));
-  });
-}
 
-// Adds a grocery item ("add" or "take")
-function addGroceryItem(type) {
-  const name = grName.value.trim();
-  const amount = Number(grAmount.value);
-
-  const fields = [
-    { el: grName, valid: !!name },
-    { el: grAmount, valid: !!amount },
-  ];
-
-  let hasError = false;
-  fields.forEach(f => {
-    if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
-    else f.el.classList.remove("input-error");
-  });
-  if (hasError) return;
-
-  if (type === "add" && amount > getMainRemaining()) {
-    grAmount.classList.add("input-error");
-    return;
+    renderWalletCard(wallet, section);
+    calculateRemaining();
   }
 
-  data.groceryItems.push({ name, amount, type, date: new Date().toISOString() });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  section.querySelector("[data-role='add-btn']").addEventListener("click", () => addItem("add"));
+  section.querySelector("[data-role='take-btn']").addEventListener("click", () => addItem("take"));
+  [nameInput, amountInput].forEach(el => {
+    el.addEventListener("input", () => el.classList.remove("input-error"));
+  });
 
-  grName.value = "";
-  grAmount.value = "";
-  fields.forEach(f => f.el.classList.remove("input-error"));
+  renderWalletItemsTable(wallet, tbody);
+  renderWalletCard(wallet, section);
 
-  const emptyGrocery = groceryTable.querySelector("td.empty-state");
-  if (emptyGrocery) emptyGrocery.closest("tr").remove();
-  const newItem = data.groceryItems[data.groceryItems.length - 1];
-  const row = buildGroceryRow(newItem);
-  row.classList.add("item-enter");
-  if (settings.sortOrder === "newest") {
-    groceryTable.prepend(row);
-  } else {
-    groceryTable.appendChild(row);
-  }
-  requestAnimationFrame(() => row.classList.add("item-enter-active"));
-
-  renderGroceryBudget();
-  updateGroceryBar();
-  calculateRemaining();
+  return section;
 }
 
-addGroceryBtn.addEventListener("click", () => addGroceryItem("add"));
-takeGroceryBtn.addEventListener("click", () => addGroceryItem("take"));
+// Rebuilds every wallet section on the main page
+function renderWallets() {
+  walletsContainer.innerHTML = "";
+  settings.wallets.forEach(wallet => {
+    walletsContainer.appendChild(buildWalletSection(wallet));
+  });
+}
 
 /* =========================
    SECOND CHOICE
@@ -723,12 +805,14 @@ function getMainRemaining() {
     if (bill.paid) remaining -= Number(bill.amount);
   });
 
-  if (settings.secondWalletEnabled) {
-    if (data.groceryBudget) remaining -= Number(data.groceryBudget);
-    data.groceryItems.forEach(item => {
+  settings.wallets.forEach(w => {
+    const wd = data.walletData[w.id];
+    if (!wd) return;
+    if (wd.budget) remaining -= Number(wd.budget);
+    wd.items.forEach(item => {
       if (item.type === "add") remaining -= Number(item.amount);
     });
-  }
+  });
 
   data.secondChoice.forEach(item => {
     remaining += item.type === "add"
@@ -818,7 +902,6 @@ function calculateRemaining(skipChart = false) {
       warningEl.classList.add("hidden");
     }
   }
-  updateGroceryBar();
   if (!skipChart) renderChart();
 }
 
@@ -828,7 +911,7 @@ function calculateRemaining(skipChart = false) {
 ========================= */
 
 // Aggregates spending per category for any month's data
-function categoryTotalsOf(d, wName, walletEnabled) {
+function categoryTotalsOf(d, walletsList) {
   const totals = {};
 
   (d.priority || []).forEach(bill => {
@@ -838,16 +921,18 @@ function categoryTotalsOf(d, wName, walletEnabled) {
     }
   });
 
-  if (walletEnabled) {
-    const budget = Number(d.groceryBudget) || 0;
-    const adds = (d.groceryItems || [])
+  (walletsList || []).forEach(w => {
+    const wd = (d.walletData || {})[w.id];
+    if (!wd) return;
+    const budget = Number(wd.budget) || 0;
+    const adds = (wd.items || [])
       .filter(i => i.type === "add")
       .reduce((s, i) => s + Number(i.amount), 0);
     const walletTotal = budget + adds;
     if (walletTotal > 0) {
-      totals[wName] = (totals[wName] || 0) + walletTotal;
+      totals[w.name] = (totals[w.name] || 0) + walletTotal;
     }
-  }
+  });
 
   (d.secondChoice || []).forEach(item => {
     if (item.type === "take") {
@@ -890,7 +975,9 @@ function renderChart() {
     return;
   }
 
-  const categoryTotals = categoryTotalsOf(data, walletName(), settings.secondWalletEnabled);
+  const categoryTotals = categoryTotalsOf(data, settings.wallets);
+  const walletColorMap = {};
+  settings.wallets.forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
 
   const spent = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
   const remaining = Math.max(income - spent, 0);
@@ -898,7 +985,7 @@ function renderChart() {
   const segments = Object.entries(categoryTotals).map(([label, amount]) => ({
     label,
     amount,
-    color: CATEGORY_COLORS[label] || (label === walletName() ? "#b5b5b5" : "#6a6a6a"),
+    color: CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a",
   }));
 
   if (remaining > 0) {
@@ -955,16 +1042,10 @@ function renderChart() {
 
 renderIncome();
 renderPriority();
-renderGroceryBudget();
-renderGroceryItems();
+renderWallets();
 renderSecondChoice();
 updatePriorityLockUI();
 calculateRemaining();
-
-// Hide second wallet section if disabled
-if (!settings.secondWalletEnabled) {
-  document.getElementById("second-wallet-section").classList.add("hidden");
-}
 
 /* =========================
    SETTINGS PANEL
@@ -1014,9 +1095,7 @@ currencySelect.addEventListener("change", () => {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   renderIncome();
   renderPriority();
-  renderGroceryBudget();
-  renderGroceryItems();
-  updateGroceryBar();
+  renderWallets();
   renderSecondChoice();
   calculateRemaining();
 });
@@ -1031,7 +1110,7 @@ sortSelect.value = settings.sortOrder;
 sortSelect.addEventListener("change", () => {
   settings.sortOrder = sortSelect.value;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  renderGroceryItems();
+  renderWallets();
   renderSecondChoice();
 });
 
@@ -1051,42 +1130,154 @@ budgetLimitInput.addEventListener("change", () => {
 });
 
 /* =========================
-   SECOND WALLET SETTING
+   WALLETS SETTING
 ========================= */
 
-const secondWalletToggle = document.getElementById("second-wallet-toggle");
-const secondWalletNameInput = document.getElementById("second-wallet-name-input");
-const secondWalletNameRow = document.getElementById("second-wallet-name-row");
-const secondWalletSection = document.getElementById("second-wallet-section");
+const RESERVED_CATEGORY_NAMES = ["bills", "subscription", "food / drink", "transport", "others"];
 
-secondWalletToggle.checked = settings.secondWalletEnabled;
-secondWalletNameInput.value = settings.secondWalletName || "";
-if (!settings.secondWalletEnabled) secondWalletNameRow.classList.add("hidden");
+const walletsSettingsList = document.getElementById("wallets-settings-list");
+const walletsCountEl = document.getElementById("wallets-count");
+const addWalletBtn = document.getElementById("add-wallet-btn");
 
-secondWalletToggle.addEventListener("change", () => {
-  settings.secondWalletEnabled = secondWalletToggle.checked;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+const addWalletModal = document.getElementById("add-wallet-modal");
+const addWalletNameInput = document.getElementById("add-wallet-name");
+const addWalletError = document.getElementById("add-wallet-error");
+const confirmAddWalletBtn = document.getElementById("confirm-add-wallet");
+const cancelAddWalletBtn = document.getElementById("cancel-add-wallet");
 
-  if (settings.secondWalletEnabled) {
-    secondWalletSection.classList.remove("hidden");
-    secondWalletNameRow.classList.remove("hidden");
-    renderGroceryBudget();
-    renderGroceryItems();
-    updateGroceryBar();
-  } else {
-    secondWalletSection.classList.add("hidden");
-    secondWalletNameRow.classList.add("hidden");
+const deleteWalletModal = document.getElementById("delete-wallet-modal");
+const deleteWalletText = document.getElementById("delete-wallet-text");
+const confirmDeleteWalletBtn = document.getElementById("confirm-delete-wallet");
+const cancelDeleteWalletBtn = document.getElementById("cancel-delete-wallet");
+let walletPendingDelete = null;
+
+// Checks a candidate wallet name against reserved category names and existing wallets
+function walletNameConflict(name, excludeId) {
+  const norm = name.trim().toLowerCase();
+  if (!norm) return "empty";
+  if (RESERVED_CATEGORY_NAMES.includes(norm)) return "reserved";
+  if (settings.wallets.some(w => w.id !== excludeId && w.name.trim().toLowerCase() === norm)) return "duplicate";
+  return null;
+}
+
+// Renders the wallet list inside settings
+function renderWalletsSettings() {
+  walletsCountEl.textContent = settings.wallets.length === 1
+    ? "1 wallet"
+    : `${settings.wallets.length} wallets`;
+
+  walletsSettingsList.innerHTML = "";
+  if (settings.wallets.length === 0) {
+    walletsSettingsList.innerHTML = '<p class="wallets-empty">No wallets yet.</p>';
+    return;
   }
+
+  settings.wallets.forEach(wallet => {
+    const row = document.createElement("div");
+    row.className = "wallet-setting-row";
+    row.innerHTML = `
+      <input type="text" class="setting-input-wide wallet-name-input" value="${wallet.name}" />
+      <button class="wallet-delete-btn" aria-label="Delete ${wallet.name}">✕</button>
+    `;
+
+    const input = row.querySelector(".wallet-name-input");
+    input.addEventListener("input", () => input.classList.remove("input-error"));
+    input.addEventListener("blur", () => {
+      const newName = input.value.trim();
+      if (!newName || newName === wallet.name) {
+        input.value = wallet.name;
+        return;
+      }
+      if (walletNameConflict(newName, wallet.id)) {
+        input.classList.add("input-error");
+        input.value = wallet.name;
+        return;
+      }
+      wallet.name = newName;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      renderWallets();
+      renderChart();
+    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
+
+    row.querySelector(".wallet-delete-btn").addEventListener("click", () => {
+      walletPendingDelete = wallet;
+      const wd = data.walletData[wallet.id];
+      const itemCount = wd ? wd.items.length : 0;
+      deleteWalletText.textContent = itemCount > 0
+        ? `Delete "${wallet.name}"? Its budget returns to your main balance and its ${itemCount} transaction${itemCount === 1 ? "" : "s"} this month will be lost.`
+        : `Delete "${wallet.name}"? This cannot be undone.`;
+      deleteWalletModal.classList.remove("hidden");
+    });
+
+    walletsSettingsList.appendChild(row);
+  });
+}
+
+addWalletBtn.addEventListener("click", () => {
+  addWalletNameInput.value = "";
+  addWalletNameInput.classList.remove("input-error");
+  addWalletError.classList.add("hidden");
+  addWalletModal.classList.remove("hidden");
+  addWalletNameInput.focus();
+});
+
+function confirmAddWallet() {
+  const name = addWalletNameInput.value.trim();
+  const conflict = walletNameConflict(name);
+
+  if (conflict === "empty") {
+    addWalletNameInput.classList.add("input-error");
+    return;
+  }
+  if (conflict === "duplicate") {
+    addWalletError.textContent = `A wallet named "${name}" already exists.`;
+    addWalletError.classList.remove("hidden");
+    addWalletNameInput.classList.add("input-error");
+    return;
+  }
+  if (conflict === "reserved") {
+    addWalletError.textContent = `"${name}" is a reserved category name. Choose another.`;
+    addWalletError.classList.remove("hidden");
+    addWalletNameInput.classList.add("input-error");
+    return;
+  }
+
+  settings.wallets.push({ id: genWalletId(), name });
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  addWalletModal.classList.add("hidden");
+  renderWallets();
+  renderWalletsSettings();
+  calculateRemaining();
+}
+
+confirmAddWalletBtn.addEventListener("click", confirmAddWallet);
+addWalletNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmAddWallet(); });
+addWalletNameInput.addEventListener("input", () => {
+  addWalletNameInput.classList.remove("input-error");
+  addWalletError.classList.add("hidden");
+});
+cancelAddWalletBtn.addEventListener("click", () => addWalletModal.classList.add("hidden"));
+
+cancelDeleteWalletBtn.addEventListener("click", () => {
+  deleteWalletModal.classList.add("hidden");
+  walletPendingDelete = null;
+});
+
+confirmDeleteWalletBtn.addEventListener("click", () => {
+  if (!walletPendingDelete) return;
+  settings.wallets = settings.wallets.filter(w => w.id !== walletPendingDelete.id);
+  delete data.walletData[walletPendingDelete.id];
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  deleteWalletModal.classList.add("hidden");
+  walletPendingDelete = null;
+  renderWallets();
+  renderWalletsSettings();
   calculateRemaining();
 });
 
-secondWalletNameInput.addEventListener("change", () => {
-  const name = secondWalletNameInput.value.trim();
-  settings.secondWalletName = name || "Second Wallet";
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  renderGroceryBudget();
-  renderChart();
-});
+renderWalletsSettings();
 
 /* =========================
    EXPORT DATA
@@ -1156,8 +1347,21 @@ function sortedArchiveKeys() {
   });
 }
 
+// Normalizes an archived entry (new multi-wallet shape or legacy single-wallet shape)
+function normalizeArchiveEntry(entry) {
+  if (entry.wallets) return entry;
+
+  const wallets = entry.walletEnabled ? [{ id: "_legacy", name: entry.walletName || "Second Wallet" }] : [];
+  const d = { ...entry.data, walletData: {} };
+  if (entry.walletEnabled && (Number(entry.data.groceryBudget) > 0 || (entry.data.groceryItems || []).length > 0)) {
+    d.walletData["_legacy"] = { budget: entry.data.groceryBudget, items: entry.data.groceryItems || [] };
+  }
+  return { data: d, wallets, currency: entry.currency, closedAt: entry.closedAt };
+}
+
 // Main remaining balance for an archived month
-function remainingOf(entry) {
+function remainingOf(rawEntry) {
+  const entry = normalizeArchiveEntry(rawEntry);
   const d = entry.data;
   if (d.income === null) return 0;
 
@@ -1165,12 +1369,14 @@ function remainingOf(entry) {
   (d.priority || []).forEach(b => {
     if (b.paid) remaining -= Number(b.amount);
   });
-  if (entry.walletEnabled) {
-    if (d.groceryBudget) remaining -= Number(d.groceryBudget);
-    (d.groceryItems || []).forEach(i => {
+  entry.wallets.forEach(w => {
+    const wd = d.walletData[w.id];
+    if (!wd) return;
+    if (wd.budget) remaining -= Number(wd.budget);
+    (wd.items || []).forEach(i => {
       if (i.type === "add") remaining -= Number(i.amount);
     });
-  }
+  });
   (d.secondChoice || []).forEach(i => {
     remaining += i.type === "add" ? Number(i.amount) : -Number(i.amount);
   });
@@ -1178,13 +1384,14 @@ function remainingOf(entry) {
 }
 
 // Income, gross spending, remaining, and category totals for an archived month
-function summarizeEntry(entry) {
-  const totals = categoryTotalsOf(entry.data, entry.walletName || "Second Wallet", entry.walletEnabled);
+function summarizeEntry(rawEntry) {
+  const entry = normalizeArchiveEntry(rawEntry);
+  const totals = categoryTotalsOf(entry.data, entry.wallets);
   const spent = Object.values(totals).reduce((a, b) => a + b, 0);
   return {
     income: entry.data.income,
     spent,
-    remaining: remainingOf(entry),
+    remaining: remainingOf(rawEntry),
     totals
   };
 }
@@ -1253,7 +1460,7 @@ function renderTrends(keys) {
     live: false
   }));
 
-  const liveTotals = categoryTotalsOf(data, walletName(), settings.secondWalletEnabled);
+  const liveTotals = categoryTotalsOf(data, settings.wallets);
   const liveSpent = Object.values(liveTotals).reduce((a, b) => a + b, 0);
   const entries = [...archivedEntries, { key: currentMonthKey, spent: liveSpent, live: true }];
 
@@ -1289,10 +1496,11 @@ function renderTrends(keys) {
 
 // Builds one archived month row (summary + expandable detail)
 function buildHistoryRow(key) {
-  const entry = archive[key];
-  const s = summarizeEntry(entry);
+  const rawEntry = archive[key];
+  const entry = normalizeArchiveEntry(rawEntry);
+  const s = summarizeEntry(rawEntry);
   const c = entry.currency || cur();
-  const size = fmtBytes(bytesOfString(JSON.stringify(entry)));
+  const size = fmtBytes(bytesOfString(JSON.stringify(rawEntry)));
   const d = entry.data;
 
   const row = document.createElement("div");
@@ -1300,10 +1508,13 @@ function buildHistoryRow(key) {
 
   const incomeText = s.income !== null ? `${c} ${fmtInt(s.income)} in` : "no income set";
 
+  const walletColorMap = {};
+  entry.wallets.forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
+
   const detailRows = Object.entries(s.totals)
     .sort((a, b) => b[1] - a[1])
     .map(([label, amount]) => {
-      const color = CATEGORY_COLORS[label] || (label === (entry.walletName || "Second Wallet") ? "#b5b5b5" : "#6a6a6a");
+      const color = CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a";
       return `
         <div class="legend-item">
           <div class="legend-left">
@@ -1326,7 +1537,8 @@ function buildHistoryRow(key) {
     </div>
   ` : "";
 
-  const counts = `${(d.priority || []).length} bills · ${(d.groceryItems || []).length} wallet items · ${(d.secondChoice || []).length} transactions`;
+  const walletItemCount = Object.values(d.walletData || {}).reduce((n, wd) => n + (wd.items || []).length, 0);
+  const counts = `${(d.priority || []).length} bills · ${walletItemCount} wallet items · ${(d.secondChoice || []).length} transactions`;
 
   row.innerHTML = `
     <div class="history-row-main">
@@ -1457,8 +1669,7 @@ function resetData() {
   data.income = null;
   data.priority = [];
   data.priorityLocked = false;
-  data.groceryBudget = null;
-  data.groceryItems = [];
+  data.walletData = {};
   data.secondChoice = [];
 }
 

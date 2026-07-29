@@ -80,21 +80,16 @@
               <span>Budget limit</span>
               <input type="number" inputmode="decimal" id="budget-limit-input" class="setting-input" placeholder="Off" />
             </div>
-            <div class="setting-row">
-              <span>Second Wallet</span>
-              <label class="toggle">
-                <input type="checkbox" id="second-wallet-toggle" />
-                <span class="toggle-slider"></span>
-              </label>
+            <div class="setting-row wallets-header">
+              <span>Wallets</span>
+              <span id="wallets-count" class="wallets-count">0 wallets</span>
             </div>
-            <div class="setting-row" id="second-wallet-name-row">
-              <span>Wallet name</span>
-              <input type="text" id="second-wallet-name-input" class="setting-input" placeholder="Second Wallet" />
-            </div>
-            <div class="setting-row">
+            <div id="wallets-settings-list" class="wallets-settings-list"></div>
+            <button id="add-wallet-btn" class="setting-btn-action">+ Add Wallet</button>
+            <div class="setting-row" style="margin-top:10px;">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.7.0</div>
+            <div class="setting-version">v1.8.0</div>
           </div>
         </section>
       </div>
@@ -171,50 +166,8 @@
       <ul id="priority-list"></ul>
     </section>
 
-    <!-- SECOND WALLET -->
-    <section id="second-wallet-section">
-      <h3 id="second-wallet-title">Second Wallet</h3>
-
-      <div class="card" id="grocery-card">
-        <span id="second-wallet-budget-label">Second Wallet Budget</span>
-        <h2 id="grocery-budget-display">RM 0</h2>
-
-        <input
-          type="number"
-          inputmode="decimal"
-          id="grocery-budget-input"
-          placeholder="Set budget (RM)"
-          class="hidden"
-        />
-        <div id="grocery-bar-wrapper" class="spend-bar-wrapper hidden">
-          <div class="spend-bar-track">
-            <div id="grocery-bar-fill" class="spend-bar-fill"></div>
-          </div>
-          <span id="grocery-bar-label" class="spend-bar-label">0% spent</span>
-        </div>
-      </div>
-
-      <div class="second-form grocery-form">
-        <input id="gr-name" placeholder="Item name" />
-        <input id="gr-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
-
-        <div class="actions">
-          <button id="add-grocery" aria-label="Add money to wallet">+ Add</button>
-          <button id="take-grocery" aria-label="Take money from wallet">- Take</button>
-        </div>
-      </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Date</th>
-            <th>Amount</th>
-          </tr>
-        </thead>
-        <tbody id="grocery-table"></tbody>
-      </table>
-    </section>
+    <!-- WALLETS -->
+    <div id="wallets-container"></div>
 
     <!-- SECOND CHOICE -->
     <section>
@@ -291,6 +244,33 @@
       <div class="modal-actions">
         <button id="cancel-archive-delete" aria-label="Cancel deleting history">Cancel</button>
         <button id="confirm-archive-delete" class="danger" aria-label="Confirm delete all history">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD WALLET MODAL -->
+  <div id="add-wallet-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Add Wallet</h3>
+      <input type="text" id="add-wallet-name" placeholder="Wallet name" class="setting-input-wide modal-input" />
+      <p id="add-wallet-error" class="modal-error hidden"></p>
+
+      <div class="modal-actions">
+        <button id="cancel-add-wallet" aria-label="Cancel adding wallet">Cancel</button>
+        <button id="confirm-add-wallet" class="danger" aria-label="Confirm add wallet">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE WALLET MODAL -->
+  <div id="delete-wallet-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Delete Wallet?</h3>
+      <p id="delete-wallet-text"></p>
+
+      <div class="modal-actions">
+        <button id="cancel-delete-wallet" aria-label="Cancel deleting wallet">Cancel</button>
+        <button id="confirm-delete-wallet" class="danger" aria-label="Confirm delete wallet">Yes, Delete</button>
       </div>
     </div>
   </div>
