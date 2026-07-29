@@ -13,10 +13,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Money" />
-  <link rel="apple-touch-icon" href="icons/icon-152x152.png" />
-  <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" href="icons/splash-1170x2532.png" />
-  <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" href="icons/splash-1125x2436.png" />
-  <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" href="icons/splash-750x1334.png" />
+  <!-- Versioned so Safari's own HTTP cache can't serve stale icon/splash
+       art when these files change - bump the ?v= on every icon update -->
+  <link rel="apple-touch-icon" href="icons/icon-152x152.png?v=19" />
+  <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" href="icons/splash-1170x2532.png?v=19" />
+  <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" href="icons/splash-1125x2436.png?v=19" />
+  <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" href="icons/splash-750x1334.png?v=19" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -89,7 +91,7 @@
             <div class="setting-row" style="margin-top:10px;">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.12.1</div>
+            <div class="setting-version">v1.12.2</div>
           </div>
         </section>
       </div>
