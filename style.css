@@ -422,14 +422,38 @@ h3 {
   animation: shake 0.3s ease;
 }
 
-/* Optional date field: greyed while empty so it reads as a placeholder */
-.second-form input[type="date"] {
+/* Optional date field. type="date" ignores the placeholder attribute and
+   renders blank on iOS, so overlay our own label while the field is empty. */
+.date-field {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.second-form .date-field input[type="date"] {
+  display: block;
+  margin-bottom: 0;
   text-align: left;
   min-height: 45px;
 }
 
-.second-form input[type="date"].is-empty {
+.date-placeholder {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  padding-left: 13px;
   color: #777;
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.second-form .date-field input[type="date"].is-empty + .date-placeholder {
+  display: flex;
+}
+
+/* Hide the browser's own dd/mm/yyyy text so it can't sit under ours */
+.second-form .date-field input[type="date"].is-empty::-webkit-datetime-edit {
+  opacity: 0;
 }
 
 .second-form input[type="date"]::-webkit-calendar-picker-indicator {

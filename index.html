@@ -89,7 +89,7 @@
             <div class="setting-row" style="margin-top:10px;">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.10.0</div>
+            <div class="setting-version">v1.10.1</div>
           </div>
         </section>
       </div>
@@ -179,7 +179,10 @@
           <option value="Others">Others</option>
         </select>
         <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
-        <input id="sc-date" type="date" class="is-empty" aria-label="Date, optional, defaults to today" />
+        <div class="date-field">
+          <input id="sc-date" type="date" class="is-empty" aria-label="Date, optional, defaults to today" />
+          <span class="date-placeholder">Date (Optional)</span>
+        </div>
 
         <div class="actions">
           <button id="add-money" aria-label="Add to second choice">+ Add</button>

@@ -672,7 +672,10 @@ function buildWalletSection(wallet) {
     <div class="second-form wallet-form">
       <input type="text" data-role="item-name" placeholder="Item name" />
       <input type="number" inputmode="decimal" data-role="item-amount" placeholder="Amount (${cur()})" />
-      <input type="date" data-role="item-date" class="is-empty" aria-label="Date, optional, defaults to today" />
+      <div class="date-field">
+        <input type="date" data-role="item-date" class="is-empty" aria-label="Date, optional, defaults to today" />
+        <span class="date-placeholder">Date (Optional)</span>
+      </div>
       <div class="actions">
         <button data-role="add-btn" aria-label="Add money to ${wallet.name}">+ Add</button>
         <button data-role="take-btn" aria-label="Take money from ${wallet.name}">- Take</button>
