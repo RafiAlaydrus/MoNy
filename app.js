@@ -1739,7 +1739,16 @@ function validateImport(obj) {
   if (d.walletData && typeof d.walletData !== "object") return "That file's wallet data is malformed.";
   if (obj.settings && typeof obj.settings !== "object") return "That file's settings are malformed.";
   if (obj.archive && typeof obj.archive !== "object") return "That file's history is malformed.";
+  if (obj.priorityBackup && !Array.isArray(obj.priorityBackup)) return "That file's saved priority bills are malformed.";
   return null;
+}
+
+// Writes a key when the file carries content for it and clears it otherwise,
+// so the app after an import matches the file exactly rather than blending
+// the file's contents with whatever was already there.
+function replaceKey(key, value, hasContent) {
+  if (!hasContent) { localStorage.removeItem(key); return true; }
+  return save(key, value);
 }
 
 importBtn.addEventListener("click", () => importFile.click());
@@ -1767,13 +1776,27 @@ importFile.addEventListener("change", () => {
     }
 
     pendingImport = parsed;
+
     const months = parsed.archive ? Object.keys(parsed.archive).length : 0;
     const walletCount = parsed.settings && Array.isArray(parsed.settings.wallets)
-      ? parsed.settings.wallets.length : 0;
+      ? parsed.settings.wallets.filter(w => !w.deleted).length : 0;
+    const savedBills = Array.isArray(parsed.priorityBackup) ? parsed.priorityBackup.length : 0;
+
+    const contents = [
+      parsed.data.month ? `the month of ${monthLabel(parsed.data.month)}` : "one month",
+      `${walletCount} wallet${walletCount === 1 ? "" : "s"}`,
+      `${months} archived month${months === 1 ? "" : "s"}`
+    ];
+    if (savedBills > 0) contents.push(`${savedBills} saved priority bill${savedBills === 1 ? "" : "s"}`);
+
+    const stamp = parsed.exportedAt
+      ? ` Exported ${new Date(parsed.exportedAt).toLocaleString("default", { dateStyle: "medium", timeStyle: "short" })}.`
+      : "";
+
     importModalText.textContent =
-      `This replaces everything currently in the app with the file's contents: ` +
-      `${parsed.data.month || "one month"}, ${walletCount} wallet${walletCount === 1 ? "" : "s"}, ` +
-      `and ${months} archived month${months === 1 ? "" : "s"}. Your current data cannot be recovered afterwards.`;
+      `The app will be replaced with exactly what this file holds: ${contents.join(", ")}.` +
+      `${stamp} Anything not in the file is cleared, and your current data cannot be recovered afterwards.`;
+
     importModal.classList.remove("hidden");
     importFile.value = "";
   };
@@ -1791,10 +1814,13 @@ cancelImportBtn.addEventListener("click", () => {
 
 confirmImportBtn.addEventListener("click", () => {
   if (!pendingImport) return;
+  const p = pendingImport;
+
   const ok =
-    save(STORAGE_KEY, pendingImport.data) &&
-    (!pendingImport.settings || save(SETTINGS_KEY, pendingImport.settings)) &&
-    (!pendingImport.archive || save(ARCHIVE_KEY, pendingImport.archive));
+    save(STORAGE_KEY, p.data) &&
+    replaceKey(SETTINGS_KEY, p.settings, !!p.settings) &&
+    replaceKey(ARCHIVE_KEY, p.archive, !!p.archive && Object.keys(p.archive).length > 0) &&
+    replaceKey(BACKUP_PRIORITY_KEY, p.priorityBackup, Array.isArray(p.priorityBackup) && p.priorityBackup.length > 0);
 
   pendingImport = null;
   importModal.classList.add("hidden");
@@ -1806,7 +1832,17 @@ confirmImportBtn.addEventListener("click", () => {
 ========================= */
 
 document.getElementById("export-data-btn").addEventListener("click", () => {
-  const exportObj = { data, settings, archive };
+  // Everything the app persists, so an import can rebuild it exactly. The
+  // priority backup is included too - it is what "Copy Last Priority" reads.
+  const exportObj = {
+    app: "monthly-money-tracker",
+    formatVersion: 1,
+    exportedAt: new Date().toISOString(),
+    data,
+    settings,
+    archive,
+    priorityBackup: JSON.parse(localStorage.getItem(BACKUP_PRIORITY_KEY)) || []
+  };
   const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
