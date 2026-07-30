@@ -1890,10 +1890,6 @@ confirmDeleteWalletBtn.addEventListener("click", () => {
 renderWalletsSettings();
 
 /* =========================
-   EXPORT DATA
-========================= */
-
-/* =========================
    IMPORT DATA
 ========================= */
 
