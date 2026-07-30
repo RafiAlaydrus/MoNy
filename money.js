@@ -23,6 +23,26 @@
     return item.type === "add" || item.type === "in";
   }
 
+  // Every amount the app stores has to be a positive, finite number. A
+  // negative would invert the meaning of its own entry - a "take" of -50
+  // would hand you money - and drives category totals below zero, which the
+  // books cannot represent.
+  function isValidAmount(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0;
+  }
+
+  // The smallest budget a wallet can be set to without its balance going
+  // negative: whatever it has already paid out, less whatever it took in.
+  // Shrinking a budget below this would conjure money out of nothing.
+  function minBudgetOf(wd) {
+    if (!wd) return 0;
+    const committed = (wd.items || []).reduce((sum, i) => {
+      return sum + (isWalletInflow(i) ? -Number(i.amount) : Number(i.amount));
+    }, 0);
+    return Math.max(committed, 0);
+  }
+
   // A Second choice entry that is money coming back out of a wallet rather
   // than new income. Entries written before transfers were tagged only
   // carry the category, so both forms are recognised.
@@ -192,6 +212,8 @@
     isWalletInflow,
     isTransferEntry,
     isReimbursement,
+    isValidAmount,
+    minBudgetOf,
     walletBalanceOf,
     walletSpentOf,
     walletTakenOf,

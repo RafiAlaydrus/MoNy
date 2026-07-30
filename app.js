@@ -364,7 +364,7 @@ incomeCard.addEventListener("click", () => {
 function saveIncome() {
   const value = Number(incomeInput.value);
 
-  if (!value || value <= 0) {
+  if (!isValidAmount(value)) {
     incomeInput.classList.add("hidden");
     return;
   }
@@ -550,7 +550,7 @@ addPriorityBtn.addEventListener("click", () => {
   const fields = [
     { el: pbName, valid: !!name },
     { el: pbCategory, valid: !!category },
-    { el: pbAmount, valid: !!amount },
+    { el: pbAmount, valid: isValidAmount(amount) },
   ];
 
   let hasError = false;
@@ -837,6 +837,7 @@ function buildWalletSection(wallet) {
       <span data-role="budget-label">${esc(wallet.name)} Balance</span>
       <h2 data-role="balance">${esc(cur())} 0</h2>
       <input type="number" inputmode="decimal" data-role="budget-input" placeholder="Set budget (${esc(cur())})" class="hidden" />
+      <p class="budget-hint hidden" data-role="budget-hint"></p>
       <div class="spend-bar-wrapper hidden" data-role="bar-wrapper">
         <div class="spend-bar-track"><div class="spend-bar-fill" data-role="bar-fill"></div></div>
         <span class="spend-bar-label" data-role="bar-label">0% spent</span>
@@ -863,6 +864,7 @@ function buildWalletSection(wallet) {
 
   const card = section.querySelector("[data-role='card']");
   const budgetInput = section.querySelector("[data-role='budget-input']");
+  const budgetHint = section.querySelector("[data-role='budget-hint']");
   const nameInput = section.querySelector("[data-role='item-name']");
   const amountInput = section.querySelector("[data-role='item-amount']");
   const dateInput = section.querySelector("[data-role='item-date']");
@@ -876,24 +878,47 @@ function buildWalletSection(wallet) {
   card.addEventListener("click", (e) => {
     if (e.target === budgetInput) return;
     budgetInput.classList.remove("hidden");
+    budgetInput.classList.remove("input-error");
+    budgetHint.classList.add("hidden");
     budgetInput.value = ensureWalletData(wallet.id).budget ?? "";
     budgetInput.focus();
   });
 
+  budgetInput.addEventListener("input", () => {
+    budgetInput.classList.remove("input-error");
+    budgetHint.classList.add("hidden");
+  });
+
   function saveBudget() {
     const value = Number(budgetInput.value);
-    if (!value || value <= 0) {
+    if (!isValidAmount(value)) {
       budgetInput.classList.add("hidden");
       return;
     }
     const wd = ensureWalletData(wallet.id);
     const oldBudget = Number(wd.budget) || 0;
+
+    // Cannot budget more than the main balance can cover
     const available = getMainRemaining() + oldBudget;
     if (value > available) {
       budgetInput.classList.add("input-error");
+      budgetHint.textContent = `Only ${cur()} ${fmt(available)} available to budget.`;
+      budgetHint.classList.remove("hidden");
       return;
     }
+
+    // ...nor less than the wallet has already paid out, which would push its
+    // balance negative and invent the difference in the main balance
+    const floor = minBudgetOf(wd);
+    if (value < floor) {
+      budgetInput.classList.add("input-error");
+      budgetHint.textContent = `${cur()} ${fmt(floor)} has already left this wallet, so the budget can't go below that.`;
+      budgetHint.classList.remove("hidden");
+      return;
+    }
+
     budgetInput.classList.remove("input-error");
+    budgetHint.classList.add("hidden");
     wd.budget = value;
     saveData();
     budgetInput.classList.add("hidden");
@@ -909,7 +934,7 @@ function buildWalletSection(wallet) {
 
     const fields = [
       { el: nameInput, valid: !!name },
-      { el: amountInput, valid: !!amount },
+      { el: amountInput, valid: isValidAmount(amount) },
     ];
     let hasError = false;
     fields.forEach(f => {
@@ -970,7 +995,7 @@ function buildWalletSection(wallet) {
 
     const fields = [
       { el: nameInput, valid: !!name },
-      { el: amountInput, valid: !!amount },
+      { el: amountInput, valid: isValidAmount(amount) },
     ];
     let hasError = false;
     fields.forEach(f => {
@@ -1159,7 +1184,7 @@ function readSecondChoiceForm() {
   const fields = [
     { el: scName, valid: !!name },
     { el: scCategory, valid: !!category },
-    { el: scAmount, valid: !!amount },
+    { el: scAmount, valid: isValidAmount(amount) },
   ];
 
   let hasError = false;

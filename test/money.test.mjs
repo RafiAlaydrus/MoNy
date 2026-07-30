@@ -298,6 +298,59 @@ test("spending is never negative and wallets never silently vanish", () => {
   assertReconciles("zero budget wallet", d, wallets);
 });
 
+test("REGRESSION: amounts must be positive finite numbers", () => {
+  // -50 is truthy, so a plain !!amount check let negatives through and a
+  // "take" of -50 handed the user money instead of spending it
+  [-50, -0.01, 0, "", "abc", null, undefined, NaN, Infinity, -Infinity].forEach(bad => {
+    assert.equal(M.isValidAmount(bad), false, `${String(bad)} should be rejected`);
+  });
+  [0.01, 1, 50, 1e6, "25", "0.5"].forEach(good => {
+    assert.equal(M.isValidAmount(good), true, `${String(good)} should be accepted`);
+  });
+});
+
+test("REGRESSION: a negative amount would break the books", () => {
+  // Proof of why isValidAmount has to be enforced at every entry point: a
+  // negative take drives its category below zero, the emptied-category
+  // cleanup drops it, and 'spent' silently loses the amount.
+  const d = {
+    income: 1000, priority: [], walletData: {},
+    secondChoice: [{ name: "neg", category: "Others", amount: -50, type: "take" }]
+  };
+  assert.equal(M.reconciles(d, []), false, "this shape must not be reachable through the UI");
+});
+
+test("REGRESSION: a budget cannot shrink below what the wallet already paid out", () => {
+  // budget 300, all 300 transferred to main, then budget lowered to 100 gave
+  // a -200 balance and more money in main than the income
+  const wd = { budget: 300, items: [{ name: "out", amount: 300, type: "out", toId: "main" }] };
+  assert.equal(M.minBudgetOf(wd), 300, "300 already left, so 300 is the floor");
+  assert.equal(M.walletBalanceOf({ ...wd, budget: 300 }), 0);
+  assert.equal(M.walletBalanceOf({ ...wd, budget: 100 }), -200, "the shape the floor prevents");
+});
+
+test("the budget floor accounts for money that came back in", () => {
+  const wd = {
+    budget: 300,
+    items: [
+      { name: "spent", amount: 250, type: "take" },
+      { name: "topped up", amount: 100, type: "add" }
+    ]
+  };
+  // paid out 250, took in 100, so only 150 is truly committed
+  assert.equal(M.minBudgetOf(wd), 150);
+  assert.equal(M.walletBalanceOf({ ...wd, budget: 150 }), 0, "at the floor the balance is exactly zero");
+});
+
+test("an untouched wallet can have its budget lowered freely", () => {
+  assert.equal(M.minBudgetOf({ budget: 500, items: [] }), 0);
+});
+
+test("a wallet whose inflows exceed outflows has a zero floor, not negative", () => {
+  const wd = { budget: 100, items: [{ name: "in", amount: 400, type: "in", fromId: "x" }] };
+  assert.equal(M.minBudgetOf(wd), 0, "floor must never go below zero");
+});
+
 test("a wallet missing from walletData is ignored, not crashed on", () => {
   const wallets = W("Grocery", "Ghost");
   const d = {
