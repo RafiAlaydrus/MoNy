@@ -2,7 +2,7 @@
   "name": "MoNy",
   "short_name": "MoNy",
   "description": "MoNy - an offline-first tracker for one month of income, bills, and spending.",
-  "id": "/monthly-money-tracker/",
+  "id": "/MoNy/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
