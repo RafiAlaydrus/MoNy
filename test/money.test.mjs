@@ -351,6 +351,68 @@ test("a wallet whose inflows exceed outflows has a zero floor, not negative", ()
   assert.equal(M.minBudgetOf(wd), 0, "floor must never go below zero");
 });
 
+test("overspending keeps the books balanced, it just goes negative", () => {
+  // "Record it anyway": remaining may go below zero, but nothing is invented
+  const d = {
+    income: 1056.17, priority: [], walletData: {},
+    secondChoice: [{ name: "big", category: "Others", amount: 2000, type: "take" }]
+  };
+  assert.equal(M.mainRemainingOf(d, []), 1056.17 - 2000);
+  assert.ok(M.mainRemainingOf(d, []) < 0, "this is the overspent state");
+  assertReconciles("overspent", d, []);
+});
+
+test("only wallets that fully cover a shortfall are offered, richest first", () => {
+  const wallets = [
+    { id: "a", name: "Small" },
+    { id: "b", name: "Big" },
+    { id: "c", name: "Empty" },
+    { id: "d", name: "Closed", deleted: true }
+  ];
+  const d = {
+    income: 1000, priority: [], secondChoice: [],
+    walletData: {
+      a: { budget: 100, items: [] },
+      b: { budget: 800, items: [] },
+      c: { budget: 0, items: [] },
+      d: { budget: 900, items: [] }
+    }
+  };
+  const covering = M.walletsCovering(d, wallets, 500);
+  assert.deepEqual(covering.map(x => x.wallet.name), ["Big"], "only Big covers 500; closed wallets excluded");
+
+  const many = M.walletsCovering(d, wallets, 50);
+  assert.deepEqual(many.map(x => x.wallet.name), ["Big", "Small"], "richest first");
+
+  assert.deepEqual(M.walletsCovering(d, wallets, 5000), [], "nothing covers an impossible shortfall");
+});
+
+test("a wallet covering exactly the shortfall qualifies", () => {
+  const wallets = [{ id: "a", name: "Exact" }];
+  const d = { income: 1000, priority: [], secondChoice: [], walletData: { a: { budget: 250, items: [] } } };
+  assert.equal(M.walletsCovering(d, wallets, 250).length, 1, "equal balance must qualify");
+});
+
+test("covering a shortfall by transfer lands remaining at zero", () => {
+  // Income funds a 1200 wallet and leaves 1056.17 in main, matching the
+  // reported case. Spending 2000 is 943.83 short; cover it from the wallet.
+  const wallets = [{ id: "a", name: "Pot" }];
+  const shortfall = 2000 - 1056.17;
+  const d = {
+    income: 2256.17, priority: [],
+    walletData: { a: { budget: 1200, items: [
+      { name: "cover", amount: shortfall, type: "out", toId: "main", txId: "t1" }
+    ] } },
+    secondChoice: [
+      { name: "cover", category: "Transfer", amount: shortfall, type: "add", transfer: true, txId: "t1" },
+      { name: "big", category: "Others", amount: 2000, type: "take" }
+    ]
+  };
+  assert.ok(Math.abs(M.mainRemainingOf(d, wallets)) < 1e-9, "remaining should be ~0, got " + M.mainRemainingOf(d, wallets));
+  assert.equal(M.totalIncomeOf(d, wallets), 2256.17, "the covering transfer is not income");
+  assertReconciles("covered shortfall", d, wallets);
+});
+
 test("a wallet missing from walletData is ignored, not crashed on", () => {
   const wallets = W("Grocery", "Ghost");
   const d = {

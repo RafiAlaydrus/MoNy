@@ -197,6 +197,7 @@ const CATEGORY_COLORS = {
 
 const CHART_IN_WALLETS_COLOR = "#f1c40f";
 const CHART_REMAINING_COLOR = "#3498db";
+const CHART_OVERSPENT_COLOR = "#c0392b";
 
 const WALLET_COLOR_RAMP = ["#2ecc71", "#e84393", "#00b8d9", "#a29bfe", "#fdcb6e"];
 function walletColor(index) { return WALLET_COLOR_RAMP[index % WALLET_COLOR_RAMP.length]; }
@@ -404,10 +405,31 @@ function buildPriorityItem(bill) {
     <strong>${esc(cur())} ${fmt(bill.amount)}</strong>
   `;
 
-  li.querySelector("input").addEventListener("change", (e) => {
-    bill.paid = e.target.checked;
-    saveData();
-    calculateRemaining();
+  const checkbox = li.querySelector("input");
+  checkbox.addEventListener("change", (e) => {
+    const commit = () => {
+      bill.paid = e.target.checked;
+      saveData();
+      calculateRemaining();
+    };
+
+    // Paying a bill takes money out of the main balance, so it can overspend
+    // just like a Second choice take
+    if (e.target.checked) {
+      const available = getMainRemaining();
+      if (Number(bill.amount) > available) {
+        askOverspend({
+          amount: Number(bill.amount),
+          available,
+          label: `Paying "${bill.name}"`,
+          transferName: bill.name,
+          proceed: commit,
+          onCancel: () => { checkbox.checked = false; }
+        });
+        return;
+      }
+    }
+    commit();
   });
 
   if (!data.priorityLocked) {
@@ -928,45 +950,27 @@ function buildWalletSection(wallet) {
   budgetInput.addEventListener("blur", saveBudget);
   budgetInput.addEventListener("keydown", (e) => { if (e.key === "Enter") budgetInput.blur(); });
 
-  function addItem(type) {
-    const name = nameInput.value.trim();
-    const amount = Number(amountInput.value);
-
-    const fields = [
-      { el: nameInput, valid: !!name },
-      { el: amountInput, valid: isValidAmount(amount) },
-    ];
-    let hasError = false;
-    fields.forEach(f => {
-      if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
-      else f.el.classList.remove("input-error");
-    });
-    if (hasError) return;
-
-    if (type === "add" && amount > getMainRemaining()) {
-      amountInput.classList.add("input-error");
-      return;
-    }
-
-    // Taking more than the wallet holds would push its balance negative, which
-    // the books cannot represent. Raise the budget first instead.
-    if (type === "take" && amount > getWalletBalance(wallet.id)) {
-      amountInput.classList.add("input-error");
-      return;
-    }
-
-    const backdated = !!dateInput.value;
+  // Writes the item. `rebuilt` is true when a covering transfer has already
+  // re-rendered every wallet section, which detaches the nodes cached above -
+  // so the incremental row insert must be skipped in that case.
+  function commitItem(type, name, amount, dateValue, rebuilt) {
     const wd = ensureWalletData(wallet.id);
-    wd.items.push({ name, amount, type, date: resolveDate(dateInput.value) });
+    wd.items.push({ name, amount, type, date: resolveDate(dateValue) });
     saveData();
+
+    if (rebuilt) {
+      renderWallets();
+      calculateRemaining();
+      return;
+    }
 
     nameInput.value = "";
     amountInput.value = "";
     dateInput.value = "";
     dateInput.classList.add("is-empty");
-    fields.forEach(f => f.el.classList.remove("input-error"));
+    [nameInput, amountInput].forEach(el => el.classList.remove("input-error"));
 
-    if (backdated) {
+    if (dateValue) {
       // A picked date can belong anywhere in the list, so re-sort the table
       renderWalletItemsTable(wallet, tbody, section);
     } else {
@@ -985,6 +989,45 @@ function buildWalletSection(wallet) {
 
     renderWalletCard(wallet, section);
     calculateRemaining();
+  }
+
+  function addItem(type) {
+    const name = nameInput.value.trim();
+    const amount = Number(amountInput.value);
+    const dateValue = dateInput.value;
+
+    const fields = [
+      { el: nameInput, valid: !!name },
+      { el: amountInput, valid: isValidAmount(amount) },
+    ];
+    let hasError = false;
+    fields.forEach(f => {
+      if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
+      else f.el.classList.remove("input-error");
+    });
+    if (hasError) return;
+
+    // Taking more than the wallet holds would push its balance negative, which
+    // the books cannot represent. Raise the budget first instead.
+    if (type === "take" && amount > getWalletBalance(wallet.id)) {
+      amountInput.classList.add("input-error");
+      return;
+    }
+
+    // Moving money into a wallet can outrun the main balance
+    if (type === "add" && amount > getMainRemaining()) {
+      askOverspend({
+        amount,
+        available: getMainRemaining(),
+        label: `Adding ${cur()} ${fmt(amount)} to ${wallet.name}`,
+        transferName: name,
+        excludeWalletId: wallet.id,
+        proceed: () => commitItem(type, name, amount, dateValue, true)
+      });
+      return;
+    }
+
+    commitItem(type, name, amount, dateValue, false);
   }
 
   section.querySelector("[data-role='add-btn']").addEventListener("click", () => addItem("add"));
@@ -1103,6 +1146,70 @@ function openTransferModal(wallet, name, amount, date, onDone) {
 
 cancelTransferBtn.addEventListener("click", () => {
   transferModal.classList.add("hidden");
+});
+
+/* =========================
+   OVERSPEND PROMPT
+========================= */
+
+const overspendModal = document.getElementById("overspend-modal");
+const overspendSummary = document.getElementById("overspend-summary");
+const overspendOptions = document.getElementById("overspend-options");
+const cancelOverspendBtn = document.getElementById("cancel-overspend");
+let overspendCancel = null;
+
+// Asks what to do when an action would spend past the main balance: cover the
+// shortfall from a wallet that can fully absorb it, record it anyway and let
+// Remaining go negative, or cancel. `proceed` performs the original action.
+function askOverspend({ amount, available, label, transferName, proceed, onCancel, excludeWalletId }) {
+  // Round to cents so the covering transfer stores a clean figure rather than
+  // float dust like 943.8299999999999
+  const shortfall = Math.round((amount - available) * 100) / 100;
+
+  overspendSummary.textContent =
+    `${label} is ${cur()} ${fmt(shortfall)} more than the ${cur()} ${fmt(available)} you have left.`;
+  overspendOptions.innerHTML = "";
+
+  // A wallet cannot fund money being moved into itself
+  const candidates = allWallets().filter(w => w.id !== excludeWalletId);
+
+  walletsCovering(data, candidates, shortfall).forEach(({ wallet, balance }) => {
+    const btn = document.createElement("button");
+    btn.className = "transfer-dest-btn";
+    btn.setAttribute("aria-label", `Cover the shortfall from ${wallet.name}`);
+    btn.innerHTML = `Cover ${esc(cur())} ${fmt(shortfall)} from ${esc(wallet.name)}` +
+      `<span class="transfer-dest-sub">Has ${esc(cur())} ${fmt(balance)}. Moves it to your main balance first.</span>`;
+    btn.addEventListener("click", () => {
+      closeOverspend();
+      // A real tagged transfer, so it is excluded from income and deleting
+      // either half removes both
+      executeTransfer(wallet, "main", `Cover ${transferName}`, shortfall, new Date().toISOString());
+      proceed();
+    });
+    overspendOptions.appendChild(btn);
+  });
+
+  const anyway = document.createElement("button");
+  anyway.className = "transfer-dest-btn";
+  anyway.setAttribute("aria-label", "Record it anyway and go overspent");
+  anyway.innerHTML = `Record it anyway` +
+    `<span class="transfer-dest-sub">Remaining goes to ${esc(cur())} ${fmt(available - amount)}.</span>`;
+  anyway.addEventListener("click", () => { closeOverspend(); proceed(); });
+  overspendOptions.appendChild(anyway);
+
+  overspendCancel = onCancel || null;
+  overspendModal.classList.remove("hidden");
+}
+
+function closeOverspend() {
+  overspendModal.classList.add("hidden");
+  overspendCancel = null;
+}
+
+cancelOverspendBtn.addEventListener("click", () => {
+  const cb = overspendCancel;
+  closeOverspend();
+  if (cb) cb();
 });
 
 /* =========================
@@ -1267,7 +1374,23 @@ sourceBackBtn.addEventListener("click", () => {
 });
 
 cancelSourceBtn.addEventListener("click", () => sourceModal.classList.add("hidden"));
-takeMoneyBtn.addEventListener("click", () => addSecondChoice("take"));
+takeMoneyBtn.addEventListener("click", () => {
+  const form = readSecondChoiceForm();
+  if (!form) return;
+
+  const available = getMainRemaining();
+  if (form.amount > available) {
+    askOverspend({
+      amount: form.amount,
+      available,
+      label: `This ${cur()} ${fmt(form.amount)}`,
+      transferName: form.name,
+      proceed: () => addSecondChoice("take")
+    });
+    return;
+  }
+  addSecondChoice("take");
+});
 
 // Clears error highlight on input
 document.querySelectorAll(".second-form input, .second-form select").forEach(el => {
@@ -1358,7 +1481,12 @@ function calculateRemaining(skipChart = false) {
 
   const warningEl = document.getElementById("budget-warning");
   if (warningEl) {
-    if (settings.budgetLimit && remaining <= settings.budgetLimit) {
+    // Being overspent is the more serious state, so it takes precedence over
+    // the budget-limit warning
+    if (remaining < 0) {
+      warningEl.textContent = `Overspent by ${cur()} ${fmt(-remaining)}`;
+      warningEl.classList.remove("hidden");
+    } else if (settings.budgetLimit && remaining <= settings.budgetLimit) {
       warningEl.textContent = `Warning: Remaining is below ${cur()} ${fmt(settings.budgetLimit)}`;
       warningEl.classList.remove("hidden");
     } else {
@@ -1410,7 +1538,8 @@ function renderChart() {
 
   const spent = breakdown.spent;
   const inWallets = Math.max(breakdown.inWallets, 0);
-  const remaining = Math.max(getMainRemaining(), 0);
+  const rawRemaining = getMainRemaining();
+  const remaining = Math.max(rawRemaining, 0);
 
   const segments = Object.entries(breakdown.categories)
     .sort((a, b) => b[1] - a[1])
@@ -1428,6 +1557,11 @@ function renderChart() {
   if (remaining > 0) {
     segments.push({ label: "Remaining", amount: remaining, color: CHART_REMAINING_COLOR });
   }
+
+  // An overspend has no slice - it is not a share of income - but the legend
+  // has to say so, otherwise the donut silently looks like a full division of
+  // money that was never there.
+  const overspentBy = rawRemaining < 0 ? -rawRemaining : 0;
 
   if (segments.length === 0) {
     segments.push({ label: "Remaining", amount: income, color: CHART_REMAINING_COLOR });
@@ -1470,7 +1604,15 @@ function renderChart() {
       </div>
       <span class="legend-amount">${esc(cur())} ${fmt(s.amount)}</span>
     </div>
-  `).join("");
+  `).join("") + (overspentBy > 0 ? `
+    <div class="legend-item legend-overspent">
+      <div class="legend-left">
+        <span class="legend-dot" style="background:${CHART_OVERSPENT_COLOR}"></span>
+        <span>Overspent</span>
+      </div>
+      <span class="legend-amount">${esc(cur())} ${fmt(overspentBy)}</span>
+    </div>
+  ` : "");
 }
 
 /* =========================

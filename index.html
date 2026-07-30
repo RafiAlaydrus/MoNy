@@ -95,7 +95,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.14.2</div>
+            <div class="setting-version">v1.15.0</div>
           </div>
         </section>
       </div>
@@ -268,6 +268,19 @@
       <div class="modal-actions">
         <button id="cancel-add-wallet" aria-label="Cancel adding wallet">Cancel</button>
         <button id="confirm-add-wallet" class="danger" aria-label="Confirm add wallet">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERSPEND MODAL -->
+  <div id="overspend-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Not enough left</h3>
+      <p id="overspend-summary"></p>
+      <div id="overspend-options" class="transfer-list"></div>
+
+      <div class="modal-actions">
+        <button id="cancel-overspend" aria-label="Cancel this entry">Cancel</button>
       </div>
     </div>
   </div>

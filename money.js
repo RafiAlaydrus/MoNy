@@ -32,6 +32,17 @@
     return Number.isFinite(n) && n > 0;
   }
 
+  // Wallets that could cover a shortfall on their own, richest first. Only
+  // wallets that cover it in full are offered, so choosing one always lands
+  // the main balance back at zero rather than a smaller overspend.
+  function walletsCovering(d, wallets, shortfall) {
+    return (wallets || [])
+      .filter(w => !w.deleted)
+      .map(w => ({ wallet: w, balance: walletBalanceOf((d.walletData || {})[w.id]) }))
+      .filter(x => x.balance >= shortfall - 1e-9)
+      .sort((a, b) => b.balance - a.balance);
+  }
+
   // The smallest budget a wallet can be set to without its balance going
   // negative: whatever it has already paid out, less whatever it took in.
   // Shrinking a budget below this would conjure money out of nothing.
@@ -214,6 +225,7 @@
     isReimbursement,
     isValidAmount,
     minBudgetOf,
+    walletsCovering,
     walletBalanceOf,
     walletSpentOf,
     walletTakenOf,

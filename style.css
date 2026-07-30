@@ -1259,3 +1259,7 @@ td {
     animation: none;
   }
 }
+
+.legend-overspent .legend-amount {
+  color: #e8e8e8;
+}
