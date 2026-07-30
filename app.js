@@ -30,6 +30,9 @@ function save(key, value) {
   }
 }
 
+/* One wrapper per stored key. Every write in the app goes through these three
+   rather than touching localStorage directly, so a full-storage failure is
+   caught in one place instead of silently dropping data at 36 call sites. */
 function saveData() { return save(STORAGE_KEY, data); }
 function saveSettings() { return save(SETTINGS_KEY, settings); }
 function saveArchive() { return save(ARCHIVE_KEY, archive); }
@@ -199,6 +202,10 @@ const CHART_IN_WALLETS_COLOR = "#f1c40f";
 const CHART_REMAINING_COLOR = "#3498db";
 const CHART_OVERSPENT_COLOR = "#c0392b";
 
+/* Wallet slice colours. The UI is otherwise greyscale; the chart is the one
+   place colour is allowed, because same-shade slices are indistinguishable.
+   The ramp cycles, so a sixth wallet reuses the first colour - acceptable
+   since the legend is labelled and nobody runs six wallets. */
 const WALLET_COLOR_RAMP = ["#2ecc71", "#e84393", "#00b8d9", "#a29bfe", "#fdcb6e"];
 function walletColor(index) { return WALLET_COLOR_RAMP[index % WALLET_COLOR_RAMP.length]; }
 
@@ -470,6 +477,8 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
   let swiping = false;
   let decided = false;
 
+  /* Transition is cleared for the duration of the drag so the row tracks the
+     finger exactly; it is put back on touchend to animate the release. */
   el.addEventListener("touchstart", (e) => {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
@@ -484,13 +493,25 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
     const dx = e.touches[0].clientX - startX;
     const dy = e.touches[0].clientY - startY;
 
-    // Let a mostly-vertical drag scroll the page instead of swiping the row
+    /* Direction lock, resolved once per gesture on the first 8px of movement.
+       Without it, any attempt to scroll the page while a finger happens to
+       start on a row drags the row sideways instead.
+
+       Mostly vertical: give up on the swipe entirely and let the page scroll.
+       Mostly horizontal: commit to swiping and stop re-testing, so a curved
+       drag does not flip modes halfway through.
+
+       All three listeners are passive, so this cannot call preventDefault -
+       abandoning the gesture is the only way to hand scrolling back to the
+       browser, which is exactly what clearing `swiping` does. */
     if (!decided) {
       if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) { swiping = false; return; }
       if (Math.abs(dx) > 8) decided = true;
     }
 
     currentX = dx;
+    /* Left only - this is delete, and there is nothing behind the right edge.
+       The -120px clamp gives the drag a rubber-band end stop. */
     if (currentX < 0) {
       el.style.transform = `translateX(${Math.max(currentX, -120)}px)`;
     }
@@ -501,6 +522,12 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
     swiping = false;
     el.style.transition = "transform 0.3s ease";
 
+    /* Past the 80px threshold the swipe counts. The row slides out and its
+       wrapper collapses its own height at the same time, so the list closes
+       the gap rather than leaving a hole.
+
+       onDelete only stages the removal - it shows the undo toast, and the
+       change is committed to storage when that toast expires. */
     if (currentX < -80) {
       el.style.transform = "translateX(-100%)";
       el.style.opacity = "0";
@@ -509,6 +536,7 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
       wrapper.style.overflow = "hidden";
       onDelete();
     } else {
+      /* Not far enough - spring back. */
       el.style.transform = "translateX(0)";
     }
   }, { passive: true });
@@ -1526,6 +1554,10 @@ function renderChart() {
     const size = canvas.width;
     const center = size / 2;
 
+    /* Empty-state ring. Two arcs drawn in opposite directions and closed into
+       one path punches the hole out of the middle - the reverse winding is
+       what makes it a donut rather than a filled disc. Same trick as the real
+       slices below. */
     ctx.beginPath();
     ctx.arc(center, center, size / 2 - 10, 0, Math.PI * 2);
     ctx.arc(center, center, (size / 2 - 10) * 0.55, Math.PI * 2, 0, true);
@@ -1543,15 +1575,30 @@ function renderChart() {
     return;
   }
 
+  /* allWallets() rather than activeWallets(): a closed wallet's spending is
+     still spending, and dropping it here would shrink the donut below the
+     income it is dividing up. */
   const breakdown = spendingBreakdownOf(data, allWallets());
+
+  /* Wallet slices are keyed by NAME, because that is how monthTotalsOf files
+     them under categories. The consequence is that closing a wallet and
+     making a new one with the same name merges the two in this chart. */
   const walletColorMap = {};
   allWallets().forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
 
   const spent = breakdown.spent;
   const inWallets = Math.max(breakdown.inWallets, 0);
+
+  /* rawRemaining keeps its sign for the overspend check below; `remaining` is
+     the clamped version used for the slice, since a negative slice angle
+     would sweep backwards over the others. */
   const rawRemaining = getMainRemaining();
   const remaining = Math.max(rawRemaining, 0);
 
+  /* Biggest categories first, so the eye lands on the largest slice at the
+     top of the donut. Colour precedence: the five fixed chart categories win,
+     then wallets by name, then a neutral grey for anything unrecognised -
+     which is also why a wallet may not be named after a fixed category. */
   const segments = Object.entries(breakdown.categories)
     .sort((a, b) => b[1] - a[1])
     .map(([label, amount]) => ({
@@ -1574,6 +1621,8 @@ function renderChart() {
   // money that was never there.
   const overspentBy = rawRemaining < 0 ? -rawRemaining : 0;
 
+  /* Income set but nothing moved yet: one full Remaining slice, so the canvas
+     shows a complete ring instead of dividing by a total of zero below. */
   if (segments.length === 0) {
     segments.push({ label: "Remaining", amount: income, color: CHART_REMAINING_COLOR });
   }
@@ -1582,13 +1631,22 @@ function renderChart() {
   const center = size / 2;
   const radius = size / 2 - 10;
   const innerRadius = radius * 0.55;
+
+  /* Slices are sized against the sum of the segments, NOT against income.
+     The two are equal in a balanced month, and when overspent the overspend
+     is deliberately absent from `segments` - so dividing by income would
+     leave a gap in the ring rather than a full circle. */
   const total = segments.reduce((sum, s) => sum + s.amount, 0);
 
   ctx.clearRect(0, 0, size, size);
 
+  /* Start at the top. Canvas angles begin at 3 o'clock, so -90deg rotates the
+     first slice up to 12 o'clock where a donut is expected to start. */
   let startAngle = -Math.PI / 2;
   segments.forEach(seg => {
     const sliceAngle = (seg.amount / total) * Math.PI * 2;
+    /* Outer arc forwards, inner arc backwards, closed into one path - the
+       same reverse-winding donut trick as the empty state above. */
     ctx.beginPath();
     ctx.arc(center, center, radius, startAngle, startAngle + sliceAngle);
     ctx.arc(center, center, innerRadius, startAngle + sliceAngle, startAngle, true);
@@ -2106,10 +2164,16 @@ function summarizeEntry(rawEntry) {
 }
 
 // Draws the monthly spending bar chart
+/* Bar chart of spending per month, drawn by hand on a canvas - no library.
+   `entries` is oldest-first and its last element is the in-progress month,
+   flagged `live`, which is drawn dimmed because it is not comparable to a
+   finished month yet. */
 function drawTrendChart(entries) {
   if (!trendCtx) return;
   const W = trendCanvas.width;
   const H = trendCanvas.height;
+  /* padTop leaves room for the value labels that sit above the tallest bar;
+     padBottom for the month names under the axis. */
   const padTop = 22;
   const padBottom = 26;
   const padSide = 14;
@@ -2118,6 +2182,8 @@ function drawTrendChart(entries) {
 
   trendCtx.clearRect(0, 0, W, H);
 
+  /* Baseline. The 0.5 offset puts a 1px stroke on a whole pixel instead of
+     straddling two, which would render as a soft 2px grey smear. */
   trendCtx.strokeStyle = "#2a2a2a";
   trendCtx.lineWidth = 1;
   trendCtx.beginPath();
@@ -2125,10 +2191,22 @@ function drawTrendChart(entries) {
   trendCtx.lineTo(W - padSide, baseY + 0.5);
   trendCtx.stroke();
 
+  /* Axis only - nothing to plot. */
   if (entries.length === 0) return;
 
+  /* Bars scale against the tallest month including the live one, so the
+     current month is never drawn taller than the canvas. The floor of 1
+     avoids dividing by zero in a month where nothing has been spent. */
   const max = Math.max(...entries.map(e => e.spent), 1);
+
+  /* Highlighting the biggest month is judged on FINISHED months only. A
+     part-way-through month should not be crowned the highest spender just
+     because it happens to lead on the 3rd. */
   const maxArchived = Math.max(...entries.filter(e => !e.live).map(e => e.spent), 0);
+
+  /* Each month gets an equal slot; the bar occupies 60% of it so there is
+     always a gap. The 44px cap stops two or three months rendering as absurd
+     slabs across the full width. */
   const slot = (W - padSide * 2) / entries.length;
   const barW = Math.min(slot * 0.6, 44);
 
@@ -2137,6 +2215,10 @@ function drawTrendChart(entries) {
     const x = padSide + slot * i + (slot - barW) / 2;
     const y = baseY - h;
 
+    /* Brightness carries the meaning, matching the greyscale rest of the UI:
+       dim = still in progress, white = highest finished month, grey = normal.
+       The maxArchived > 0 guard stops every bar going white in a history
+       where nothing has been spent at all. */
     if (e.live) {
       trendCtx.fillStyle = "#4a4a4a";
     } else if (e.spent === maxArchived && maxArchived > 0) {
@@ -2146,12 +2228,15 @@ function drawTrendChart(entries) {
     }
     trendCtx.fillRect(x, y, barW, h);
 
+    /* Month name under the axis, centred on the bar. */
     trendCtx.fillStyle = "#666";
     trendCtx.font = "11px -apple-system, sans-serif";
     trendCtx.textAlign = "center";
     trendCtx.textBaseline = "top";
     trendCtx.fillText(monthShort(e.key), x + barW / 2, baseY + 7);
 
+    /* Value labels only when there is room. Past six bars the slots are
+       narrower than the text and the numbers collide into a grey smudge. */
     if (entries.length <= 6) {
       trendCtx.fillStyle = e.live ? "#666" : "#aaa";
       trendCtx.font = "10px -apple-system, sans-serif";

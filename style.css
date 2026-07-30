@@ -1,8 +1,28 @@
+/* =====================================================================
+   MONTHLY MONEY TRACKER - STYLES
+
+   Pure-black minimalist monochrome, 21 sections.
+
+   Two conventions run through the whole file and explain most of what
+   looks unusual here:
+
+   1. THE UI IS GREYSCALE. The only colour anywhere is the donut chart and
+      its legend dots, because same-shade slices are impossible to tell
+      apart. Everything else carries meaning through brightness, fill, and
+      shape instead - progress bars brighten rather than turning red, and
+      a primary button is filled where a secondary one is outlined.
+
+   2. MOTION IS OPTIONAL. Every animation in this file is switched off
+      under prefers-reduced-motion at the bottom.
+   ===================================================================== */
+
 /* =====================
    Global Reset & Base
 ===================== */
 * {
   box-sizing: border-box;
+  /* Kills the grey flash iOS paints over any tapped element. The app has
+     its own :active states, and the double feedback looks broken. */
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -11,17 +31,28 @@ html, body {
   padding: 0;
   background: #000;
   color: #fff;
+  /* System font stack - no webfont, so nothing to download and nothing to
+     fail offline. */
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  /* Fixed-width digits, globally. Money figures count up when they change,
+     and without this every digit is a different width so the number jiggles
+     and reflows mid-animation. */
   font-variant-numeric: tabular-nums;
 }
 
 input[type="checkbox"] {
+  /* Near-white tick, since the browser default is a bright blue that would
+     be the only colour outside the chart. */
   accent-color: #e8e8e8;
 }
 
 /* =====================
    Pull to Refresh
 ===================== */
+/* Sits behind the app at the top of the viewport and is revealed as the whole
+   page is dragged down. pointer-events: none matters - it spans the full width
+   under the finger, and without it the drag would land on this instead of the
+   content. Opacity is driven from JS in step with the drag distance. */
 .pull-indicator {
   position: fixed;
   top: 0;
@@ -51,6 +82,9 @@ input[type="checkbox"] {
 /* =====================
    App Container
 ===================== */
+/* Both views share this. The 480px cap keeps the phone layout intact on a
+   desktop browser rather than stretching the cards across a wide window -
+   this is a phone app that happens to open anywhere. */
 .app {
   max-width: 480px;
   margin: 0 auto;
@@ -68,15 +102,32 @@ input[type="checkbox"] {
 }
 
 .settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   background: none;
   border: none;
-  padding: 6px;
+  padding: 0;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 10px;
+  color: #888;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.settings-btn:hover {
+  color: #ccc;
 }
 
 .settings-btn:active {
   background: #1a1a1a;
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-btn { transition: none; }
 }
 
 .settings-panel {
@@ -150,6 +201,9 @@ input[type="checkbox"] {
   margin-top: 10px;
 }
 
+/* overflow stays VISIBLE, unusually for a progress track: the budget-limit
+   tick below is taller than the bar and has to overhang both edges to be
+   readable. Positioning context for that tick. */
 .spend-bar-track {
   position: relative;
   width: 100%;
@@ -159,6 +213,11 @@ input[type="checkbox"] {
   overflow: visible;
 }
 
+/* Width and colour are both set from calculateRemaining(). The background is
+   deliberately absent here - it is assigned in JS from a three-tier
+   brightness ramp (dim grey under 50%, lighter to 75%, white past it), so the
+   bar intensifies rather than turning red. Both properties transition, so a
+   change animates in step with the counting figure above. */
 .spend-bar-fill {
   height: 100%;
   border-radius: 3px;
@@ -166,6 +225,9 @@ input[type="checkbox"] {
   transition: width 0.4s ease, background 0.4s ease;
 }
 
+/* Optional budget-limit marker. Its `left` is set in JS as a percentage.
+   12px tall against a 6px track, pulled up 3px, so it straddles the bar
+   evenly and reads as a notch rather than part of the fill. */
 .spend-bar-limit {
   position: absolute;
   top: -3px;
@@ -332,6 +394,16 @@ h3 {
   padding: 10px 14px;
 }
 
+/* SWIPE TO DELETE - three layers stacked in one wrapper.
+
+   The wrapper clips (overflow: hidden) so the row can slide out of frame
+   without widening the page. It also collapses its own max-height to zero on
+   delete, which is what closes the gap in the list.
+
+   Underneath sits .swipe-delete-bg, permanently visible but covered. On top
+   sits the row itself, opaque and raised, translated left by the gesture -
+   which uncovers the background beneath progressively, so "Delete" appears to
+   slide in from the right without anything actually moving. */
 .swipe-wrapper {
   position: relative;
   overflow: hidden;
@@ -354,6 +426,10 @@ h3 {
   border-radius: 10px;
 }
 
+/* The sliding layer. background and z-index are what make the trick work:
+   without an OPAQUE background the delete label shows through the row, and
+   without the raised z-index the row sits behind it entirely. #0f0f0f rather
+   than #000 so the row is still distinguishable from the page. */
 #priority-list li {
   display: flex;
   align-items: center;
@@ -436,6 +512,9 @@ h3 {
   min-height: 45px;
 }
 
+/* Covers the whole field, but pointer-events: none lets taps fall through to
+   the real input underneath - otherwise this would swallow the tap that opens
+   the date picker. */
 .date-placeholder {
   position: absolute;
   inset: 0;
@@ -447,15 +526,22 @@ h3 {
   pointer-events: none;
 }
 
+/* .is-empty is toggled by wireDateInput() on every input event, since CSS has
+   no way to select an empty date field on its own - :placeholder-shown does
+   not apply to type="date". */
 .second-form .date-field input[type="date"].is-empty + .date-placeholder {
   display: flex;
 }
 
-/* Hide the browser's own dd/mm/yyyy text so it can't sit under ours */
+/* Hide the browser's own dd/mm/yyyy text so it can't sit under ours.
+   opacity rather than display, because hiding the edit region outright
+   collapses the field's height and makes the row jump. */
 .second-form .date-field input[type="date"].is-empty::-webkit-datetime-edit {
   opacity: 0;
 }
 
+/* The calendar glyph ships black and is invisible on a black background;
+   inverting it is the only way to recolour a shadow-DOM icon. */
 .second-form input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.6);
   cursor: pointer;
@@ -602,7 +688,16 @@ td {
 /* =====================
    Modal
 ===================== */
-/* Sized to the visible viewport so an open keyboard never covers the card */
+/* Sized to the visible viewport so an open keyboard never covers the card.
+
+   --vv-top and --vv-height are written by the keyboard-aware IIFE in app.js
+   from the visualViewport API. A plain `inset: 0` would size this to the
+   LAYOUT viewport, which on iOS does not shrink when the keyboard appears -
+   so the modal would centre behind it. That was the Add Wallet bug: the name
+   field sat under the keyboard with no way to scroll to it.
+
+   The fallbacks matter: on a browser without visualViewport the variables are
+   never set, and this falls back to a normal full-screen overlay. */
 .modal {
   position: fixed;
   left: 0;
@@ -621,6 +716,9 @@ td {
   display: none;
 }
 
+/* max-height + overflow-y keep long modals usable: the overspend and transfer
+   pickers grow with the number of wallets, and on a short screen with the
+   keyboard up they must scroll internally rather than overflow the card. */
 .modal-card {
   background: #111;
   border-radius: 16px;
@@ -761,6 +859,8 @@ td {
   padding: 0;
 }
 
+/* width: 100% forces the timer onto its own line below the text and button,
+   via the flex-wrap on the parent. */
 .undo-timer {
   width: 100%;
   height: 3px;
@@ -769,6 +869,11 @@ td {
   overflow: hidden;
 }
 
+/* The draining countdown. Starts full and is animated to 0% from JS, which
+   also supplies the DURATION - the transition is declared here with a timing
+   function but no time, so showUndo() can set it to match the undo window.
+   Linear on purpose: this is a clock, and any easing would misrepresent how
+   much time is actually left. */
 .undo-bar {
   height: 100%;
   background: #e8e8e8;
@@ -777,6 +882,9 @@ td {
   transition: width linear;
 }
 
+/* Both keyframes have to repeat translateX(-50%) in every step. transform is
+   a single property, so animating translateY alone would overwrite the
+   centring above and the toast would slide off to the right mid-animation. */
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(20px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -787,6 +895,9 @@ td {
   to { opacity: 0; transform: translateX(-50%) translateY(20px); }
 }
 
+/* `forwards` holds the final frame, so the toast stays invisible during the
+   300ms before hideUndo() actually adds .hidden. Without it the toast would
+   snap back to full opacity the instant the animation ended. */
 .undo-toast.fading {
   animation: toast-out 0.3s ease forwards;
 }
@@ -1205,20 +1316,33 @@ td {
 /* =====================
    Motion
 ===================== */
+/* Sections fade-slide in on load, staggered 50ms apart so the page assembles
+   top to bottom instead of appearing all at once.
+
+   `backwards` is what makes the stagger work: it applies the from-state
+   during the delay, so a section waiting its turn is already invisible.
+   Without it every section would render at full opacity, then blink out when
+   its delay elapsed. */
 .app > * {
   animation: section-in 0.45s ease backwards;
 }
 
+/* Hard-coded rather than generated, because there is a fixed set of top-level
+   sections. A seventh would simply appear with no delay. */
 .app > *:nth-child(2) { animation-delay: 0.05s; }
 .app > *:nth-child(3) { animation-delay: 0.1s; }
 .app > *:nth-child(4) { animation-delay: 0.15s; }
 .app > *:nth-child(5) { animation-delay: 0.2s; }
 .app > *:nth-child(6) { animation-delay: 0.25s; }
 
+/* No `to` block needed - omitting it animates from these values back to
+   whatever the element's own styles already are. */
 @keyframes section-in {
   from { opacity: 0; transform: translateY(10px); }
 }
 
+/* Grows out of the button that opened it, hence the top-right origin - a
+   default centre origin makes the panel appear to expand from nowhere. */
 .settings-panel:not(.hidden) {
   transform-origin: top right;
   animation: pop-in 0.15s ease;
@@ -1240,6 +1364,12 @@ td {
   from { opacity: 0; }
 }
 
+/* Added and removed by animateMoneyTo() whenever a figure changes, so the
+   card flashes its border while the number counts. The class is what draws
+   the eye to WHICH card moved when several update at once.
+
+   It peaks at 35% and returns, rather than easing to a held colour, so the
+   pulse reads as a blink and leaves no state behind to clean up. */
 .card-pulse {
   animation: card-pulse 0.6s ease;
 }
@@ -1250,6 +1380,9 @@ td {
   100% { border-color: #232323; }
 }
 
+/* Every animation in the file is switched off here. Note this only disables
+   ANIMATIONS - the count-up in animateMoneyTo() is driven by JS and checks
+   the same media query itself, since CSS cannot reach it. */
 @media (prefers-reduced-motion: reduce) {
   .app > *,
   .settings-panel:not(.hidden),
@@ -1260,6 +1393,9 @@ td {
   }
 }
 
+/* The overspent legend row has no slice in the donut - an overspend is not a
+   share of income - so it is brightened to stay legible as the one legend
+   entry with nothing to point at. */
 .legend-overspent .legend-amount {
   color: #e8e8e8;
 }

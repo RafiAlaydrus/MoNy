@@ -1,14 +1,35 @@
 <!DOCTYPE html>
+<!--
+  MONTHLY MONEY TRACKER
+
+  The entire UI, in one file. Two <main> elements exist at once - #app-view
+  and #history-view - and the app toggles `hidden` between them rather than
+  navigating, so there is no router and no page load between views.
+
+  Everything below is static markup EXCEPT #wallets-container, which is built
+  from scratch by renderWallets() because the number of wallets is unknown
+  until settings are read.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- maximum-scale + user-scalable=no stop iOS zooming the whole page when a
+       number field is focused, which on a form-heavy app leaves the user
+       stranded at 1.3x with no obvious way back. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="A simple offline-first personal finance tracker for monthly income, bills, and spending." />
+  <!-- theme-color paints the status bar and browser chrome to match the app's
+       black; color-scheme tells the browser to render form controls and
+       scrollbars dark rather than defaulting to light ones. -->
   <meta name="theme-color" content="#000000" />
   <meta name="color-scheme" content="dark" />
   <title>Monthly Money Tracker</title>
 
+  <!-- PWA install metadata: icons, name, standalone display. -->
   <link rel="manifest" href="manifest.json" />
+  <!-- iOS ignores manifest.json for most of this and needs its own meta tags.
+       "capable" is what makes the home-screen launch open without Safari's
+       address bar; the title is what appears under the icon. -->
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,6 +44,10 @@
 </head>
 <body>
 
+  <!-- Pull-to-refresh affordance. Sits above the app and is revealed as the
+       whole page is dragged down; past the threshold the text swaps and this
+       spinner shows while the reload happens. The dasharray is what makes the
+       circle a partial arc rather than a closed ring. -->
   <div id="pull-indicator" class="pull-indicator">
     <svg id="pull-spinner" class="pull-spinner hidden" width="20" height="20" viewBox="0 0 20 20" fill="none">
       <circle cx="10" cy="10" r="8" stroke="#888" stroke-width="2" stroke-dasharray="40" stroke-linecap="round"/>
@@ -38,15 +63,19 @@
         <h1 id="secret-reset">MONTHLY SPENT</h1>
         <section class="settings-bar">
           <button id="history-toggle" class="settings-btn" aria-label="History">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <circle cx="10" cy="10" r="7.5" stroke="#888" stroke-width="1.3"/>
-              <path d="M10 6v4l2.8 1.6" stroke="#888" stroke-width="1.3" stroke-linecap="round"/>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 7v5l3 2"/>
             </svg>
           </button>
           <button id="settings-toggle" class="settings-btn" aria-label="Settings">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M8.325 2.317a1.5 1.5 0 0 1 3.35 0l.09.54a1.05 1.05 0 0 0 1.57.71l.46-.27a1.5 1.5 0 0 1 1.675 2.49l-.37.44a1.05 1.05 0 0 0 .26 1.72l.5.22a1.5 1.5 0 0 1 0 2.87l-.5.22a1.05 1.05 0 0 0-.26 1.72l.37.44a1.5 1.5 0 0 1-1.675 2.49l-.46-.27a1.05 1.05 0 0 0-1.57.71l-.09.54a1.5 1.5 0 0 1-3.35 0l-.09-.54a1.05 1.05 0 0 0-1.57-.71l-.46.27a1.5 1.5 0 0 1-1.675-2.49l.37-.44a1.05 1.05 0 0 0-.26-1.72l-.5-.22a1.5 1.5 0 0 1 0-2.87l.5-.22a1.05 1.05 0 0 0 .26-1.72l-.37-.44a1.5 1.5 0 0 1 1.675-2.49l.46.27a1.05 1.05 0 0 0 1.57-.71l.09-.54Z" stroke="#888" stroke-width="1.3"/>
-              <circle cx="10" cy="10" r="2.5" stroke="#888" stroke-width="1.3"/>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h10M18 18h2"/>
+              <circle cx="16" cy="6" r="2"/>
+              <circle cx="10" cy="12" r="2"/>
+              <circle cx="16" cy="18" r="2"/>
             </svg>
           </button>
 
@@ -95,25 +124,37 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.15.1</div>
+            <div class="setting-version">v1.15.2</div>
           </div>
         </section>
       </div>
       <p id="current-month"></p>
     </header>
 
-    <!-- MONTHLY CHART -->
+    <!-- MONTHLY CHART
+         Off by default and toggled from settings. The width/height attributes
+         are the canvas BACKING size in pixels - CSS scales the element down
+         for display, so changing them here changes the drawing resolution,
+         not the layout. renderChart() reads canvas.width for all its geometry.
+         Fixed at 300 and not devicePixelRatio-aware, so it is slightly soft on
+         high-DPI screens. -->
     <section id="chart-section" class="hidden">
       <div class="chart-container">
         <canvas id="summary-chart" width="300" height="300" role="img" aria-label="Monthly spending breakdown chart"></canvas>
+        <!-- Filled by renderChart(); one row per slice, plus an "Overspent"
+             row that has no slice behind it. -->
         <div id="chart-legend"></div>
       </div>
     </section>
 
-    <!-- SUMMARY -->
+    <!-- SUMMARY - the two headline figures -->
     <section class="summary">
 
-      <!-- TOTAL INCOME -->
+      <!-- TOTAL INCOME
+           The display and its editor are the same card: tapping the figure
+           reveals the input and hides the <h2>. The value shown is not the
+           number typed here - it is totalIncomeOf(), which adds genuinely new
+           Second choice income on top. -->
       <div class="card" id="income-card">
         <span>Total Income</span>
         <h2 id="total-income-display">RM 0</h2>
@@ -127,7 +168,14 @@
         />
       </div>
 
-      <!-- REMAINING -->
+      <!-- REMAINING
+           What is left in MAIN - not net worth. Money sitting in a wallet has
+           already left this figure.
+
+           The bar has two children: the fill, whose width is the percentage
+           spent, and an absolutely-positioned tick marking the optional budget
+           limit. The warning below shows either "Overspent by X" or the
+           budget-limit message, with overspend taking precedence. -->
       <div class="card">
         <span>Remaining</span>
         <h2 id="remaining-money">RM 0</h2>
@@ -143,14 +191,22 @@
 
     </section>
 
-    <!-- PRIORITY -->
+    <!-- PRIORITY - fixed bills for the month, ticked off as they are paid.
+         Adding a bill costs nothing; ticking it is what spends the money.
+
+         Section order on this page is Priority -> Second choice -> Wallets,
+         which is deliberate: bills first because they are non-negotiable. -->
     <section>
       <div style="display:flex;align-items:baseline;gap:8px;">
+        <!-- Shown once the list is locked for the month. The lock is one-way -
+             there is no unlock, and the secret reset is the only escape. -->
         <h3>Priority</h3>
         <span id="priority-lock-badge" class="lock-badge hidden">Locked</span>
       </div>
 
-      <!-- PRIORITY FORM -->
+      <!-- PRIORITY FORM - hidden entirely once locked.
+           These three category values are fixed rather than free text because
+           the chart colours them by exact name; a wallet may not reuse one. -->
       <div class="second-form" id="priority-form">
         <input id="pb-name" placeholder="Bill name" />
         <select id="pb-category">
@@ -161,18 +217,25 @@
         </select>
         <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
 
+        <!-- Filled button = primary action, outlined = secondary. The app is
+             greyscale, so shape carries the emphasis instead of colour. -->
         <div class="actions">
           <button id="add-priority" aria-label="Add priority bill">Add Priority Bill</button>
           <button id="save-priority" aria-label="Save and lock priority bills">Save Priority</button>
         </div>
+        <!-- Only shown when a backup from last month exists, the list is
+             empty, and it is not locked - see updateCopyLastBtn(). -->
         <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy priority bills from last month">Copy Last Priority</button>
       </div>
 
-      <!-- PRIORITY LIST -->
+      <!-- Built by renderPriority(); each row is a swipe-to-delete wrapper. -->
       <ul id="priority-list"></ul>
     </section>
 
-    <!-- SECOND CHOICE -->
+    <!-- SECOND CHOICE - free-form day-to-day money in and out.
+         "+ Add" opens the new-money/coming-back question, because whether a
+         credit is income or a repayment changes the whole month's totals and
+         cannot be inferred from the amount. -->
     <section>
       <h3>Second choice</h3>
 
@@ -185,6 +248,14 @@
           <option value="Others">Others</option>
         </select>
         <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
+        <!-- input[type=date] ignores the placeholder attribute, and iOS
+             renders an empty one completely blank with no hint at all. The
+             overlaid span is the placeholder; the .is-empty class is toggled
+             by wireDateInput() to show and hide it.
+
+             Leaving it blank means now. Picking a day keeps the current time
+             of day, so several entries backdated to the same date still sort
+             by the order they were entered. -->
         <div class="date-field">
           <input id="sc-date" type="date" class="is-empty" aria-label="Date, optional, defaults to today" />
           <span class="date-placeholder">Date (Optional)</span>
@@ -209,19 +280,31 @@
       </table>
     </section>
 
-    <!-- WALLETS -->
+    <!-- WALLETS - named sub-budgets carved out of the main balance.
+         Intentionally empty: there is no static markup for a wallet at all.
+         renderWallets() builds one <section> per active wallet from scratch
+         and wires its events, because the count and names are only known once
+         settings have loaded. Closed wallets are excluded here but still
+         counted in every money calculation. -->
     <div id="wallets-container"></div>
 
   </main>
 
-  <!-- HISTORY VIEW -->
+  <!-- HISTORY VIEW - the archive of finished months.
+       A sibling of #app-view, not a separate page: the two swap `hidden`, so
+       switching views keeps all state in memory and never reloads.
+
+       Months are archived automatically at rollover, with wallet names and
+       currency SNAPSHOTTED at close, so renaming a wallet later does not
+       rewrite what history shows. -->
   <main class="app hidden" id="history-view">
     <header>
       <div class="header-row">
         <div class="history-header-left">
           <button id="history-back" class="settings-btn" aria-label="Back to tracker">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M12.5 4 6.5 10l6 6" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 5 8 12l7 7"/>
             </svg>
           </button>
           <h1>HISTORY</h1>
@@ -230,6 +313,9 @@
       <p id="history-count"></p>
     </header>
 
+    <!-- Spending per month, up to 12 bars, with the in-progress month dimmed
+         at the end. Below it, average / lowest / highest tiles computed from
+         finished months only. -->
     <section>
       <div class="chart-container">
         <canvas id="trend-chart" width="440" height="190" role="img" aria-label="Spending per month trend chart"></canvas>
@@ -237,6 +323,10 @@
       </div>
     </section>
 
+    <!-- One expandable row per month, newest first, each showing a category
+         breakdown and its size in storage. The storage line at the bottom is
+         the running total across all four localStorage keys - the early
+         warning for the quota this app can genuinely hit. -->
     <section>
       <h3>Months</h3>
       <div id="history-list"></div>
@@ -245,7 +335,23 @@
     </section>
   </main>
 
-  <!-- DELETE ALL HISTORY MODAL -->
+  <!-- ===================================================================
+       MODALS
+
+       All nine live here at the end of <body>, outside both views, so they
+       overlay whichever view is visible. Each is `hidden` until opened.
+
+       They size themselves against the --vv-top / --vv-height CSS variables
+       that the keyboard-aware IIFE in app.js keeps in sync with
+       visualViewport, so a modal containing a text field centres in the space
+       ABOVE an open on-screen keyboard rather than behind it.
+
+       Destructive confirmations put the dangerous button on the right with
+       .danger, and Cancel on the left.
+       =================================================================== -->
+
+  <!-- DELETE ALL HISTORY - wipes every archived month. Not undoable, unlike
+       deleting a single month, which is why the text names the count. -->
   <div id="archive-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Delete All History?</h3>
@@ -258,7 +364,10 @@
     </div>
   </div>
 
-  <!-- ADD WALLET MODAL -->
+  <!-- ADD WALLET - the inline error covers three rejections: an empty name, a
+       duplicate, and a name reserved by one of the five chart categories
+       (which would merge the wallet into that slice). See
+       walletNameConflict(). -->
   <div id="add-wallet-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Add Wallet</h3>
@@ -272,7 +381,16 @@
     </div>
   </div>
 
-  <!-- OVERSPEND MODAL -->
+  <!-- OVERSPEND - shown when an action would push Remaining below zero.
+       Three things can trigger it: a Second choice take, ticking a bill paid,
+       and a wallet add.
+
+       The options list is built by askOverspend() and holds one button per
+       wallet that can cover the shortfall IN FULL - partial covers are not
+       offered, so choosing one always lands Remaining at exactly zero - plus
+       "Record it anyway", which lets Remaining go negative. Overspending is a
+       legitimate state here, not an error: the books still balance, the
+       numbers just go negative. -->
   <div id="overspend-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Not enough left</h3>
@@ -285,7 +403,15 @@
     </div>
   </div>
 
-  <!-- MONEY SOURCE MODAL -->
+  <!-- MONEY SOURCE - asked on every Second choice "+ Add".
+       This question cannot be skipped or guessed, because the two answers
+       produce completely different books. "New money" raises Total Income.
+       "Money coming back" leaves income alone and instead CANCELS earlier
+       spending - required by the invariant, since otherwise the original cost
+       would sit in `spent` while the cash was back in your pocket.
+
+       The sub-labels spell out the consequence rather than the mechanism,
+       because the user is answering about their life, not the data model. -->
   <div id="source-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Where's this from?</h3>
@@ -308,7 +434,10 @@
     </div>
   </div>
 
-  <!-- IMPORT MODAL -->
+  <!-- IMPORT - the button says "Replace" rather than "Import" because that is
+       what happens: importing CLEARS any key the file omits, so the app
+       afterwards matches the file exactly instead of blending with what was
+       already there. -->
   <div id="import-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Import Data?</h3>
@@ -321,7 +450,13 @@
     </div>
   </div>
 
-  <!-- TRANSFER MODAL -->
+  <!-- TRANSFER - destination picker, built by openTransferModal(). Lists
+       "Main wallet" plus every OTHER active wallet with its balance; the
+       source is excluded so a wallet cannot fund itself.
+
+       Whichever is picked, the transfer writes two linked halves sharing a
+       txId. Deleting either half removes both, so a partial delete can never
+       create or destroy money. -->
   <div id="transfer-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Transfer To</h3>
@@ -334,7 +469,11 @@
     </div>
   </div>
 
-  <!-- DELETE WALLET MODAL -->
+  <!-- DELETE WALLET - says "Delete" but performs a SOFT delete. Any leftover
+       balance is returned to main as a real tagged transfer, then the wallet
+       is marked deleted: true. It vanishes from the UI but stays in every
+       money calculation, so spending it already made is not un-spent - the
+       v1.13.0 bug. Closed wallets are purged for real at the next rollover. -->
   <div id="delete-wallet-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Delete Wallet?</h3>
@@ -347,7 +486,10 @@
     </div>
   </div>
 
-  <!-- SECRET RESET MODAL -->
+  <!-- SECRET RESET - reached by double-tapping the "MONTHLY SPENT" header.
+       Undocumented on purpose, and the only way out of a locked priority list.
+       Clears this month only; priority bills are backed up first, and the
+       partial month is NOT archived. -->
   <div id="reset-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Reset Everything?</h3>
@@ -363,7 +505,10 @@
     </div>
   </div>
 
-  <!-- SAVE PRIORITY MODAL -->
+  <!-- SAVE PRIORITY - confirms locking the bill list for the rest of the
+       month. Genuinely one-way: there is no unlock, and the secret reset is
+       the only escape. Hence the blunt wording and the .danger button on what
+       is nominally just a save. -->
   <div id="priority-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Save Priority Bills?</h3>
@@ -379,16 +524,29 @@
     </div>
   </div>
 
-  <!-- UNDO TOAST -->
+  <!-- UNDO TOAST - shared by every deletion in the app.
+       The deletion is only staged when it appears: the change is committed to
+       storage when the 3-second bar drains, or reverted if Undo is tapped.
+       There is a single slot, so only the most recent action is undoable. -->
   <div id="undo-toast" class="undo-toast hidden">
     <span id="undo-text">Bill deleted</span>
     <button id="undo-btn" aria-label="Undo last deletion">Undo</button>
     <div class="undo-timer"><div id="undo-bar" class="undo-bar"></div></div>
   </div>
 
+  <!-- LOAD ORDER IS LOAD-BEARING. money.js must come first: it assigns its
+       functions onto the global object, and app.js calls them as bare globals
+       at parse time. Swapping these two lines breaks the app instantly.
+
+       Neither is deferred, so both run before the service worker registers
+       below - which is also why app.js can assume the DOM above it exists. -->
   <script src="money.js"></script>
   <script src="app.js"></script>
   <script>
+  /* Register the offline cache, but only after load, so fetching and caching
+     the asset list never competes with the first paint. Guarded because the
+     API is absent over file:// and in some private-browsing modes - the app
+     still works, it just will not run offline. */
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("./service-worker.js");

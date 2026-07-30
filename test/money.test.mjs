@@ -1,19 +1,44 @@
-/* Run with:  node --test test/
+/* Run with:  node --test test/     (or: npm test)
  *
  * These exercise money.js directly - the same file the browser loads - so a
  * formula change that breaks the books fails here instead of on a phone.
+ *
+ * Two conventions worth knowing before adding a test:
+ *
+ * 1. Every scenario ends with assertReconciles. The invariant is the point;
+ *    an assertion about one figure can pass while the month as a whole is
+ *    nonsense.
+ *
+ * 2. Tests named REGRESSION encode a bug that actually shipped. Each one has
+ *    been verified to FAIL when its fix is reverted - a test that cannot fail
+ *    is worse than no test, because it buys false confidence. If you touch
+ *    money.js, break the fix on purpose once and confirm red before trusting
+ *    green.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
+/* money.js is a UMD-style CommonJS module, not ESM, and it is loaded here by
+   path rather than copied. That is deliberate: the tests must run the exact
+   bytes the browser loads, because the one real accounting bug in this
+   project's history came from two copies of the same formula drifting apart. */
 const require = createRequire(import.meta.url);
 const M = require("../money.js");
 
+/* Builds wallet definition objects with predictable ids - W("Grocery","Fuel")
+   gives w0 and w1, matching the walletData keys each test writes by hand.
+   Wallets live in settings in the real app, so the math functions always take
+   them as an argument rather than reading them from the month. */
 const W = (...names) => names.map((name, i) => ({ id: `w${i}`, name }));
 
-// Every scenario must satisfy: spent + inWallets + mainRemaining === totalIncome
+/* THE invariant: spent + inWallets + mainRemaining === totalIncome.
+   Every unit of money is in exactly one of three states - gone, set aside, or
+   still in main - and they must add back up to what came in. The epsilon
+   absorbs binary float dust (0.3 - 0.1 - 0.2 leaves about -1e-13), and the
+   message prints all four figures because knowing WHICH side is wrong is most
+   of the diagnosis. */
 function assertReconciles(label, d, wallets) {
   const income = M.totalIncomeOf(d, wallets);
   const b = M.spendingBreakdownOf(d, wallets);
@@ -25,6 +50,13 @@ function assertReconciles(label, d, wallets) {
   );
 }
 
+/* ---------------------------------------------------------------------------
+   BASELINE - the simplest shapes, which everything else builds on
+--------------------------------------------------------------------------- */
+
+/* A month before the user has typed anything. Income is null rather than 0
+   because "not set yet" and "earned nothing" render differently, and the
+   invariant is vacuously true when there is no income to balance against. */
 test("empty month reconciles and reports no income", () => {
   const d = { income: null, priority: [], secondChoice: [], walletData: {} };
   assert.equal(M.totalIncomeOf(d, []), null);
@@ -32,6 +64,7 @@ test("empty month reconciles and reports no income", () => {
   assert.ok(M.reconciles(d, []));
 });
 
+/* Income set, nothing spent: it should all still be sitting in main. */
 test("income only", () => {
   const d = { income: 1000, priority: [], secondChoice: [], walletData: {} };
   assert.equal(M.totalIncomeOf(d, []), 1000);
@@ -39,6 +72,8 @@ test("income only", () => {
   assertReconciles("income only", d, []);
 });
 
+/* A bill is a plan until it is ticked. Listing what you owe must not move any
+   money - only `paid: true` spends. */
 test("paid bills count as spending, unpaid do not", () => {
   const d = {
     income: 1000,
@@ -54,6 +89,13 @@ test("paid bills count as spending, unpaid do not", () => {
   assertReconciles("bills", d, []);
 });
 
+/* ---------------------------------------------------------------------------
+   WALLETS - moving money vs spending it
+--------------------------------------------------------------------------- */
+
+/* The distinction the whole wallet feature rests on, and the v1.11.0 bug:
+   allocating RM 650 across wallets was reported as RM 650 spent when only
+   RM 39.60 had been used. Money in a wallet has left main but is not gone. */
 test("budgeting into a wallet is not spending", () => {
   const wallets = W("Grocery");
   const d = {
@@ -67,6 +109,10 @@ test("budgeting into a wallet is not spending", () => {
   assertReconciles("wallet budget", d, wallets);
 });
 
+/* The other half of that rule: a `take` is the moment it becomes spending.
+   It is filed under the WALLET's name, not a category, which is why a wallet
+   may not be named after one of the five fixed chart categories - the two
+   would merge into one slice. */
 test("taking from a wallet is spending, attributed to the wallet", () => {
   const wallets = W("Grocery");
   const d = {
@@ -80,6 +126,12 @@ test("taking from a wallet is spending, attributed to the wallet", () => {
   assertReconciles("wallet take", d, wallets);
 });
 
+/* ---------------------------------------------------------------------------
+   INCOME - what counts as new money, and what only looks like it
+--------------------------------------------------------------------------- */
+
+/* Money genuinely earned mid-month raises both income and what you can spend.
+   The contrast cases are the two tests below. */
 test("real Second choice income raises total income", () => {
   const d = {
     income: 1000, priority: [], walletData: {},
@@ -90,6 +142,12 @@ test("real Second choice income raises total income", () => {
   assertReconciles("extra income", d, []);
 });
 
+/* The v1.13.0 bug. Pulling your own money back out of a wallet was read as
+   fresh earnings, so income climbed every time you moved money around. Both
+   halves of the transfer are written here because that is what the app
+   stores - deleting either half removes both.
+
+   Revert the transfer exclusion in money.js and four tests go red. */
 test("REGRESSION: transfer back to Main must not inflate total income", () => {
   const wallets = W("Grocery");
   const d = {
@@ -104,6 +162,9 @@ test("REGRESSION: transfer back to Main must not inflate total income", () => {
   assertReconciles("transfer to main", d, wallets);
 });
 
+/* Data written before `transfer: true` existed is still on people's phones.
+   isTransferEntry falls back to the category name so those months keep
+   totalling correctly - the reason that fallback can never be removed. */
 test("legacy transfer rows without the flag are still excluded from income", () => {
   const wallets = W("Grocery");
   const d = {
@@ -116,6 +177,12 @@ test("legacy transfer rows without the flag are still excluded from income", () 
   assertReconciles("legacy transfer to main", d, wallets);
 });
 
+/* ---------------------------------------------------------------------------
+   TRANSFERS - two linked halves that must never create or destroy money
+--------------------------------------------------------------------------- */
+
+/* Shuffling between wallets touches nothing outside them: main is unchanged
+   and inWallets still totals the same 400. */
 test("wallet to wallet transfer moves money without creating or spending it", () => {
   const wallets = W("Grocery", "Fuel");
   const d = {
@@ -132,6 +199,10 @@ test("wallet to wallet transfer moves money without creating or spending it", ()
   assertReconciles("wallet to wallet", d, wallets);
 });
 
+/* Both types raise a wallet's balance, but only `add` takes from main - an
+   `in` arrived from another wallet, where the money was already accounted
+   for. Confusing the two would mint or destroy money on every transfer, which
+   is why isWalletInflow exists as its own named predicate. */
 test("a wallet 'add' pulls from main, unlike an 'in'", () => {
   const wallets = W("Grocery");
   const d = {
@@ -143,6 +214,11 @@ test("a wallet 'add' pulls from main, unlike an 'in'", () => {
   assertReconciles("wallet add", d, wallets);
 });
 
+/* The v1.13.0 bug: deleting a wallet erased the spending it had already done,
+   so closing a wallet handed you money back that was long gone.
+
+   The fix is why allWallets() exists alongside activeWallets(): every math
+   call must see closed wallets, and only the UI filters them out. */
 test("closing a wallet keeps its spending on the books", () => {
   // A wallet is soft-deleted, so it stays in the math while leaving the UI.
   // Its leftover balance is returned to main as a tagged transfer first.
@@ -168,6 +244,21 @@ test("closing a wallet keeps its spending on the books", () => {
   assertReconciles("closed wallet", d, wallets);
 });
 
+/* ---------------------------------------------------------------------------
+   REIMBURSEMENTS - money coming back, which cancels spending
+
+   The subtlest rule in the codebase, and the reason the app asks "new money
+   or coming back?" instead of guessing. A repayment cannot simply raise
+   income: the original cost would stay in `spent` while the cash was back in
+   your pocket, and the three states would total more than came in. So it
+   cancels the spending instead - own category first, then the largest
+   remaining ones, because money fronted from a wallet often comes back into
+   main under a different label.
+--------------------------------------------------------------------------- */
+
+/* The base case: spend 50, get 50 back, end up exactly where you started.
+   Income is untouched, main is whole again, and the category disappears
+   entirely rather than lingering at zero. */
 test("reimbursement raises remaining without raising income", () => {
   // Fronted RM 50 for a friend's food, then got repaid
   const d = {
@@ -185,6 +276,10 @@ test("reimbursement raises remaining without raising income", () => {
   assertReconciles("reimbursement", d, []);
 });
 
+/* Paid back more than was owed. The surplus has no spending left to cancel,
+   so it genuinely IS new money - this is what monthTotalsOf tracks as
+   `excess` and folds into income. Without it the books would not balance for
+   an over-payment. */
 test("a reimbursement bigger than the spending it cancels is partly new money", () => {
   const d = {
     income: 1000, priority: [], walletData: {},
@@ -199,6 +294,10 @@ test("a reimbursement bigger than the spending it cancels is partly new money", 
   assertReconciles("over-reimbursement", d, []);
 });
 
+/* Why the cancellation spills past its own category. The cost was taken from
+   the Grocery wallet (filed under "Grocery"), but the repayment arrives in
+   main labelled "Food / Drink". A same-category-only rule would find nothing
+   to cancel and wrongly book the repayment as income. */
 test("a reimbursement spills over to cancel spending in other categories", () => {
   // Fronted the cost from a wallet, repaid into main under a different label
   const wallets = W("Grocery");
@@ -213,6 +312,8 @@ test("a reimbursement spills over to cancel spending in other categories", () =>
   assertReconciles("spill-over reimbursement", d, wallets);
 });
 
+/* The other answer to the same question - explicitly new money behaves like
+   ordinary income and does not cancel anything. */
 test("new money is still counted as income", () => {
   const d = {
     income: 1000, priority: [], walletData: {},
@@ -222,6 +323,10 @@ test("new money is still counted as income", () => {
   assertReconciles("explicit new money", d, []);
 });
 
+/* Rows saved before v1.14.0 carry no newMoney flag at all. isReimbursement
+   requires an explicit `false`, so absence means income and old months keep
+   the totals they have always shown. Treating a missing flag as "coming back"
+   would silently rewrite everyone's history. */
 test("adds saved before the question existed still count as income", () => {
   const d = {
     income: 1000, priority: [], walletData: {},
@@ -231,6 +336,11 @@ test("adds saved before the question existed still count as income", () => {
   assertReconciles("legacy add", d, []);
 });
 
+/* The two exclusions must not collide. Both a transfer and a reimbursement
+   are adds that skip income, but only a reimbursement cancels spending - so
+   moving money out of a wallet must leave the paid Bills untouched. This is
+   why isReimbursement explicitly excludes transfers rather than just checking
+   the newMoney flag. */
 test("a wallet transfer back is not treated as a reimbursement", () => {
   // Transfers must not cancel spending - the wallet money was never spent
   const wallets = W("Grocery");
@@ -245,6 +355,14 @@ test("a wallet transfer back is not treated as a reimbursement", () => {
   assertReconciles("transfer is not a reimbursement", d, wallets);
 });
 
+/* ---------------------------------------------------------------------------
+   EDGE CASES - awkward shapes that must not crash or drift
+--------------------------------------------------------------------------- */
+
+/* One month using every feature at once: paid and unpaid bills, takes, real
+   income, a transfer to main, a wallet take, a top-up, and a wallet-to-wallet
+   move. Individually-correct rules can still interact wrongly, and this is
+   the test that would catch that. */
 test("everything at once still balances", () => {
   const wallets = W("Grocery", "Fuel");
   const d = {
@@ -276,6 +394,9 @@ test("everything at once still balances", () => {
   assertReconciles("kitchen sink", d, wallets);
 });
 
+/* Deliberately awkward thirds and cents. Binary floats cannot represent them
+   exactly, so this guards that the accumulated error stays inside the epsilon
+   rather than growing into a visible discrepancy. */
 test("fractional amounts do not drift", () => {
   const wallets = W("Grocery");
   const d = {
@@ -286,6 +407,8 @@ test("fractional amounts do not drift", () => {
   assertReconciles("fractions", d, wallets);
 });
 
+/* A wallet that exists but holds nothing. It must contribute zero everywhere
+   without being mistaken for missing data or dropped from the totals. */
 test("spending is never negative and wallets never silently vanish", () => {
   const wallets = W("Grocery");
   const d = {
@@ -298,6 +421,16 @@ test("spending is never negative and wallets never silently vanish", () => {
   assertReconciles("zero budget wallet", d, wallets);
 });
 
+/* ---------------------------------------------------------------------------
+   VALIDATION REGRESSIONS - shapes the UI must never be able to produce
+
+   These two work as a pair: the first proves the guard rejects bad input, the
+   second proves WHY it has to, by showing the books breaking when it does not.
+--------------------------------------------------------------------------- */
+
+/* The bad list is the interesting half. 0 is rejected because a zero-amount
+   entry is noise, Infinity because it poisons every downstream total, and
+   numeric strings are accepted because that is what an <input> hands over. */
 test("REGRESSION: amounts must be positive finite numbers", () => {
   // -50 is truthy, so a plain !!amount check let negatives through and a
   // "take" of -50 handed the user money instead of spending it
@@ -320,6 +453,16 @@ test("REGRESSION: a negative amount would break the books", () => {
   assert.equal(M.reconciles(d, []), false, "this shape must not be reachable through the UI");
 });
 
+/* ---------------------------------------------------------------------------
+   BUDGET FLOOR - the other v1.14.2 fix
+
+   A wallet's balance is budget + inflows - outflows, so lowering the budget
+   after money has left drags the balance negative and conjures the difference
+   into main. minBudgetOf computes how far down is safe.
+--------------------------------------------------------------------------- */
+
+/* The exact reported sequence. The second assertion documents the broken
+   shape the floor exists to prevent, rather than only asserting the fix. */
 test("REGRESSION: a budget cannot shrink below what the wallet already paid out", () => {
   // budget 300, all 300 transferred to main, then budget lowered to 100 gave
   // a -200 balance and more money in main than the income
@@ -329,6 +472,10 @@ test("REGRESSION: a budget cannot shrink below what the wallet already paid out"
   assert.equal(M.walletBalanceOf({ ...wd, budget: 100 }), -200, "the shape the floor prevents");
 });
 
+/* The floor is NET, not gross outflow. Money that came back in raises the
+   headroom again, so a wallet that spent 250 but was topped up by 100 can go
+   as low as 150. Flattening minBudgetOf to count only outflows fails this
+   test and the one above. */
 test("the budget floor accounts for money that came back in", () => {
   const wd = {
     budget: 300,
@@ -342,15 +489,28 @@ test("the budget floor accounts for money that came back in", () => {
   assert.equal(M.walletBalanceOf({ ...wd, budget: 150 }), 0, "at the floor the balance is exactly zero");
 });
 
+/* Nothing committed, no floor - the guard must not restrict a wallet that has
+   never been used. */
 test("an untouched wallet can have its budget lowered freely", () => {
   assert.equal(M.minBudgetOf({ budget: 500, items: [] }), 0);
 });
 
+/* A wallet that received more than it paid out has a NEGATIVE net commitment.
+   Without the Math.max clamp the floor would come back below zero, which the
+   budget field would then accept as a valid negative budget. */
 test("a wallet whose inflows exceed outflows has a zero floor, not negative", () => {
   const wd = { budget: 100, items: [{ name: "in", amount: 400, type: "in", fromId: "x" }] };
   assert.equal(M.minBudgetOf(wd), 0, "floor must never go below zero");
 });
 
+/* ---------------------------------------------------------------------------
+   OVERSPENDING - going past the balance is allowed, but must stay honest
+--------------------------------------------------------------------------- */
+
+/* "Record it anyway". Remaining goes negative and the invariant still holds -
+   overspending is a real state to represent, not an error to reject. The
+   chart relies on this: it shows an "Overspent" legend line rather than
+   clamping remaining to zero, which used to draw a donut larger than income. */
 test("overspending keeps the books balanced, it just goes negative", () => {
   // "Record it anyway": remaining may go below zero, but nothing is invented
   const d = {
@@ -362,6 +522,13 @@ test("overspending keeps the books balanced, it just goes negative", () => {
   assertReconciles("overspent", d, []);
 });
 
+/* Which wallets the overspend prompt may offer. Only full covers qualify, so
+   picking one always lands remaining at exactly zero rather than a smaller
+   overspend that would need a second prompt. Closed wallets are excluded
+   because their money has already been returned to main.
+
+   Three cases in one test: exactly one wallet covering, several sorted
+   richest-first, and nothing covering at all. */
 test("only wallets that fully cover a shortfall are offered, richest first", () => {
   const wallets = [
     { id: "a", name: "Small" },
@@ -387,12 +554,22 @@ test("only wallets that fully cover a shortfall are offered, richest first", () 
   assert.deepEqual(M.walletsCovering(d, wallets, 5000), [], "nothing covers an impossible shortfall");
 });
 
+/* The boundary. A wallet holding precisely the shortfall must be offered -
+   hence the 1e-9 epsilon in walletsCovering, since float dust could otherwise
+   put an exact balance a fraction under the threshold and hide the only
+   wallet that could help. */
 test("a wallet covering exactly the shortfall qualifies", () => {
   const wallets = [{ id: "a", name: "Exact" }];
   const d = { income: 1000, priority: [], secondChoice: [], walletData: { a: { budget: 250, items: [] } } };
   assert.equal(M.walletsCovering(d, wallets, 250).length, 1, "equal balance must qualify");
 });
 
+/* End to end: the state the app writes after the user picks "cover from a
+   wallet". A real tagged transfer, both halves sharing a txId, and remaining
+   settling at zero rather than merely closer to it.
+
+   Built from real reported figures, which is why they are not round - round
+   numbers hide exactly the float problems this needs to catch. */
 test("covering a shortfall by transfer lands remaining at zero", () => {
   // Income funds a 1200 wallet and leaves 1056.17 in main, matching the
   // reported case. Spending 2000 is 943.83 short; cover it from the wallet.
@@ -413,6 +590,10 @@ test("covering a shortfall by transfer lands remaining at zero", () => {
   assertReconciles("covered shortfall", d, wallets);
 });
 
+/* A wallet defined in settings but with no slot in this month's walletData -
+   the normal state for a wallet created but not yet used, and for every
+   wallet at the start of a fresh month. Every function must treat the missing
+   slot as empty rather than throwing on undefined. */
 test("a wallet missing from walletData is ignored, not crashed on", () => {
   const wallets = W("Grocery", "Ghost");
   const d = {
