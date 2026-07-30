@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  MONTHLY MONEY TRACKER
+  MoNy
 
   The entire UI, in one file. Two <main> elements exist at once - #app-view
   and #history-view - and the app toggles `hidden` between them rather than
@@ -17,13 +17,15 @@
        number field is focused, which on a form-heavy app leaves the user
        stranded at 1.3x with no obvious way back. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="description" content="A simple offline-first personal finance tracker for monthly income, bills, and spending." />
-  <!-- theme-color paints the status bar and browser chrome to match the app's
-       black; color-scheme tells the browser to render form controls and
-       scrollbars dark rather than defaulting to light ones. -->
-  <meta name="theme-color" content="#000000" />
-  <meta name="color-scheme" content="dark" />
-  <title>Monthly Money Tracker</title>
+  <meta name="description" content="MoNy - an offline-first tracker for one month of income, bills, and spending." />
+  <!-- theme-color paints the status bar and browser chrome to match the
+       app surface, one per scheme so it follows the system. color-scheme
+       lists dark first: dark is the default and light the secondary skin,
+       and this is also what makes form controls and scrollbars match. -->
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E0E10" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FAFAF8" />
+  <meta name="color-scheme" content="dark light" />
+  <title>MoNy</title>
 
   <!-- PWA install metadata: icons, name, standalone display. -->
   <link rel="manifest" href="manifest.json" />
@@ -33,7 +35,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Money" />
+  <meta name="apple-mobile-web-app-title" content="MoNy" />
   <!-- Versioned so Safari's own HTTP cache can't serve stale icon/splash
        art when these files change - bump the ?v= on every icon update -->
   <link rel="apple-touch-icon" href="icons/icon-152x152.png?v=19" />
@@ -50,7 +52,7 @@
        circle a partial arc rather than a closed ring. -->
   <div id="pull-indicator" class="pull-indicator">
     <svg id="pull-spinner" class="pull-spinner hidden" width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <circle cx="10" cy="10" r="8" stroke="#888" stroke-width="2" stroke-dasharray="40" stroke-linecap="round"/>
+      <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" stroke-dasharray="40" stroke-linecap="round"/>
     </svg>
     <span id="pull-text">Pull to refresh</span>
   </div>
@@ -60,7 +62,7 @@
     <!-- HEADER + SETTINGS -->
     <header>
       <div class="header-row">
-        <h1 id="secret-reset">MONTHLY SPENT</h1>
+        <h1 id="secret-reset">Monthly spent</h1>
         <section class="settings-bar">
           <button id="history-toggle" class="settings-btn" aria-label="History">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -116,15 +118,15 @@
               <span id="wallets-count" class="wallets-count">0 wallets</span>
             </div>
             <div id="wallets-settings-list" class="wallets-settings-list"></div>
-            <button id="add-wallet-btn" class="setting-btn-action">+ Add Wallet</button>
+            <button id="add-wallet-btn" class="setting-btn-action">+ Add wallet</button>
             <div class="setting-row" style="margin-top:10px;">
-              <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
+              <button id="export-data-btn" class="setting-btn-action">Export data</button>
             </div>
             <div class="setting-row">
-              <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
+              <button id="import-data-btn" class="setting-btn-action">Import data</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.15.2</div>
+            <div class="setting-version">v1.16.0</div>
           </div>
         </section>
       </div>
@@ -156,14 +158,14 @@
            number typed here - it is totalIncomeOf(), which adds genuinely new
            Second choice income on top. -->
       <div class="card" id="income-card">
-        <span>Total Income</span>
-        <h2 id="total-income-display">RM 0</h2>
+        <span>Total income</span>
+        <h2 id="total-income-display">0</h2>
 
         <input
           type="number"
           inputmode="decimal"
           id="total-income-input"
-          placeholder="Enter income (RM)"
+          placeholder="Enter income"
           class="hidden"
         />
       </div>
@@ -178,7 +180,7 @@
            budget-limit message, with overspend taking precedence. -->
       <div class="card">
         <span>Remaining</span>
-        <h2 id="remaining-money">RM 0</h2>
+        <h2 id="remaining-money">0</h2>
         <div class="spend-bar-wrapper">
           <div class="spend-bar-track">
             <div id="spend-bar-fill" class="spend-bar-fill"></div>
@@ -215,17 +217,17 @@
           <option value="Subscription">Subscription</option>
           <option value="Others">Others</option>
         </select>
-        <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
+        <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount" />
 
         <!-- Filled button = primary action, outlined = secondary. The app is
              greyscale, so shape carries the emphasis instead of colour. -->
         <div class="actions">
-          <button id="add-priority" aria-label="Add priority bill">Add Priority Bill</button>
-          <button id="save-priority" aria-label="Save and lock priority bills">Save Priority</button>
+          <button id="add-priority" aria-label="Add bill">Add bill</button>
+          <button id="save-priority" aria-label="Lock priority bills">Save priority</button>
         </div>
         <!-- Only shown when a backup from last month exists, the list is
              empty, and it is not locked - see updateCopyLastBtn(). -->
-        <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy priority bills from last month">Copy Last Priority</button>
+        <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy last month's priority bills">Copy last priority</button>
       </div>
 
       <!-- Built by renderPriority(); each row is a swipe-to-delete wrapper. -->
@@ -247,7 +249,7 @@
           <option value="Transport">Transport</option>
           <option value="Others">Others</option>
         </select>
-        <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
+        <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount" />
         <!-- input[type=date] ignores the placeholder attribute, and iOS
              renders an empty one completely blank with no hint at all. The
              overlaid span is the placeholder; the .is-empty class is toggled
@@ -307,7 +309,7 @@
               <path d="M15 5 8 12l7 7"/>
             </svg>
           </button>
-          <h1>HISTORY</h1>
+          <h1>History</h1>
         </div>
       </div>
       <p id="history-count"></p>
@@ -330,7 +332,7 @@
     <section>
       <h3>Months</h3>
       <div id="history-list"></div>
-      <button id="delete-archive-btn" class="delete-all-btn hidden" aria-label="Delete all archived history">Delete All History</button>
+      <button id="delete-archive-btn" class="delete-all-btn hidden" aria-label="Delete all history">Delete all history</button>
       <p id="storage-line" class="storage-line"></p>
     </section>
   </main>
@@ -354,12 +356,12 @@
        deleting a single month, which is why the text names the count. -->
   <div id="archive-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Delete All History?</h3>
+      <h3>Delete all history</h3>
       <p id="archive-modal-text"></p>
 
       <div class="modal-actions">
-        <button id="cancel-archive-delete" aria-label="Cancel deleting history">Cancel</button>
-        <button id="confirm-archive-delete" class="danger" aria-label="Confirm delete all history">Yes, Delete</button>
+        <button id="cancel-archive-delete" aria-label="Cancel">Cancel</button>
+        <button id="confirm-archive-delete" class="danger" aria-label="Delete all history">Delete</button>
       </div>
     </div>
   </div>
@@ -370,13 +372,13 @@
        walletNameConflict(). -->
   <div id="add-wallet-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Add Wallet</h3>
+      <h3>Add wallet</h3>
       <input type="text" id="add-wallet-name" placeholder="Wallet name" class="setting-input-wide modal-input" />
       <p id="add-wallet-error" class="modal-error hidden"></p>
 
       <div class="modal-actions">
-        <button id="cancel-add-wallet" aria-label="Cancel adding wallet">Cancel</button>
-        <button id="confirm-add-wallet" class="danger" aria-label="Confirm add wallet">Add</button>
+        <button id="cancel-add-wallet" aria-label="Cancel">Cancel</button>
+        <button id="confirm-add-wallet" class="danger" aria-label="Add wallet">Add</button>
       </div>
     </div>
   </div>
@@ -398,7 +400,7 @@
       <div id="overspend-options" class="transfer-list"></div>
 
       <div class="modal-actions">
-        <button id="cancel-overspend" aria-label="Cancel this entry">Cancel</button>
+        <button id="cancel-overspend" aria-label="Cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -414,7 +416,7 @@
        because the user is answering about their life, not the data model. -->
   <div id="source-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Where's this from?</h3>
+      <h3>Where is this from</h3>
       <p id="source-summary"></p>
 
       <div class="transfer-list">
@@ -440,12 +442,12 @@
        already there. -->
   <div id="import-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Import Data?</h3>
+      <h3>Replace all data</h3>
       <p id="import-modal-text"></p>
 
       <div class="modal-actions">
-        <button id="cancel-import" aria-label="Cancel import">Cancel</button>
-        <button id="confirm-import" class="danger" aria-label="Confirm import and replace data">Replace</button>
+        <button id="cancel-import" aria-label="Cancel">Cancel</button>
+        <button id="confirm-import" class="danger" aria-label="Replace all data">Replace</button>
       </div>
     </div>
   </div>
@@ -459,12 +461,12 @@
        create or destroy money. -->
   <div id="transfer-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Transfer To</h3>
+      <h3>Transfer to</h3>
       <p id="transfer-summary"></p>
       <div id="transfer-destinations" class="transfer-list"></div>
 
       <div class="modal-actions">
-        <button id="cancel-transfer" aria-label="Cancel transfer">Cancel</button>
+        <button id="cancel-transfer" aria-label="Cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -476,12 +478,12 @@
        v1.13.0 bug. Closed wallets are purged for real at the next rollover. -->
   <div id="delete-wallet-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Delete Wallet?</h3>
+      <h3>Delete wallet</h3>
       <p id="delete-wallet-text"></p>
 
       <div class="modal-actions">
-        <button id="cancel-delete-wallet" aria-label="Cancel deleting wallet">Cancel</button>
-        <button id="confirm-delete-wallet" class="danger" aria-label="Confirm delete wallet">Yes, Delete</button>
+        <button id="cancel-delete-wallet" aria-label="Cancel">Cancel</button>
+        <button id="confirm-delete-wallet" class="danger" aria-label="Delete wallet">Delete</button>
       </div>
     </div>
   </div>
@@ -492,15 +494,14 @@
        partial month is NOT archived. -->
   <div id="reset-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Reset Everything?</h3>
+      <h3>Reset this month</h3>
       <p>
-        This will erase all data for this month.<br />
-        This action cannot be undone.
+        Erases every entry for this month. This cannot be undone.
       </p>
 
       <div class="modal-actions">
-        <button id="cancel-reset" aria-label="Cancel reset">Cancel</button>
-        <button id="confirm-reset" class="danger" aria-label="Confirm reset all data">Yes, Reset</button>
+        <button id="cancel-reset" aria-label="Cancel">Cancel</button>
+        <button id="confirm-reset" class="danger" aria-label="Reset this month">Reset</button>
       </div>
     </div>
   </div>
@@ -511,15 +512,14 @@
        is nominally just a save. -->
   <div id="priority-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Save Priority Bills?</h3>
+      <h3>Lock priority bills</h3>
       <p>
-        Are you sure?<br />
-        Once saved, you cannot change priority bills again.
+        Priority bills cannot be changed for the rest of the month.
       </p>
 
       <div class="modal-actions">
-        <button id="cancel-priority" aria-label="Cancel saving priority bills">Cancel</button>
-        <button id="confirm-priority" class="danger" aria-label="Confirm save and lock priority bills">Yes, Save</button>
+        <button id="cancel-priority" aria-label="Cancel">Cancel</button>
+        <button id="confirm-priority" class="danger" aria-label="Lock priority bills">Lock</button>
       </div>
     </div>
   </div>

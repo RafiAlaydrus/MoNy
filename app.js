@@ -20,9 +20,9 @@ function save(key, value) {
     if (!storageWarned) {
       storageWarned = true;
       alert(
-        "Couldn't save - storage for this app is full.\n\n" +
-        "Export your data from Settings, then delete old months from History " +
-        "to free space. Changes since this message are not saved."
+        "Storage for this app is full.\n\n" +
+        "Export your data from settings, then delete old months from " +
+        "history to free space. Changes since this message are not saved."
       );
     }
     console.error("localStorage write failed", err);
@@ -189,25 +189,52 @@ const chartCanvas = document.getElementById("summary-chart");
 const chartCtx = chartCanvas ? chartCanvas.getContext("2d") : null;
 const chartLegend = document.getElementById("chart-legend");
 
-// Only the chart and its legend use color - the rest of the app stays monochrome
-const CATEGORY_COLORS = {
-  "Bills": "#e74c3c",
-  "Subscription": "#e67e22",
-  "Food / Drink": "#9b59b6",
-  "Transport": "#16a085",
-  "Others": "#8a8a8a",
-};
+/* THEME BRIDGE
 
-const CHART_IN_WALLETS_COLOR = "#f1c40f";
-const CHART_REMAINING_COLOR = "#3498db";
-const CHART_OVERSPENT_COLOR = "#c0392b";
+   A canvas cannot resolve var(--token) - fillStyle needs a literal colour
+   string. So the charts read the resolved values off :root at draw time
+   instead of hardcoding them, which is what lets them follow dark and
+   light without keeping a second palette in JavaScript.
 
-/* Wallet slice colours. The UI is otherwise greyscale; the chart is the one
-   place colour is allowed, because same-shade slices are indistinguishable.
-   The ramp cycles, so a sixth wallet reuses the first colour - acceptable
-   since the legend is labelled and nobody runs six wallets. */
-const WALLET_COLOR_RAMP = ["#2ecc71", "#e84393", "#00b8d9", "#a29bfe", "#fdcb6e"];
-function walletColor(index) { return WALLET_COLOR_RAMP[index % WALLET_COLOR_RAMP.length]; }
+   Read at DRAW time, never cached: the system scheme can flip while the
+   app is open, and a cached palette would leave the chart painted for the
+   wrong theme until reload. */
+function themeColor(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
+/* Category slices. Colour here is DATA ENCODING, not mood - it separates
+   one category from another and carries no good/bad meaning, which is why
+   there is no red-for-overspending or green-for-saving in this map.
+
+   Keyed by the exact stored category string. These keys are data: they are
+   written into every saved entry and every archived month, so renaming one
+   orphans history. Reserved against wallet names for the same reason. */
+function categoryColors() {
+  return {
+    "Bills": themeColor("--chart-1", "#B4705F"),
+    "Subscription": themeColor("--chart-2", "#8C7A3A"),
+    "Food / Drink": themeColor("--chart-6", "#8F7396"),
+    "Transport": themeColor("--chart-4", "#5E8A88"),
+    "Others": themeColor("--chart-5", "#6E7BA0"),
+  };
+}
+
+/* Wallet slice colours, cycling through the same desaturated ramp. A sixth
+   wallet reuses the first colour - acceptable, since the legend is
+   labelled. Saturation is kept low deliberately so that no slice competes
+   with --signal, which is reserved for the Remaining figure.
+
+   --chart-5 is deliberately absent: it belongs to "Others", the one
+   category a wallet slice sits next to most often. --chart-3 leads because
+   it is used by no category at all, so the first wallet is always unique. */
+function walletColor(index) {
+  const ramp = ["--chart-3", "--chart-6", "--chart-4", "--chart-2", "--chart-1"];
+  const fallback = ["#7E8F63", "#8F7396", "#5E8A88", "#8C7A3A", "#B4705F"];
+  const i = index % ramp.length;
+  return themeColor(ramp[i], fallback[i]);
+}
 
 // Returns the current currency symbol
 function cur() { return settings.currency; }
@@ -547,7 +574,7 @@ function renderPriority() {
   priorityList.innerHTML = "";
 
   if (data.priority.length === 0) {
-    priorityList.innerHTML = '<li class="empty-state">No priority bills added yet.</li>';
+    priorityList.innerHTML = '<li class="empty-state">No bills logged this month.</li>';
     return;
   }
 
@@ -634,7 +661,7 @@ addPriorityBtn.addEventListener("click", () => {
 const copyLastBtn = document.getElementById("copy-last-priority");
 const backupPriority = JSON.parse(localStorage.getItem(BACKUP_PRIORITY_KEY));
 
-// Shows or hides the "Copy Last Priority" button
+// Shows or hides the "Copy last priority" button
 function updateCopyLastBtn() {
   if (backupPriority && backupPriority.length > 0 && data.priority.length === 0 && !data.priorityLocked) {
     copyLastBtn.classList.remove("hidden");
@@ -807,7 +834,7 @@ function makeRowDeletable(row, onDelete) {
 
   // Desktop fallback, since there is no swipe with a mouse
   row.addEventListener("dblclick", () => {
-    if (confirm("Delete this entry?")) onDelete();
+    if (confirm("Delete this entry")) onDelete();
   });
 }
 
@@ -857,14 +884,9 @@ function updateWalletBar(wallet, section) {
   fill.style.width = `${pct}%`;
   label.textContent = `${Math.round(pct)}% spent`;
 
-  if (pct < 50) {
-    fill.style.background = "#6f6f6f";
-  } else if (pct < 75) {
-    fill.style.background = "#b0b0b0";
-  } else {
-    fill.style.background = "#ffffff";
-  }
-  label.style.color = pct >= 75 ? "#e8e8e8" : "";
+  /* Wallet bars stay neutral, coloured from the stylesheet. --signal marks
+     the main Remaining figure only - repeating the accent on every wallet
+     would spread it across the screen and cost it its meaning. */
 }
 
 // Refreshes a wallet's balance card and bar
@@ -872,7 +894,7 @@ function renderWalletCard(wallet, section) {
   // Same count-up and pulse the Remaining card uses, so adding or taking
   // money reads the same way in every wallet
   animateMoneyTo(section.querySelector("[data-role='balance']"), getWalletBalance(wallet.id));
-  section.querySelector("[data-role='budget-label']").textContent = `${wallet.name} Balance`;
+  section.querySelector("[data-role='budget-label']").textContent = `${wallet.name} balance`;
   section.querySelector(".wallet-section-title").textContent = wallet.name;
   updateWalletBar(wallet, section);
 }
@@ -885,7 +907,7 @@ function buildWalletSection(wallet) {
   section.innerHTML = `
     <h3 class="wallet-section-title">${esc(wallet.name)}</h3>
     <div class="card wallet-card" data-role="card">
-      <span data-role="budget-label">${esc(wallet.name)} Balance</span>
+      <span data-role="budget-label">${esc(wallet.name)} balance</span>
       <h2 data-role="balance">${esc(cur())} 0</h2>
       <input type="number" inputmode="decimal" data-role="budget-input" placeholder="Set budget (${esc(cur())})" class="hidden" />
       <p class="budget-hint hidden" data-role="budget-hint"></p>
@@ -1220,7 +1242,7 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
 
   const anyway = document.createElement("button");
   anyway.className = "transfer-dest-btn";
-  anyway.setAttribute("aria-label", "Record it anyway and go overspent");
+  anyway.setAttribute("aria-label", "Record it anyway");
   anyway.innerHTML = `Record it anyway` +
     `<span class="transfer-dest-sub">Remaining goes to ${esc(cur())} ${fmt(available - amount)}.</span>`;
   anyway.addEventListener("click", () => { closeOverspend(); proceed(); });
@@ -1501,14 +1523,14 @@ function calculateRemaining(skipChart = false) {
   fill.style.width = `${pct}%`;
   label.textContent = `${Math.round(pct)}% spent`;
 
-  if (pct < 50) {
-    fill.style.background = "#6f6f6f";
-  } else if (pct < 75) {
-    fill.style.background = "#b0b0b0";
-  } else {
-    fill.style.background = "#ffffff";
-  }
-  label.style.color = pct >= 75 ? "#e8e8e8" : "";
+  /* Colour is no longer set here. The bar and the figure above it are one
+     component and share --signal from the stylesheet, so the only state
+     JavaScript communicates is overspent-or-not - as a class, leaving the
+     actual colours to the theme. The old three-tier brightness ramp is
+     gone: it was using brightness as emphasis, which the hero figure now
+     carries on its own. */
+  fill.classList.toggle("is-overspent", remaining < 0);
+  remainingMoneyEl.classList.toggle("is-overspent", remaining < 0);
 
   if (settings.budgetLimit && income > 0) {
     const limitSpendPct = ((income - settings.budgetLimit) / income) * 100;
@@ -1562,16 +1584,16 @@ function renderChart() {
     ctx.arc(center, center, size / 2 - 10, 0, Math.PI * 2);
     ctx.arc(center, center, (size / 2 - 10) * 0.55, Math.PI * 2, 0, true);
     ctx.closePath();
-    ctx.fillStyle = "#1a1a1a";
+    ctx.fillStyle = themeColor("--card-raised", "#1F1F22");
     ctx.fill();
 
-    ctx.fillStyle = "#555";
+    ctx.fillStyle = themeColor("--text-muted", "#6B6B67");
     ctx.font = "13px -apple-system, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("No data yet", center, center);
 
-    legend.innerHTML = '<span style="color:#555;font-size:13px;">Set your income to get started.</span>';
+    legend.innerHTML = '<span class="chart-empty-note">No income set for this month.</span>';
     return;
   }
 
@@ -1583,6 +1605,7 @@ function renderChart() {
   /* Wallet slices are keyed by NAME, because that is how monthTotalsOf files
      them under categories. The consequence is that closing a wallet and
      making a new one with the same name merges the two in this chart. */
+  const catColors = categoryColors();
   const walletColorMap = {};
   allWallets().forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
 
@@ -1604,16 +1627,16 @@ function renderChart() {
     .map(([label, amount]) => ({
       label,
       amount,
-      color: CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a",
+      color: catColors[label] || walletColorMap[label] || themeColor("--text-muted", "#6B6B67"),
     }));
 
   // Money budgeted to a wallet has left the main balance but is not spent yet
   if (inWallets > 0) {
-    segments.push({ label: "In wallets", amount: inWallets, color: CHART_IN_WALLETS_COLOR });
+    segments.push({ label: "In wallets", amount: inWallets, color: themeColor("--chart-wallets", "#74716A") });
   }
 
   if (remaining > 0) {
-    segments.push({ label: "Remaining", amount: remaining, color: CHART_REMAINING_COLOR });
+    segments.push({ label: "Remaining", amount: remaining, color: themeColor("--signal", "#C9A876") });
   }
 
   // An overspend has no slice - it is not a share of income - but the legend
@@ -1624,7 +1647,7 @@ function renderChart() {
   /* Income set but nothing moved yet: one full Remaining slice, so the canvas
      shows a complete ring instead of dividing by a total of zero below. */
   if (segments.length === 0) {
-    segments.push({ label: "Remaining", amount: income, color: CHART_REMAINING_COLOR });
+    segments.push({ label: "Remaining", amount: income, color: themeColor("--signal", "#C9A876") });
   }
 
   const size = canvas.width;
@@ -1656,13 +1679,13 @@ function renderChart() {
     startAngle += sliceAngle;
   });
 
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = themeColor("--text-primary", "#EDEDEC");
   ctx.font = "bold 18px -apple-system, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(`${cur()} ${fmt(spent)}`, center, center - 8);
   ctx.font = "12px -apple-system, sans-serif";
-  ctx.fillStyle = "#888";
+  ctx.fillStyle = themeColor("--text-secondary", "#8A8A86");
   ctx.fillText("total spent", center, center + 12);
 
   legend.innerHTML = segments.map(s => `
@@ -1676,7 +1699,7 @@ function renderChart() {
   `).join("") + (overspentBy > 0 ? `
     <div class="legend-item legend-overspent">
       <div class="legend-left">
-        <span class="legend-dot" style="background:${CHART_OVERSPENT_COLOR}"></span>
+        <span class="legend-dot" style="background:${themeColor("--danger", "#D9776B")}"></span>
         <span>Overspent</span>
       </div>
       <span class="legend-amount">${esc(cur())} ${fmt(overspentBy)}</span>
@@ -1746,12 +1769,31 @@ currencySelect.value = settings.currency;
 currencySelect.addEventListener("change", () => {
   settings.currency = currencySelect.value;
   saveSettings();
+  applyCurrencyPlaceholders();
   renderIncome();
   renderPriority();
   renderWallets();
   renderSecondChoice();
   calculateRemaining();
 });
+
+/* The amount fields name the active currency, so the symbol is never
+   hardcoded in the markup - the app has to read correctly for someone using
+   any of the eight currencies, not just the default. The wallet forms are
+   built at render time and already interpolate cur(); these three are static
+   markup, so they are filled in here and refreshed whenever it changes. */
+function applyCurrencyPlaceholders() {
+  const c = cur();
+  const set = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.placeholder = text;
+  };
+  set("total-income-input", `Enter income (${c})`);
+  set("pb-amount", `Amount (${c})`);
+  set("sc-amount", `Amount (${c})`);
+}
+
+applyCurrencyPlaceholders();
 
 /* =========================
    SORT SETTING
@@ -1995,7 +2037,7 @@ importFile.addEventListener("change", () => {
     try {
       parsed = JSON.parse(reader.result);
     } catch (err) {
-      alert("Couldn't read that file - it isn't valid JSON.");
+      alert("That file is not valid JSON.");
       importFile.value = "";
       return;
     }
@@ -2033,7 +2075,7 @@ importFile.addEventListener("change", () => {
     importFile.value = "";
   };
   reader.onerror = () => {
-    alert("Couldn't read that file.");
+    alert("That file could not be read.");
     importFile.value = "";
   };
   reader.readAsText(file);
@@ -2065,7 +2107,7 @@ confirmImportBtn.addEventListener("click", () => {
 
 document.getElementById("export-data-btn").addEventListener("click", () => {
   // Everything the app persists, so an import can rebuild it exactly. The
-  // priority backup is included too - it is what "Copy Last Priority" reads.
+  // priority backup is included too - it is what "Copy last priority" reads.
   const exportObj = {
     app: "monthly-money-tracker",
     formatVersion: 1,
@@ -2184,7 +2226,7 @@ function drawTrendChart(entries) {
 
   /* Baseline. The 0.5 offset puts a 1px stroke on a whole pixel instead of
      straddling two, which would render as a soft 2px grey smear. */
-  trendCtx.strokeStyle = "#2a2a2a";
+  trendCtx.strokeStyle = themeColor("--border", "#2A2A28");
   trendCtx.lineWidth = 1;
   trendCtx.beginPath();
   trendCtx.moveTo(padSide, baseY + 0.5);
@@ -2220,16 +2262,16 @@ function drawTrendChart(entries) {
        The maxArchived > 0 guard stops every bar going white in a history
        where nothing has been spent at all. */
     if (e.live) {
-      trendCtx.fillStyle = "#4a4a4a";
+      trendCtx.fillStyle = themeColor("--text-muted", "#6B6B67");
     } else if (e.spent === maxArchived && maxArchived > 0) {
-      trendCtx.fillStyle = "#ffffff";
+      trendCtx.fillStyle = themeColor("--text-primary", "#EDEDEC");
     } else {
-      trendCtx.fillStyle = "#8a8a8a";
+      trendCtx.fillStyle = themeColor("--text-secondary", "#8A8A86");
     }
     trendCtx.fillRect(x, y, barW, h);
 
     /* Month name under the axis, centred on the bar. */
-    trendCtx.fillStyle = "#666";
+    trendCtx.fillStyle = themeColor("--text-muted", "#6B6B67");
     trendCtx.font = "11px -apple-system, sans-serif";
     trendCtx.textAlign = "center";
     trendCtx.textBaseline = "top";
@@ -2238,7 +2280,7 @@ function drawTrendChart(entries) {
     /* Value labels only when there is room. Past six bars the slots are
        narrower than the text and the numbers collide into a grey smudge. */
     if (entries.length <= 6) {
-      trendCtx.fillStyle = e.live ? "#666" : "#aaa";
+      trendCtx.fillStyle = e.live ? themeColor("--text-muted", "#6B6B67") : themeColor("--text-secondary", "#8A8A86");
       trendCtx.font = "10px -apple-system, sans-serif";
       trendCtx.textBaseline = "bottom";
       trendCtx.fillText(fmtWhole(e.spent), x + barW / 2, y - 4);
@@ -2271,7 +2313,7 @@ function renderTrends(keys) {
 
   trendStats.innerHTML = `
     <div class="stat-cell">
-      <span class="stat-label">Avg Spent</span>
+      <span class="stat-label">Avg spent</span>
       <span class="stat-value">${esc(cur())} ${fmtWhole(avg)}</span>
     </div>
     <div class="stat-cell">
@@ -2301,13 +2343,14 @@ function buildHistoryRow(key) {
 
   const incomeText = s.income !== null ? `${esc(c)} ${fmtWhole(s.income)} in` : "no income set";
 
+  const catColors = categoryColors();
   const walletColorMap = {};
   entry.wallets.forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
 
   const detailRows = Object.entries(s.totals)
     .sort((a, b) => b[1] - a[1])
     .map(([label, amount]) => {
-      const color = CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a";
+      const color = catColors[label] || walletColorMap[label] || themeColor("--text-muted", "#6B6B67");
       return `
         <div class="legend-item">
           <div class="legend-left">
@@ -2323,7 +2366,7 @@ function buildHistoryRow(key) {
   const inWalletsRow = s.inWallets > 0 ? `
     <div class="legend-item">
       <div class="legend-left">
-        <span class="legend-dot" style="background:${CHART_IN_WALLETS_COLOR}"></span>
+        <span class="legend-dot" style="background:${themeColor("--chart-wallets", "#74716A")}"></span>
         <span>In wallets</span>
       </div>
       <span class="legend-amount">${esc(c)} ${fmt(s.inWallets)}</span>
@@ -2333,7 +2376,7 @@ function buildHistoryRow(key) {
   const remainingRow = s.income !== null ? `
     <div class="legend-item">
       <div class="legend-left">
-        <span class="legend-dot" style="background:${CHART_REMAINING_COLOR}"></span>
+        <span class="legend-dot" style="background:${themeColor("--signal", "#C9A876")}"></span>
         <span>Remaining</span>
       </div>
       <span class="legend-amount">${esc(c)} ${fmt(s.remaining)}</span>
@@ -2434,6 +2477,27 @@ historyBack.addEventListener("click", () => {
   appView.classList.remove("hidden");
   window.scrollTo(0, 0);
 });
+
+/* =========================
+   THEME CHANGE
+========================= */
+
+/* Everything styled in CSS re-themes itself when the system scheme flips.
+   The two canvases cannot: a chart is painted once with literal colour
+   strings and keeps those pixels until something repaints it. Left alone,
+   switching to light mode at night leaves the donut's centre figure in
+   near-white on a white card - invisible.
+
+   So listen for the flip and redraw whichever view is on screen. */
+if (window.matchMedia) {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (historyView.classList.contains("hidden")) {
+      renderChart();
+    } else {
+      renderHistory();
+    }
+  });
+}
 
 /* =========================
    DELETE ALL HISTORY
