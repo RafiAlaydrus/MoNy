@@ -1,109 +1,20 @@
 /* =====================================================================
-   MoNy - STYLES
+   MONTHLY MONEY TRACKER - STYLES
 
-   Calm, minimal, quiet confidence. Precise, not decorative.
+   Pure-black minimalist monochrome, 21 sections.
 
-   The app's maths is already honest - it calls an overspend an overspend
-   rather than softening or hiding it. These styles exist to match that
-   tone rather than dress over it.
+   Two conventions run through the whole file and explain most of what
+   looks unusual here:
 
-   Four conventions run through the whole file:
+   1. THE UI IS GREYSCALE. The only colour anywhere is the donut chart and
+      its legend dots, because same-shade slices are impossible to tell
+      apart. Everything else carries meaning through brightness, fill, and
+      shape instead - progress bars brighten rather than turning red, and
+      a primary button is filled where a secondary one is outlined.
 
-   1. NO RAW HEX BELOW THE TOKEN BLOCK. Every colour resolves to a custom
-      property, which is what keeps dark and light in step.
-
-   2. ONE SIGNAL COLOUR, ONE JOB. --signal marks the Remaining figure and
-      the bar beneath it. Nowhere else - not buttons, links, active
-      states or icons. Everything else is surface and text tokens.
-
-   3. EMPHASIS COMES FROM SIZE AND WEIGHT, never from tracking, caps, or
-      a second accent. Two weights only: 400 regular, 500 medium. No 600,
-      no 700 - they read heavy and fight the tone. Sentence case
-      everywhere; no uppercase labels.
-
-   4. MOTION IS OPTIONAL. Every animation is switched off under
-      prefers-reduced-motion at the bottom.
-
-   Explicitly absent: gradients, shadows beyond one modal lift, glow,
-   neon, and any success/celebration colour. The app does not cheerlead.
+   2. MOTION IS OPTIONAL. Every animation in this file is switched off
+      under prefers-reduced-motion at the bottom.
    ===================================================================== */
-
-/* =====================
-   Design tokens
-
-   Every colour in this file resolves to one of these. Nothing below
-   should contain a raw hex value - that is what keeps dark and light in
-   sync, and it is the rule to enforce when adding anything new.
-
-   Dark is the brand's home surface and the default. Light is a
-   secondary skin applied only when the system asks for it.
-
-   --signal has exactly one job: the Remaining figure and the bar
-   directly beneath it. It appears nowhere else. If everything is
-   highlighted, nothing is.
-
-   There is deliberately no success/positive colour. The app does not
-   congratulate you for spending less.
-===================== */
-:root {
-  --bg: #0E0E10;
-  --card: #18181B;
-  --card-raised: #1F1F22;
-  --border: #2A2A28;
-  --text-primary: #EDEDEC;
-  --text-secondary: #8A8A86;
-  --text-muted: #6B6B67;
-  --signal: #C9A876;
-  --danger: #D9776B;
-
-  /* Filled controls invert the surface: primary text becomes the
-     background, and the page background becomes the label. Derived from
-     the tokens above so they follow the theme automatically. */
-  --fill-solid: var(--text-primary);
-  --on-solid: var(--bg);
-
-  /* Chart hues. Desaturated so no category competes with --signal, but
-     far enough apart in hue to stay legible as separate slices. These
-     are read by app.js at draw time via getComputedStyle, because a
-     canvas cannot resolve var() on its own. */
-  --chart-1: #B4705F;
-  --chart-2: #8C7A3A;
-  --chart-3: #7E8F63;
-  --chart-4: #5E8A88;
-  --chart-5: #6E7BA0;
-  --chart-6: #8F7396;
-  /* "In wallets" is not a spending category - it is money set aside. Kept
-     deliberately neutral so it reads as a holding state, and so it cannot
-     be mistaken for the --signal slice next to it in the legend. */
-  --chart-wallets: #74716A;
-  --chart-remaining: var(--signal);
-  --chart-overspent: var(--danger);
-  --chart-track: var(--card-raised);
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #FAFAF8;
-    --card: #FFFFFF;
-    --card-raised: #F2F2EF;
-    --border: #E5E5E1;
-    --text-primary: #1C1C1A;
-    --text-secondary: #75756F;
-    --text-muted: #A3A39C;
-    --signal: #A8823F;
-    --danger: #B84A3C;
-
-    /* Darkened a step so each hue holds its own against white, which
-       washes out mid-tones that read fine on a dark surface. */
-    --chart-1: #9C5A4A;
-    --chart-2: #6F6029;
-    --chart-3: #64754C;
-    --chart-4: #467170;
-    --chart-5: #566384;
-    --chart-6: #755B7C;
-    --chart-wallets: #6B6862;
-  }
-}
 
 /* =====================
    Global Reset & Base
@@ -118,8 +29,8 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
-  color: var(--text-primary);
+  background: #000;
+  color: #fff;
   /* System font stack - no webfont, so nothing to download and nothing to
      fail offline. */
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
@@ -132,7 +43,7 @@ html, body {
 input[type="checkbox"] {
   /* Near-white tick, since the browser default is a bright blue that would
      be the only colour outside the chart. */
-  accent-color: var(--fill-solid);
+  accent-color: #e8e8e8;
 }
 
 /* =====================
@@ -152,7 +63,7 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--text-secondary);
+  color: #888;
   font-size: 13px;
   z-index: 500;
   pointer-events: none;
@@ -201,18 +112,18 @@ input[type="checkbox"] {
   padding: 0;
   cursor: pointer;
   border-radius: 10px;
-  color: var(--text-secondary);
+  color: #888;
   -webkit-tap-highlight-color: transparent;
   transition: color 120ms ease, background 120ms ease;
 }
 
 .settings-btn:hover {
-  color: var(--text-primary);
+  color: #ccc;
 }
 
 .settings-btn:active {
-  background: var(--card-raised);
-  color: var(--text-primary);
+  background: #1a1a1a;
+  color: #fff;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -223,8 +134,8 @@ input[type="checkbox"] {
   position: absolute;
   top: 36px;
   right: 0;
-  background: var(--card-raised);
-  border: 1px solid var(--border);
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
   border-radius: 14px;
   padding: 14px 16px;
   width: 280px;
@@ -237,7 +148,7 @@ input[type="checkbox"] {
   justify-content: space-between;
   gap: 12px;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: #ccc;
 }
 
 .setting-row + .setting-row {
@@ -245,9 +156,9 @@ input[type="checkbox"] {
 }
 
 .setting-select {
-  background: var(--card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  background: #111;
+  color: #fff;
+  border: 1px solid #2a2a2a;
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 13px;
@@ -257,9 +168,9 @@ input[type="checkbox"] {
 }
 
 .setting-input {
-  background: var(--card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  background: #111;
+  color: #fff;
+  border: 1px solid #2a2a2a;
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 13px;
@@ -268,13 +179,13 @@ input[type="checkbox"] {
 }
 
 .setting-input::placeholder {
-  color: var(--text-muted);
+  color: #555;
 }
 
 .setting-btn-action {
   width: 100%;
-  background: var(--card-raised);
-  color: var(--text-secondary);
+  background: #2c2c2c;
+  color: #ccc;
   border: none;
   border-radius: 8px;
   padding: 10px;
@@ -283,7 +194,7 @@ input[type="checkbox"] {
 }
 
 .setting-btn-action:active {
-  background: var(--border);
+  background: #3a3a3a;
 }
 
 .spend-bar-wrapper {
@@ -297,36 +208,21 @@ input[type="checkbox"] {
   position: relative;
   width: 100%;
   height: 6px;
-  background: var(--border);
+  background: #2a2a2a;
   border-radius: 3px;
   overflow: visible;
 }
 
-/* The base bar is NEUTRAL. Wallet sections reuse this same class, and
-   accenting it here would repeat --signal down the whole screen. The old
-   three-tier brightness ramp is gone: brightness was standing in for
-   emphasis, which the hero figure now carries on its own.
-
-   Only the width is set from JavaScript; every colour lives here. */
+/* Width and colour are both set from calculateRemaining(). The background is
+   deliberately absent here - it is assigned in JS from a three-tier
+   brightness ramp (dim grey under 50%, lighter to 75%, white past it), so the
+   bar intensifies rather than turning red. Both properties transition, so a
+   change animates in step with the counting figure above. */
 .spend-bar-fill {
   height: 100%;
   border-radius: 3px;
   width: 0%;
-  background: var(--text-secondary);
   transition: width 0.4s ease, background 0.4s ease;
-}
-
-/* The MAIN bar only, by id - it belongs to the Remaining figure above it,
-   so it carries the same accent. This is the one place besides that number
-   where --signal appears anywhere in the app. */
-#spend-bar-fill {
-  background: var(--signal);
-}
-
-/* Overspent - matches the figure above rather than staying accent-coloured
-   while the number beside it says something has gone wrong. */
-#spend-bar-fill.is-overspent {
-  background: var(--danger);
 }
 
 /* Optional budget-limit marker. Its `left` is set in JS as a percentage.
@@ -337,7 +233,7 @@ input[type="checkbox"] {
   top: -3px;
   width: 2px;
   height: 12px;
-  background: var(--text-primary);
+  background: #fff;
   border-radius: 1px;
   opacity: 0.6;
 }
@@ -346,12 +242,12 @@ input[type="checkbox"] {
   display: block;
   margin-top: 4px;
   font-size: 11px;
-  color: var(--text-muted);
+  color: #666;
 }
 
 .budget-warning {
-  color: var(--text-primary);
-  font-weight: 500;
+  color: #fff;
+  font-weight: 600;
   font-size: 12px;
   text-align: center;
   margin-top: 4px;
@@ -360,10 +256,10 @@ input[type="checkbox"] {
 .setting-version {
   text-align: center;
   font-size: 11px;
-  color: var(--text-muted);
+  color: #555;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid #2a2a2a;
 }
 
 /* Toggle switch */
@@ -384,7 +280,7 @@ input[type="checkbox"] {
 .toggle-slider {
   position: absolute;
   inset: 0;
-  background: var(--border);
+  background: #333;
   border-radius: 24px;
   cursor: pointer;
   transition: background 0.2s;
@@ -397,17 +293,17 @@ input[type="checkbox"] {
   height: 18px;
   left: 3px;
   bottom: 3px;
-  background: var(--text-primary);
+  background: #fff;
   border-radius: 50%;
   transition: transform 0.2s;
 }
 
 .toggle input:checked + .toggle-slider {
-  background: var(--fill-solid);
+  background: #e8e8e8;
 }
 
 .toggle input:checked + .toggle-slider::before {
-  background: var(--on-solid);
+  background: #0a0a0a;
   transform: translateX(20px);
 }
 
@@ -426,14 +322,15 @@ header {
 
 header h1 {
   font-size: 28px;
-  font-weight: 500;
+  font-weight: 700;
   margin: 0;
+  letter-spacing: 0.3px;
 }
 
 header p {
   margin-top: 6px;
   font-size: 14px;
-  color: var(--text-secondary);
+  color: #9a9a9a;
 }
 
 /* =====================
@@ -447,47 +344,35 @@ header p {
 }
 
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: #111;
+  border: 1px solid #232323;
   border-radius: 14px;
   padding: 16px;
 }
 
-/* Section label above a figure. Sentence case and quiet - it names the
-   number without competing with it. */
 .card span {
   display: block;
-  font-size: 13px;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: #8a8a8a;
   margin-bottom: 6px;
 }
 
 .card > span {
-  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
 }
 
 .card h2 {
   margin: 0;
-  font-size: 28px;
-  font-weight: 500;
+  font-size: 22px;
+  font-weight: 600;
 }
 
-/* Remaining is the hero figure of the main screen: the largest number,
-   and the ONLY place --signal appears. Everything else on the screen is
-   a text token, which is what lets this one figure carry weight without
-   any decoration around it. */
+/* Emphasize remaining money */
 #remaining-money {
-  font-size: 32px;
-  font-weight: 500;
-  color: var(--signal);
-}
-
-/* Overspent. The figure switches to --danger because the state has
-   changed, not merely the number - it should read as "pay attention",
-   which is also why --danger is a muted terracotta rather than a
-   fire-engine red. Applied by calculateRemaining(). */
-#remaining-money.is-overspent {
-  color: var(--danger);
+  font-size: 26px;
+  font-weight: 700;
 }
 
 /* =====================
@@ -496,15 +381,15 @@ header p {
 h3 {
   margin: 16px 0 10px;
   font-size: 18px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* =====================
    Priority Section
 ===================== */
 #priority-list {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: #0f0f0f;
+  border: 1px solid #1e1e1e;
   border-radius: 14px;
   padding: 10px 14px;
 }
@@ -530,29 +415,29 @@ h3 {
   right: 0;
   bottom: 0;
   width: 100%;
-  background: var(--card-raised);
+  background: #2e2e2e;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding-right: 20px;
-  color: var(--text-primary);
+  color: #fff;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: 10px;
 }
 
 /* The sliding layer. background and z-index are what make the trick work:
    without an OPAQUE background the delete label shows through the row, and
-   without the raised z-index the row sits behind it entirely. var(--card) rather
-   than var(--bg) so the row is still distinguishable from the page. */
+   without the raised z-index the row sits behind it entirely. #0f0f0f rather
+   than #000 so the row is still distinguishable from the page. */
 #priority-list li {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #1f1f1f;
   font-size: 15px;
-  background: var(--card);
+  background: #0f0f0f;
   position: relative;
   z-index: 1;
 }
@@ -565,8 +450,8 @@ h3 {
    Second Choice Form
 ===================== */
 .second-form {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: #0f0f0f;
+  border: 1px solid #1e1e1e;
   border-radius: 14px;
   padding: 14px;
 }
@@ -576,10 +461,10 @@ h3 {
   width: 100%;
   padding: 12px;
   margin-bottom: 10px;
-  background: var(--card-raised);
-  border: 1px solid var(--border);
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
   border-radius: 10px;
-  color: var(--text-primary);
+  color: #fff;
   font-size: 15px;
   -webkit-appearance: none;
   appearance: none;
@@ -593,23 +478,23 @@ h3 {
 }
 
 .second-form select option {
-  background: var(--card-raised);
-  color: var(--text-primary);
+  background: #1a1a1a;
+  color: #fff;
 }
 
 .second-form input::placeholder,
 .second-form select:invalid {
-  color: var(--text-muted);
+  color: #777;
 }
 
 .second-form input:focus,
 .second-form select:focus {
   outline: none;
-  border-color: var(--border);
+  border-color: #3a3a3a;
 }
 
 .second-form .input-error {
-  border-color: var(--fill-solid);
+  border-color: #e8e8e8;
   animation: shake 0.3s ease;
 }
 
@@ -636,7 +521,7 @@ h3 {
   display: none;
   align-items: center;
   padding-left: 13px;
-  color: var(--text-muted);
+  color: #777;
   font-size: 15px;
   pointer-events: none;
 }
@@ -674,15 +559,17 @@ h3 {
   gap: 8px;
   background: none;
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #1f1f1f;
   padding: 8px 0;
-  color: var(--text-muted);
+  color: #7a7a7a;
   font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   cursor: pointer;
 }
 
 .table-toggle:active {
-  color: var(--text-secondary);
+  color: #b0b0b0;
 }
 
 .table-toggle .chev {
@@ -713,35 +600,25 @@ h3 {
   margin-top: 6px;
 }
 
-/* Outline is the DEFAULT button. A button has to opt in to being filled,
-   and only one per form does - the primary action of that form. Filling
-   everything would flatten the distinction and make the screen shout.
-
-   Colour never distinguishes these two: fill does. That is what lets the
-   accent stay reserved for the Remaining figure. */
 .actions button {
   flex: 1;
   padding: 12px;
   border-radius: 12px;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  border: none;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 
-/* The one filled button in the Second choice form. */
 #add-money {
-  background: var(--fill-solid);
-  border-color: var(--fill-solid);
-  color: var(--on-solid);
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 #take-money {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  border: 1px solid #333;
+  color: #b0b0b0;
 }
 
 .actions button:active {
@@ -768,7 +645,7 @@ th:last-child, td:last-child {
 }
 
 thead {
-  color: var(--text-muted);
+  color: #7a7a7a;
 }
 
 th {
@@ -783,7 +660,7 @@ td:last-child {
 }
 
 tbody tr {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #1f1f1f;
 }
 
 td {
@@ -843,7 +720,7 @@ td {
    pickers grow with the number of wallets, and on a short screen with the
    keyboard up they must scroll internally rather than overflow the card. */
 .modal-card {
-  background: var(--card);
+  background: #111;
   border-radius: 16px;
   padding: 20px;
   width: 90%;
@@ -860,7 +737,7 @@ td {
 }
 
 .modal-card p {
-  color: var(--text-secondary);
+  color: #aaa;
   font-size: 14px;
 }
 
@@ -878,20 +755,15 @@ td {
   cursor: pointer;
 }
 
-/* The destructive confirm. Outlined in --danger rather than filled: the
-   modal has already stated what will happen in words, so the button only
-   needs to be identifiable, not loud. Muted terracotta reads as "pay
-   attention", which is the intent - alarm would be overstating it. */
 .modal-actions .danger {
-  background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 .modal-actions button:not(.danger) {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  border: 1px solid #333;
+  color: #ccc;
 }
 
 /* Prevent app from stealing clicks when modal is open */
@@ -912,7 +784,7 @@ td {
 }
 
 .empty-state {
-  color: var(--text-muted);
+  color: #555;
   font-size: 13px;
   text-align: center;
   padding: 20px 0;
@@ -921,16 +793,16 @@ td {
 
 .date-stamp {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #666;
 }
 
 .returned-mark {
-  color: var(--text-muted);
+  color: #777;
   font-size: 11px;
 }
 
 .budget-hint {
-  color: var(--fill-solid);
+  color: #e8e8e8;
   font-size: 11px;
   line-height: 1.4;
   margin: 8px 0 0;
@@ -938,10 +810,11 @@ td {
 
 .lock-badge {
   font-size: 11px;
-  background: var(--border);
-  color: var(--text-secondary);
+  background: #2a2a2a;
+  color: #888;
   padding: 3px 8px;
   border-radius: 6px;
+  letter-spacing: 0.3px;
 }
 
 /* =====================
@@ -952,8 +825,8 @@ td {
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--card-raised);
-  border: 1px solid var(--border);
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
   border-radius: 12px;
   padding: 12px 16px;
   display: flex;
@@ -971,7 +844,7 @@ td {
 }
 
 .undo-toast span {
-  color: var(--text-secondary);
+  color: #ccc;
   font-size: 14px;
   flex: 1;
 }
@@ -979,9 +852,9 @@ td {
 #undo-btn {
   background: none;
   border: none;
-  color: var(--text-primary);
+  color: #fff;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   padding: 0;
 }
@@ -991,7 +864,7 @@ td {
 .undo-timer {
   width: 100%;
   height: 3px;
-  background: var(--border);
+  background: #2a2a2a;
   border-radius: 3px;
   overflow: hidden;
 }
@@ -1003,7 +876,7 @@ td {
    much time is actually left. */
 .undo-bar {
   height: 100%;
-  background: var(--fill-solid);
+  background: #e8e8e8;
   border-radius: 3px;
   width: 100%;
   transition: width linear;
@@ -1052,17 +925,15 @@ td {
   margin-top: 12px;
 }
 
-/* The one filled button in each wallet's form. */
 .actions [data-role="add-btn"] {
-  background: var(--fill-solid);
-  border-color: var(--fill-solid);
-  color: var(--on-solid);
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 .actions [data-role="take-btn"] {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  border: 1px solid #333;
+  color: #b0b0b0;
 }
 
 .transfer-btn {
@@ -1070,15 +941,15 @@ td {
   margin-top: 8px;
   padding: 10px;
   border-radius: 12px;
-  border: 1px dashed var(--border);
+  border: 1px dashed #3a3a3a;
   background: none;
-  color: var(--text-secondary);
+  color: #888;
   font-size: 13px;
   cursor: pointer;
 }
 
 .transfer-btn:active {
-  background: var(--card-raised);
+  background: #1a1a1a;
 }
 
 .transfer-list {
@@ -1091,23 +962,23 @@ td {
 .transfer-dest-btn {
   width: 100%;
   text-align: left;
-  background: var(--card-raised);
-  border: 1px solid var(--border);
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
   border-radius: 10px;
   padding: 12px 14px;
-  color: var(--fill-solid);
+  color: #e8e8e8;
   font-size: 14px;
   cursor: pointer;
 }
 
 .transfer-dest-btn:active {
-  background: var(--border);
+  background: #232323;
 }
 
 .transfer-dest-sub {
   display: block;
   font-size: 11px;
-  color: var(--text-muted);
+  color: #666;
   margin-top: 2px;
 }
 
@@ -1119,7 +990,7 @@ td {
 }
 
 .wallets-count {
-  color: var(--text-muted);
+  color: #666;
   font-size: 12px;
 }
 
@@ -1132,7 +1003,7 @@ td {
 }
 
 .wallets-empty {
-  color: var(--text-muted);
+  color: #555;
   font-size: 12px;
   text-align: center;
   padding: 6px 0;
@@ -1148,23 +1019,23 @@ td {
 .setting-input-wide {
   flex: 1;
   min-width: 0;
-  background: var(--card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  background: #111;
+  color: #fff;
+  border: 1px solid #2a2a2a;
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 13px;
 }
 
 .setting-input-wide::placeholder {
-  color: var(--text-muted);
+  color: #555;
 }
 
 .wallet-delete-btn {
   flex-shrink: 0;
   background: none;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
+  border: 1px solid #333;
+  color: #8a8a8a;
   border-radius: 8px;
   width: 30px;
   height: 30px;
@@ -1174,7 +1045,7 @@ td {
 }
 
 .wallet-delete-btn:active {
-  background: var(--card-raised);
+  background: #1a1a1a;
 }
 
 .modal-input {
@@ -1185,8 +1056,8 @@ td {
 }
 
 .modal-error {
-  color: var(--text-primary);
-  font-weight: 500;
+  color: #fff;
+  font-weight: 600;
   font-size: 12px;
   margin-top: 8px;
   margin-bottom: 0;
@@ -1197,11 +1068,9 @@ td {
 ===================== */
 
 /* Add Priority */
-/* The one filled button in the Priority form. */
 #add-priority {
-  background: var(--fill-solid);
-  border-color: var(--fill-solid);
-  color: var(--on-solid);
+  background: #e8e8e8;
+  color: #0a0a0a;
 }
 
 .copy-last-btn {
@@ -1209,22 +1078,22 @@ td {
   margin-top: 8px;
   padding: 10px;
   border-radius: 12px;
-  border: 1px dashed var(--border);
+  border: 1px dashed #3a3a3a;
   background: none;
-  color: var(--text-secondary);
+  color: #888;
   font-size: 13px;
   cursor: pointer;
 }
 
 .copy-last-btn:active {
-  background: var(--card-raised);
+  background: #1a1a1a;
 }
 
 /* Save Priority */
 #save-priority {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  border: 1px solid #333;
+  color: #b0b0b0;
 }
 
 /* =====================
@@ -1236,8 +1105,8 @@ td {
 }
 
 .chart-container {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: #111;
+  border: 1px solid #232323;
   border-radius: 14px;
   padding: 20px;
   display: flex;
@@ -1263,7 +1132,7 @@ td {
   align-items: center;
   justify-content: space-between;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: #ccc;
 }
 
 .legend-left {
@@ -1280,8 +1149,8 @@ td {
 }
 
 .legend-amount {
-  font-weight: 500;
-  color: var(--text-primary);
+  font-weight: 600;
+  color: #fff;
 }
 
 /* =====================
@@ -1295,8 +1164,9 @@ td {
 
 .history-header-left h1 {
   font-size: 28px;
-  font-weight: 500;
+  font-weight: 700;
   margin: 0;
+  letter-spacing: 0.3px;
 }
 
 #trend-chart {
@@ -1312,8 +1182,8 @@ td {
 
 .stat-cell {
   flex: 1;
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: #0f0f0f;
+  border: 1px solid #1e1e1e;
   border-radius: 10px;
   padding: 10px 6px;
   text-align: center;
@@ -1322,20 +1192,22 @@ td {
 .stat-label {
   display: block;
   font-size: 10px;
-  color: var(--text-muted);
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   margin-bottom: 4px;
 }
 
 .stat-value {
   font-size: 14px;
-  font-weight: 500;
-  color: var(--fill-solid);
+  font-weight: 600;
+  color: #e8e8e8;
 }
 
 .stat-sub {
   display: block;
   font-size: 10px;
-  color: var(--text-muted);
+  color: #666;
   margin-top: 2px;
 }
 
@@ -1343,13 +1215,13 @@ td {
   width: 100%;
   text-align: center;
   font-size: 12px;
-  color: var(--text-muted);
+  color: #555;
   margin: 0;
 }
 
 .history-row {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: #111;
+  border: 1px solid #232323;
   border-radius: 14px;
   padding: 12px 14px;
   margin-bottom: 10px;
@@ -1365,12 +1237,12 @@ td {
 
 .history-month {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .history-sub {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #666;
   margin-top: 3px;
 }
 
@@ -1383,13 +1255,13 @@ td {
 
 .history-remaining {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .history-delete {
   background: none;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
+  border: 1px solid #333;
+  color: #8a8a8a;
   border-radius: 8px;
   width: 28px;
   height: 28px;
@@ -1399,38 +1271,34 @@ td {
 }
 
 .history-delete:active {
-  background: var(--card-raised);
+  background: #1a1a1a;
 }
 
 .history-detail {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid #1f1f1f;
   margin-top: 10px;
   padding-top: 10px;
 }
 
 .history-meta {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #555;
   margin-top: 2px;
 }
 
-/* Destructive, and not the primary action of this screen - so outlined in
-   --danger, matching the modal confirm it opens. It was previously the
-   brightest element in the history view, which pointed the eye straight at
-   the one button nobody should reach for by accident. */
 .delete-all-btn {
   width: 100%;
   margin-top: 4px;
   padding: 12px;
   border-radius: 12px;
-  background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
+  border: none;
+  background: #e8e8e8;
+  color: #0a0a0a;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -1441,7 +1309,7 @@ td {
 .storage-line {
   text-align: center;
   font-size: 11px;
-  color: var(--text-muted);
+  color: #555;
   margin-top: 14px;
 }
 
@@ -1507,9 +1375,9 @@ td {
 }
 
 @keyframes card-pulse {
-  0% { border-color: var(--border); }
-  35% { border-color: var(--text-secondary); }
-  100% { border-color: var(--border); }
+  0% { border-color: #232323; }
+  35% { border-color: #9a9a9a; }
+  100% { border-color: #232323; }
 }
 
 /* Every animation in the file is switched off here. Note this only disables
@@ -1526,14 +1394,8 @@ td {
 }
 
 /* The overspent legend row has no slice in the donut - an overspend is not a
-   share of income - so it takes --danger to stay legible as the one legend
-   entry with nothing to point at, and to match the figure on the card. */
+   share of income - so it is brightened to stay legible as the one legend
+   entry with nothing to point at. */
 .legend-overspent .legend-amount {
-  color: var(--danger);
-}
-
-/* Chart empty state. Neutral information, not an instruction to act. */
-.chart-empty-note {
-  color: var(--text-muted);
-  font-size: 13px;
+  color: #e8e8e8;
 }
