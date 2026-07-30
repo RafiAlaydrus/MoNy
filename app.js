@@ -841,8 +841,9 @@ function updateWalletBar(wallet, section) {
 
 // Refreshes a wallet's balance card and bar
 function renderWalletCard(wallet, section) {
-  const balance = getWalletBalance(wallet.id);
-  section.querySelector("[data-role='balance']").textContent = `${cur()} ${fmt(balance)}`;
+  // Same count-up and pulse the Remaining card uses, so adding or taking
+  // money reads the same way in every wallet
+  animateMoneyTo(section.querySelector("[data-role='balance']"), getWalletBalance(wallet.id));
   section.querySelector("[data-role='budget-label']").textContent = `${wallet.name} Balance`;
   section.querySelector(".wallet-section-title").textContent = wallet.name;
   updateWalletBar(wallet, section);
@@ -1407,35 +1408,45 @@ function getMainRemaining() {
   return mainRemainingOf(data, allWallets());
 }
 
-let displayedRemaining = null;
-let remainingAnim = 0;
-const remainingCard = remainingMoneyEl.closest(".card");
+// Counts a money figure to its new value and pulses the card it sits in, so a
+// change reads as movement rather than a snap. The previous value and a
+// cancellation token live on the element, so any number of cards can use this
+// independently - a freshly rendered element simply has no previous value and
+// is set instantly.
+function animateMoneyTo(el, to) {
+  const from = el._shownValue;
+  el._shownValue = to;
 
-// Animates the remaining balance toward a new value and pulses the card
-function updateRemainingDisplay(to) {
-  const from = displayedRemaining;
-  displayedRemaining = to;
-
-  if (from === null || from === to) {
-    remainingMoneyEl.textContent = `${cur()} ${fmt(to)}`;
+  if (from === undefined || from === null || from === to) {
+    el.textContent = `${cur()} ${fmt(to)}`;
     return;
   }
 
-  remainingCard.classList.remove("card-pulse");
-  void remainingCard.offsetWidth;
-  remainingCard.classList.add("card-pulse");
+  const card = el.closest(".card");
+  if (card) {
+    card.classList.remove("card-pulse");
+    void card.offsetWidth;
+    card.classList.add("card-pulse");
+  }
 
-  const token = ++remainingAnim;
+  const token = (el._animToken || 0) + 1;
+  el._animToken = token;
+
   const start = performance.now();
   const duration = 350;
   function tick(now) {
-    if (token !== remainingAnim) return;
+    if (el._animToken !== token) return;
     const p = Math.min((now - start) / duration, 1);
     const eased = 1 - Math.pow(1 - p, 3);
-    remainingMoneyEl.textContent = `${cur()} ${fmt(from + (to - from) * eased)}`;
+    el.textContent = `${cur()} ${fmt(from + (to - from) * eased)}`;
     if (p < 1) requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+}
+
+// Animates the remaining balance toward a new value and pulses the card
+function updateRemainingDisplay(to) {
+  animateMoneyTo(remainingMoneyEl, to);
 }
 
 // Recalculates and renders the remaining balance, bars, and warnings
@@ -1443,7 +1454,7 @@ function calculateRemaining(skipChart = false) {
   renderIncome();
 
   if (data.income === null) {
-    displayedRemaining = 0;
+    remainingMoneyEl._shownValue = 0;
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
     return;
   }
