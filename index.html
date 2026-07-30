@@ -95,7 +95,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.13.0</div>
+            <div class="setting-version">v1.14.0</div>
           </div>
         </section>
       </div>
@@ -268,6 +268,29 @@
       <div class="modal-actions">
         <button id="cancel-add-wallet" aria-label="Cancel adding wallet">Cancel</button>
         <button id="confirm-add-wallet" class="danger" aria-label="Confirm add wallet">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONEY SOURCE MODAL -->
+  <div id="source-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Where's this from?</h3>
+      <p id="source-summary"></p>
+
+      <div class="transfer-list">
+        <button id="source-new" class="transfer-dest-btn" aria-label="New money, counts as income">
+          New money
+          <span class="transfer-dest-sub">Earned or received. Adds to Total Income.</span>
+        </button>
+        <button id="source-back" class="transfer-dest-btn" aria-label="Money coming back, not income">
+          Money coming back
+          <span class="transfer-dest-sub">Repaid for something you covered. Total Income stays the same.</span>
+        </button>
+      </div>
+
+      <div class="modal-actions">
+        <button id="cancel-source" aria-label="Cancel">Cancel</button>
       </div>
     </div>
   </div>

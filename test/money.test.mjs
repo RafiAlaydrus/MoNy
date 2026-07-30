@@ -15,7 +15,7 @@ const W = (...names) => names.map((name, i) => ({ id: `w${i}`, name }));
 
 // Every scenario must satisfy: spent + inWallets + mainRemaining === totalIncome
 function assertReconciles(label, d, wallets) {
-  const income = M.totalIncomeOf(d);
+  const income = M.totalIncomeOf(d, wallets);
   const b = M.spendingBreakdownOf(d, wallets);
   const main = M.mainRemainingOf(d, wallets);
   const sum = b.spent + b.inWallets + main;
@@ -27,14 +27,14 @@ function assertReconciles(label, d, wallets) {
 
 test("empty month reconciles and reports no income", () => {
   const d = { income: null, priority: [], secondChoice: [], walletData: {} };
-  assert.equal(M.totalIncomeOf(d), null);
+  assert.equal(M.totalIncomeOf(d, []), null);
   assert.equal(M.mainRemainingOf(d, []), 0);
   assert.ok(M.reconciles(d, []));
 });
 
 test("income only", () => {
   const d = { income: 1000, priority: [], secondChoice: [], walletData: {} };
-  assert.equal(M.totalIncomeOf(d), 1000);
+  assert.equal(M.totalIncomeOf(d, []), 1000);
   assert.equal(M.mainRemainingOf(d, []), 1000);
   assertReconciles("income only", d, []);
 });
@@ -85,7 +85,7 @@ test("real Second choice income raises total income", () => {
     income: 1000, priority: [], walletData: {},
     secondChoice: [{ name: "Freelance", category: "Others", amount: 100, type: "add" }]
   };
-  assert.equal(M.totalIncomeOf(d), 1100);
+  assert.equal(M.totalIncomeOf(d, []), 1100);
   assert.equal(M.mainRemainingOf(d, []), 1100);
   assertReconciles("extra income", d, []);
 });
@@ -98,7 +98,7 @@ test("REGRESSION: transfer back to Main must not inflate total income", () => {
     walletData: { w0: { budget: 300, items: [{ name: "back", amount: 50, type: "out", toId: "main" }] } },
     secondChoice: [{ name: "back", category: "Transfer", amount: 50, type: "add", transfer: true }]
   };
-  assert.equal(M.totalIncomeOf(d), 1000, "returning your own money is not new income");
+  assert.equal(M.totalIncomeOf(d, wallets), 1000, "returning your own money is not new income");
   assert.equal(M.mainRemainingOf(d, wallets), 750);
   assert.equal(M.spendingBreakdownOf(d, wallets).inWallets, 250);
   assertReconciles("transfer to main", d, wallets);
@@ -112,7 +112,7 @@ test("legacy transfer rows without the flag are still excluded from income", () 
     // written before transfers carried an explicit flag
     secondChoice: [{ name: "back", category: "Transfer", amount: 50, type: "add" }]
   };
-  assert.equal(M.totalIncomeOf(d), 1000);
+  assert.equal(M.totalIncomeOf(d, wallets), 1000);
   assertReconciles("legacy transfer to main", d, wallets);
 });
 
@@ -164,8 +164,85 @@ test("closing a wallet keeps its spending on the books", () => {
   assert.equal(b.spent, 100, "the 100 actually spent must survive closing the wallet");
   assert.equal(b.inWallets, 0);
   assert.equal(M.mainRemainingOf(d, wallets), 900, "only the 100 truly spent is gone");
-  assert.equal(M.totalIncomeOf(d), 1000);
+  assert.equal(M.totalIncomeOf(d, wallets), 1000);
   assertReconciles("closed wallet", d, wallets);
+});
+
+test("reimbursement raises remaining without raising income", () => {
+  // Fronted RM 50 for a friend's food, then got repaid
+  const d = {
+    income: 1000, priority: [], walletData: {},
+    secondChoice: [
+      { name: "Friend's food", category: "Food / Drink", amount: 50, type: "take" },
+      { name: "Repaid", category: "Food / Drink", amount: 50, type: "add", newMoney: false }
+    ]
+  };
+  assert.equal(M.totalIncomeOf(d, []), 1000, "getting your own money back is not income");
+  assert.equal(M.mainRemainingOf(d, []), 1000, "but you do have the money again");
+  const b = M.spendingBreakdownOf(d, []);
+  assert.equal(b.spent, 0, "you never net-spent it");
+  assert.equal(b.categories["Food / Drink"], undefined, "the cancelled category drops out");
+  assertReconciles("reimbursement", d, []);
+});
+
+test("a reimbursement bigger than the spending it cancels is partly new money", () => {
+  const d = {
+    income: 1000, priority: [], walletData: {},
+    secondChoice: [
+      { name: "Snack", category: "Food / Drink", amount: 50, type: "take" },
+      { name: "Overpaid", category: "Food / Drink", amount: 80, type: "add", newMoney: false }
+    ]
+  };
+  // 50 cancels the spending, the extra 30 has nothing to cancel so it is income
+  assert.equal(M.totalIncomeOf(d, []), 1030);
+  assert.equal(M.spendingBreakdownOf(d, []).spent, 0);
+  assertReconciles("over-reimbursement", d, []);
+});
+
+test("a reimbursement spills over to cancel spending in other categories", () => {
+  // Fronted the cost from a wallet, repaid into main under a different label
+  const wallets = W("Grocery");
+  const d = {
+    income: 1000, priority: [],
+    walletData: { w0: { budget: 300, items: [{ name: "friend's food", amount: 50, type: "take" }] } },
+    secondChoice: [{ name: "Repaid", category: "Food / Drink", amount: 50, type: "add", newMoney: false }]
+  };
+  const b = M.spendingBreakdownOf(d, wallets);
+  assert.equal(b.spent, 0, "the wallet spending is cancelled even though labels differ");
+  assert.equal(M.totalIncomeOf(d, wallets), 1000, "no new money appeared");
+  assertReconciles("spill-over reimbursement", d, wallets);
+});
+
+test("new money is still counted as income", () => {
+  const d = {
+    income: 1000, priority: [], walletData: {},
+    secondChoice: [{ name: "Gig", category: "Others", amount: 100, type: "add", newMoney: true }]
+  };
+  assert.equal(M.totalIncomeOf(d, []), 1100);
+  assertReconciles("explicit new money", d, []);
+});
+
+test("adds saved before the question existed still count as income", () => {
+  const d = {
+    income: 1000, priority: [], walletData: {},
+    secondChoice: [{ name: "Old row", category: "Others", amount: 100, type: "add" }]
+  };
+  assert.equal(M.totalIncomeOf(d, []), 1100, "no flag means legacy income, unchanged");
+  assertReconciles("legacy add", d, []);
+});
+
+test("a wallet transfer back is not treated as a reimbursement", () => {
+  // Transfers must not cancel spending - the wallet money was never spent
+  const wallets = W("Grocery");
+  const d = {
+    income: 1000,
+    priority: [{ name: "Rent", category: "Bills", amount: 100, paid: true }],
+    walletData: { w0: { budget: 300, items: [{ amount: 50, type: "out", toId: "main" }] } },
+    secondChoice: [{ name: "back", category: "Transfer", amount: 50, type: "add", transfer: true }]
+  };
+  assert.equal(M.spendingBreakdownOf(d, wallets).categories.Bills, 100, "the paid bill is untouched");
+  assert.equal(M.totalIncomeOf(d, wallets), 1000);
+  assertReconciles("transfer is not a reimbursement", d, wallets);
 });
 
 test("everything at once still balances", () => {
@@ -195,7 +272,7 @@ test("everything at once still balances", () => {
       w1: { budget: 150, items: [{ name: "to fuel", amount: 60, type: "in", fromId: "w0" }] }
     }
   };
-  assert.equal(M.totalIncomeOf(d), 1176.17, "1056.17 + 120 gig, transfer excluded");
+  assert.equal(M.totalIncomeOf(d, wallets), 1176.17, "1056.17 + 120 gig, transfer excluded");
   assertReconciles("kitchen sink", d, wallets);
 });
 

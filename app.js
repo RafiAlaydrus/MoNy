@@ -350,7 +350,7 @@ monthText.textContent = now.toLocaleString("default", {
 
 // Renders the income display
 function renderIncome() {
-  const total = totalIncomeOf(data);
+  const total = totalIncomeOf(data, allWallets());
   incomeDisplay.textContent = total !== null ? `${cur()} ${fmt(total)}` : `${cur()} 0`;
 }
 
@@ -1109,8 +1109,14 @@ function deleteSecondChoiceItem(item) {
 function buildSecondChoiceRow(item) {
   const row = document.createElement("tr");
   const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+  // Mark money that came back, so months later it is clear which additions
+  // were repayments rather than earnings
+  const mark = isReimbursement(item)
+    ? ' <span class="returned-mark" title="Money coming back, not income">&#8617;</span>'
+    : "";
+
   row.innerHTML = `
-    <td>${esc(item.name)}</td>
+    <td>${esc(item.name)}${mark}</td>
     <td>${esc(item.category)}</td>
     <td class="date-stamp">${dateStr}</td>
     <td>${item.type === "add" ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
@@ -1143,8 +1149,9 @@ function renderSecondChoice() {
   });
 }
 
-// Adds a second choice transaction ("add" or "take")
-function addSecondChoice(type) {
+// Validates the Second choice form, marking any bad fields. Returns the
+// values when they are all usable.
+function readSecondChoiceForm() {
   const name = scName.value.trim();
   const category = scCategory.value;
   const amount = Number(scAmount.value);
@@ -1160,10 +1167,22 @@ function addSecondChoice(type) {
     if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
     else f.el.classList.remove("input-error");
   });
-  if (hasError) return;
+  if (hasError) return null;
+
+  return { name, category, amount, fields };
+}
+
+// Adds a second choice transaction. For an "add", newMoney says whether it
+// counts as income or is money coming back to you.
+function addSecondChoice(type, newMoney) {
+  const form = readSecondChoiceForm();
+  if (!form) return;
+  const { name, category, amount, fields } = form;
 
   const backdated = !!scDate.value;
-  data.secondChoice.push({ name, category, amount, type, date: resolveDate(scDate.value) });
+  const entry = { name, category, amount, type, date: resolveDate(scDate.value) };
+  if (type === "add") entry.newMoney = newMoney !== false;
+  data.secondChoice.push(entry);
   saveData();
 
   scName.value = "";
@@ -1193,7 +1212,36 @@ function addSecondChoice(type) {
   calculateRemaining();
 }
 
-addMoneyBtn.addEventListener("click", () => addSecondChoice("add"));
+/* =========================
+   NEW MONEY vs MONEY COMING BACK
+========================= */
+
+const sourceModal = document.getElementById("source-modal");
+const sourceSummary = document.getElementById("source-summary");
+const sourceNewBtn = document.getElementById("source-new");
+const sourceBackBtn = document.getElementById("source-back");
+const cancelSourceBtn = document.getElementById("cancel-source");
+
+// Asks whether an addition is income or money returning, because a repayment
+// should raise what you have left without inflating what you earned.
+addMoneyBtn.addEventListener("click", () => {
+  const form = readSecondChoiceForm();
+  if (!form) return;
+  sourceSummary.textContent = `Adding ${cur()} ${fmt(form.amount)} - is this new money, or money coming back to you?`;
+  sourceModal.classList.remove("hidden");
+});
+
+sourceNewBtn.addEventListener("click", () => {
+  sourceModal.classList.add("hidden");
+  addSecondChoice("add", true);
+});
+
+sourceBackBtn.addEventListener("click", () => {
+  sourceModal.classList.add("hidden");
+  addSecondChoice("add", false);
+});
+
+cancelSourceBtn.addEventListener("click", () => sourceModal.classList.add("hidden"));
 takeMoneyBtn.addEventListener("click", () => addSecondChoice("take"));
 
 // Clears error highlight on input
@@ -1256,7 +1304,7 @@ function calculateRemaining(skipChart = false) {
 
   updateRemainingDisplay(remaining);
 
-  const income = totalIncomeOf(data);
+  const income = totalIncomeOf(data, allWallets());
   const spent = income - remaining;
   const pct = Math.min(Math.max((spent / income) * 100, 0), 100);
   const fill = document.getElementById("spend-bar-fill");
@@ -1308,7 +1356,7 @@ function renderChart() {
   const ctx = chartCtx;
   const legend = chartLegend;
 
-  const income = totalIncomeOf(data) || 0;
+  const income = totalIncomeOf(data, allWallets()) || 0;
   if (income === 0) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const size = canvas.width;
@@ -1839,7 +1887,7 @@ function summarizeEntry(rawEntry) {
   const entry = normalizeArchiveEntry(rawEntry);
   const b = spendingBreakdownOf(entry.data, entry.wallets);
   return {
-    income: totalIncomeOf(entry.data),
+    income: totalIncomeOf(entry.data, entry.wallets),
     spent: b.spent,
     inWallets: b.inWallets,
     remaining: mainRemainingOf(entry.data, entry.wallets),

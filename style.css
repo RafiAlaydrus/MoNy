@@ -698,6 +698,11 @@ td {
   color: #666;
 }
 
+.returned-mark {
+  color: #777;
+  font-size: 11px;
+}
+
 .lock-badge {
   font-size: 11px;
   background: #2a2a2a;
