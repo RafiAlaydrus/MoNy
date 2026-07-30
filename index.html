@@ -91,7 +91,11 @@
             <div class="setting-row" style="margin-top:10px;">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
-            <div class="setting-version">v1.12.2</div>
+            <div class="setting-row">
+              <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
+              <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
+            </div>
+            <div class="setting-version">v1.13.0</div>
           </div>
         </section>
       </div>
@@ -268,6 +272,19 @@
     </div>
   </div>
 
+  <!-- IMPORT MODAL -->
+  <div id="import-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Import Data?</h3>
+      <p id="import-modal-text"></p>
+
+      <div class="modal-actions">
+        <button id="cancel-import" aria-label="Cancel import">Cancel</button>
+        <button id="confirm-import" class="danger" aria-label="Confirm import and replace data">Replace</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TRANSFER MODAL -->
   <div id="transfer-modal" class="modal hidden">
     <div class="modal-card">
@@ -333,6 +350,7 @@
     <div class="undo-timer"><div id="undo-bar" class="undo-bar"></div></div>
   </div>
 
+  <script src="money.js"></script>
   <script src="app.js"></script>
   <script>
   if ("serviceWorker" in navigator) {

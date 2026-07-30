@@ -1,8 +1,9 @@
-const CACHE_NAME = "mmt-v19";
+const CACHE_NAME = "mmt-v20";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
+  "./money.js",
   "./app.js",
   "./manifest.json",
 ];

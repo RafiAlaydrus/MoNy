@@ -7,6 +7,33 @@ const SETTINGS_KEY = "monthly-money-tracker-settings";
 const BACKUP_PRIORITY_KEY = "monthly-money-tracker-priority-backup";
 const ARCHIVE_KEY = "monthly-money-tracker-archive";
 
+/* Persistence. Declared before anything writes, because the migrations below
+   already save. A quota failure is surfaced once instead of losing data
+   silently. */
+let storageWarned = false;
+
+function save(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (err) {
+    if (!storageWarned) {
+      storageWarned = true;
+      alert(
+        "Couldn't save - storage for this app is full.\n\n" +
+        "Export your data from Settings, then delete old months from History " +
+        "to free space. Changes since this message are not saved."
+      );
+    }
+    console.error("localStorage write failed", err);
+    return false;
+  }
+}
+
+function saveData() { return save(STORAGE_KEY, data); }
+function saveSettings() { return save(SETTINGS_KEY, settings); }
+function saveArchive() { return save(ARCHIVE_KEY, archive); }
+
 const now = new Date();
 const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
@@ -27,12 +54,12 @@ if (!settings.collapsed) settings.collapsed = {};
 if (!settings.dateOrderMigrated) {
   settings.sortOrder = "oldest";
   settings.dateOrderMigrated = true;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
 }
 // The archive replaced the old keep-data option
 if ("keepData" in settings) {
   delete settings.keepData;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
 }
 
 let archive = JSON.parse(localStorage.getItem(ARCHIVE_KEY)) || {};
@@ -84,7 +111,7 @@ if (!settings.wallets) {
   }
   delete settings.secondWalletEnabled;
   delete settings.secondWalletName;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
 }
 
 if (data && !data.walletData) {
@@ -98,7 +125,7 @@ if (data && !data.walletData) {
   }
   delete data.groceryBudget;
   delete data.groceryItems;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
 }
 
 if (!data) {
@@ -111,13 +138,19 @@ if (!data) {
       currency: settings.currency,
       closedAt: new Date().toISOString()
     };
-    localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive));
+    saveArchive();
   }
   if ((data.priority || []).length > 0) {
     localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
   }
+  // Closed wallets only needed to survive the month they were closed in;
+  // their figures are in the archive now.
+  if (settings.wallets.some(w => w.deleted)) {
+    settings.wallets = settings.wallets.filter(w => !w.deleted);
+    saveSettings();
+  }
   data = freshMonthData();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
 }
 
 /* =========================
@@ -174,19 +207,26 @@ function cur() { return settings.currency; }
 // Formats a number with 2 decimals
 function fmt(n) { return Number(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-// Formats a number as a whole integer
-function fmtInt(n) { return Number(n).toLocaleString("en"); }
+// Rounds to a whole number, for compact summaries where cents would be noise
+function fmtWhole(n) { return Math.round(Number(n)).toLocaleString("en"); }
 
-// Total income: the amount set on the income card plus any money received
-// through Second choice "add" entries, so extra income you log there counts
-// toward the total instead of only ever showing up in what's left over.
-function totalIncomeOf(d) {
-  if (d.income === null) return null;
-  const adds = (d.secondChoice || []).reduce((sum, item) => {
-    return sum + (item.type === "add" ? Number(item.amount) : 0);
-  }, 0);
-  return Number(d.income) + adds;
+// Escapes text before it goes into innerHTML. Names are free text, so an
+// unescaped quote or angle bracket would otherwise corrupt the markup.
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
+
+// Every wallet, including closed ones. Closed wallets stay in the money math
+// so the spending they already recorded is not silently un-spent.
+function allWallets() { return settings.wallets; }
+
+// Wallets the user should still see and be able to use.
+function activeWallets() { return settings.wallets.filter(w => !w.deleted); }
 
 // Turns an optional YYYY-MM-DD picker value into a stored timestamp. Empty
 // means now; a picked day keeps the current time of day so several entries
@@ -234,7 +274,7 @@ function buildTableToggle(key, table) {
 
   bar.addEventListener("click", () => {
     settings.collapsed[key] = !settings.collapsed[key];
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    saveSettings();
     apply();
   });
 
@@ -311,7 +351,7 @@ monthText.textContent = now.toLocaleString("default", {
 // Renders the income display
 function renderIncome() {
   const total = totalIncomeOf(data);
-  incomeDisplay.textContent = total !== null ? `${cur()} ${fmtInt(total)}` : `${cur()} 0`;
+  incomeDisplay.textContent = total !== null ? `${cur()} ${fmt(total)}` : `${cur()} 0`;
 }
 
 incomeCard.addEventListener("click", () => {
@@ -330,7 +370,7 @@ function saveIncome() {
   }
 
   data.income = value;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
 
   incomeInput.classList.add("hidden");
   renderIncome();
@@ -347,7 +387,7 @@ incomeInput.addEventListener("keydown", (e) => {
 ========================= */
 
 // Builds a single priority bill list item
-function buildPriorityItem(bill, index) {
+function buildPriorityItem(bill) {
   const wrapper = document.createElement("div");
   wrapper.className = "swipe-wrapper";
 
@@ -359,71 +399,97 @@ function buildPriorityItem(bill, index) {
   li.innerHTML = `
     <label style="display:flex; gap:8px;">
       <input type="checkbox" ${bill.paid ? "checked" : ""} />
-      ${bill.name} (${bill.category})
+      ${esc(bill.name)} (${esc(bill.category)})
     </label>
-    <strong>${cur()} ${fmt(bill.amount)}</strong>
+    <strong>${esc(cur())} ${fmt(bill.amount)}</strong>
   `;
 
   li.querySelector("input").addEventListener("change", (e) => {
     bill.paid = e.target.checked;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    saveData();
     calculateRemaining();
   });
 
   if (!data.priorityLocked) {
-    let startX = 0;
-    let currentX = 0;
-    let swiping = false;
+    attachSwipeToDelete(wrapper, li, () => {
+      // Resolve the position at delete time. Capturing an index here would go
+      // stale after any earlier deletion and remove the wrong bill.
+      const index = data.priority.indexOf(bill);
+      if (index === -1) return;
+      data.priority.splice(index, 1);
 
-    li.addEventListener("touchstart", (e) => {
-      startX = e.touches[0].clientX;
-      currentX = 0;
-      swiping = true;
-      li.style.transition = "none";
-    }, { passive: true });
+      renderPriority();
+      calculateRemaining();
 
-    li.addEventListener("touchmove", (e) => {
-      if (!swiping) return;
-      currentX = e.touches[0].clientX - startX;
-      if (currentX < 0) {
-        li.style.transform = `translateX(${Math.max(currentX, -120)}px)`;
-      }
+      showUndo(
+        `"${bill.name}" deleted`,
+        () => saveData(),
+        () => {
+          data.priority.splice(Math.min(index, data.priority.length), 0, bill);
+          saveData();
+          renderPriority();
+          calculateRemaining();
+        }
+      );
     });
-
-    li.addEventListener("touchend", () => {
-      swiping = false;
-      li.style.transition = "transform 0.3s ease";
-      if (currentX < -80) {
-        li.style.transform = "translateX(-100%)";
-        li.style.opacity = "0";
-        wrapper.style.transition = "max-height 0.3s ease, opacity 0.3s ease";
-        wrapper.style.maxHeight = "0";
-        wrapper.style.overflow = "hidden";
-
-        const removed = data.priority.splice(index, 1)[0];
-        calculateRemaining();
-
-        showUndo(
-          `"${removed.name}" deleted`,
-          () => {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-          },
-          () => {
-            data.priority.splice(index, 0, removed);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            renderPriority();
-            calculateRemaining();
-          }
-        );
-      } else {
-        li.style.transform = "translateX(0)";
-      }
-    }, { passive: true });
   }
 
   wrapper.appendChild(deleteLayer);
   wrapper.appendChild(li);
   return wrapper;
+}
+
+// Shared swipe-left-to-delete gesture. Calls onDelete once the row is dragged
+// far enough; the caller is responsible for the data change and the undo.
+function attachSwipeToDelete(wrapper, el, onDelete) {
+  let startX = 0;
+  let startY = 0;
+  let currentX = 0;
+  let swiping = false;
+  let decided = false;
+
+  el.addEventListener("touchstart", (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    currentX = 0;
+    swiping = true;
+    decided = false;
+    el.style.transition = "none";
+  }, { passive: true });
+
+  el.addEventListener("touchmove", (e) => {
+    if (!swiping) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+
+    // Let a mostly-vertical drag scroll the page instead of swiping the row
+    if (!decided) {
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) { swiping = false; return; }
+      if (Math.abs(dx) > 8) decided = true;
+    }
+
+    currentX = dx;
+    if (currentX < 0) {
+      el.style.transform = `translateX(${Math.max(currentX, -120)}px)`;
+    }
+  }, { passive: true });
+
+  el.addEventListener("touchend", () => {
+    if (!swiping) return;
+    swiping = false;
+    el.style.transition = "transform 0.3s ease";
+
+    if (currentX < -80) {
+      el.style.transform = "translateX(-100%)";
+      el.style.opacity = "0";
+      wrapper.style.transition = "max-height 0.3s ease, opacity 0.3s ease";
+      wrapper.style.maxHeight = "0";
+      wrapper.style.overflow = "hidden";
+      onDelete();
+    } else {
+      el.style.transform = "translateX(0)";
+    }
+  }, { passive: true });
 }
 
 // Renders the priority bills list
@@ -435,8 +501,8 @@ function renderPriority() {
     return;
   }
 
-  data.priority.forEach((bill, index) => {
-    const wrapper = buildPriorityItem(bill, index);
+  data.priority.forEach(bill => {
+    const wrapper = buildPriorityItem(bill);
     wrapper.classList.add("item-enter");
     priorityList.appendChild(wrapper);
     requestAnimationFrame(() => wrapper.classList.add("item-enter-active"));
@@ -464,7 +530,7 @@ cancelPriorityBtn.addEventListener("click", () => {
 
 confirmPriorityBtn.addEventListener("click", () => {
   data.priorityLocked = true;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
   priorityModal.classList.add("hidden");
   renderPriority();
   updatePriorityLockUI();
@@ -495,7 +561,7 @@ addPriorityBtn.addEventListener("click", () => {
   if (hasError) return;
 
   data.priority.push({ name, category, amount, paid: false, date: new Date().toISOString() });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
 
   pbName.value = "";
   pbCategory.selectedIndex = 0;
@@ -504,8 +570,7 @@ addPriorityBtn.addEventListener("click", () => {
 
   const emptyItem = priorityList.querySelector(".empty-state");
   if (emptyItem) emptyItem.remove();
-  const newIndex = data.priority.length - 1;
-  const wrapper = buildPriorityItem(data.priority[newIndex], newIndex);
+  const wrapper = buildPriorityItem(data.priority[data.priority.length - 1]);
   wrapper.classList.add("item-enter");
   priorityList.appendChild(wrapper);
   requestAnimationFrame(() => wrapper.classList.add("item-enter-active"));
@@ -536,7 +601,7 @@ copyLastBtn.addEventListener("click", () => {
     paid: false,
     date: new Date().toISOString()
   }));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
   copyLastBtn.classList.add("hidden");
   renderPriority();
   calculateRemaining();
@@ -554,27 +619,10 @@ function ensureWalletData(id) {
   return data.walletData[id];
 }
 
-// True for items that raise a wallet's balance ("add" from main, "in" from a transfer)
-function isWalletInflow(item) {
-  return item.type === "add" || item.type === "in";
-}
-
-// Returns a wallet's live balance
-function getWalletBalance(id) {
-  const wd = ensureWalletData(id);
-  const budget = Number(wd.budget) || 0;
-  return wd.items.reduce((bal, item) => {
-    return bal + (isWalletInflow(item) ? Number(item.amount) : -Number(item.amount));
-  }, budget);
-}
-
-// Returns a wallet's net spending (for its progress bar)
-function getWalletSpent(id) {
-  const wd = ensureWalletData(id);
-  return wd.items.reduce((sum, item) => {
-    return sum + (isWalletInflow(item) ? -Number(item.amount) : Number(item.amount));
-  }, 0);
-}
+// Balance and spending both come from money.js so the app and its tests
+// agree on the arithmetic
+function getWalletBalance(id) { return walletBalanceOf(ensureWalletData(id)); }
+function getWalletSpent(id) { return walletSpentOf(ensureWalletData(id)); }
 
 // Resolves a transfer counterparty's current name, falling back to the stored one
 function transferPartyName(id, fallback) {
@@ -584,28 +632,137 @@ function transferPartyName(id, fallback) {
   return fallback || "deleted wallet";
 }
 
+// Removes a transfer's matching half so money is never created or destroyed
+// by deleting only one side. Both halves share a txId.
+function removeTransferCounterparts(txId, exceptItem) {
+  if (!txId) return 0;
+  let removed = 0;
+
+  Object.values(data.walletData).forEach(wd => {
+    for (let i = (wd.items || []).length - 1; i >= 0; i--) {
+      const it = wd.items[i];
+      if (it !== exceptItem && it.txId === txId) { wd.items.splice(i, 1); removed++; }
+    }
+  });
+  for (let i = data.secondChoice.length - 1; i >= 0; i--) {
+    const it = data.secondChoice[i];
+    if (it !== exceptItem && it.txId === txId) { data.secondChoice.splice(i, 1); removed++; }
+  }
+
+  return removed;
+}
+
+// Restores a whole-month snapshot taken before a deletion. Simpler and safer
+// than un-splicing both halves of a transfer in the right order.
+function restoreSnapshot(snapshot) {
+  const revived = JSON.parse(snapshot);
+  // Mutate in place so nothing holds a stale reference to the old object
+  Object.keys(data).forEach(k => { delete data[k]; });
+  Object.assign(data, revived);
+  saveData();
+  renderWallets();
+  renderSecondChoice();
+  renderPriority();
+  calculateRemaining();
+}
+
+// Deletes one wallet transaction (plus the other half if it was a transfer)
+function deleteWalletItem(wallet, item, tbody, section) {
+  const wd = ensureWalletData(wallet.id);
+  const index = wd.items.indexOf(item);
+  if (index === -1) return;
+
+  const snapshot = JSON.stringify(data);
+
+  wd.items.splice(index, 1);
+  const pairedRemoved = removeTransferCounterparts(item.txId, item);
+
+  if (pairedRemoved) {
+    renderWallets();
+  } else {
+    renderWalletItemsTable(wallet, tbody, section);
+    renderWalletCard(wallet, section);
+  }
+  renderSecondChoice();
+  calculateRemaining();
+
+  showUndo(
+    pairedRemoved ? `"${item.name}" transfer deleted` : `"${item.name}" deleted`,
+    () => saveData(),
+    () => restoreSnapshot(snapshot)
+  );
+}
+
 // Builds a single wallet transaction row
-function buildWalletItemRow(item) {
+function buildWalletItemRow(item, wallet, tbody, section) {
   const row = document.createElement("tr");
   const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
 
-  let label = item.name;
+  let label = esc(item.name);
   if (item.type === "out") {
-    label = `${item.name} → ${transferPartyName(item.toId, item.toName)}`;
+    label = `${esc(item.name)} → ${esc(transferPartyName(item.toId, item.toName))}`;
   } else if (item.type === "in") {
-    label = `${item.name} ← ${transferPartyName(item.fromId, item.fromName)}`;
+    label = `${esc(item.name)} ← ${esc(transferPartyName(item.fromId, item.fromName))}`;
   }
 
   row.innerHTML = `
     <td>${label}</td>
     <td class="date-stamp">${dateStr}</td>
-    <td>${isWalletInflow(item) ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
+    <td>${isWalletInflow(item) ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
+
+  if (wallet) {
+    makeRowDeletable(row, () => deleteWalletItem(wallet, item, tbody, section));
+  }
   return row;
 }
 
+// Wraps a table row so it can be swiped away (touch) or double-clicked (mouse)
+function makeRowDeletable(row, onDelete) {
+  row.classList.add("row-deletable");
+
+  let startX = 0, startY = 0, dx = 0, active = false, decided = false;
+
+  row.addEventListener("touchstart", (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dx = 0; active = true; decided = false;
+    row.style.transition = "none";
+  }, { passive: true });
+
+  row.addEventListener("touchmove", (e) => {
+    if (!active) return;
+    const mx = e.touches[0].clientX - startX;
+    const my = e.touches[0].clientY - startY;
+    if (!decided) {
+      if (Math.abs(my) > Math.abs(mx) && Math.abs(my) > 8) { active = false; return; }
+      if (Math.abs(mx) > 8) decided = true;
+    }
+    dx = mx;
+    if (dx < 0) row.style.transform = `translateX(${Math.max(dx, -110)}px)`;
+  }, { passive: true });
+
+  row.addEventListener("touchend", () => {
+    if (!active) return;
+    active = false;
+    row.style.transition = "transform 0.25s ease, opacity 0.25s ease";
+    if (dx < -70) {
+      row.style.transform = "translateX(-100%)";
+      row.style.opacity = "0";
+      onDelete();
+    } else {
+      row.style.transform = "translateX(0)";
+    }
+  }, { passive: true });
+
+  // Desktop fallback, since there is no swipe with a mouse
+  row.addEventListener("dblclick", () => {
+    if (confirm("Delete this entry?")) onDelete();
+  });
+}
+
 // Renders a wallet's transaction table
-function renderWalletItemsTable(wallet, tbody) {
+function renderWalletItemsTable(wallet, tbody, section) {
   tbody.innerHTML = "";
   const wd = ensureWalletData(wallet.id);
 
@@ -621,8 +778,9 @@ function renderWalletItemsTable(wallet, tbody) {
     sorted.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   }
 
+  const host = section || tbody.closest(".wallet-section");
   sorted.forEach(item => {
-    const row = buildWalletItemRow(item);
+    const row = buildWalletItemRow(item, wallet, tbody, host);
     row.classList.add("item-enter");
     tbody.appendChild(row);
     requestAnimationFrame(() => row.classList.add("item-enter-active"));
@@ -662,7 +820,7 @@ function updateWalletBar(wallet, section) {
 // Refreshes a wallet's balance card and bar
 function renderWalletCard(wallet, section) {
   const balance = getWalletBalance(wallet.id);
-  section.querySelector("[data-role='balance']").textContent = `${cur()} ${fmtInt(balance)}`;
+  section.querySelector("[data-role='balance']").textContent = `${cur()} ${fmt(balance)}`;
   section.querySelector("[data-role='budget-label']").textContent = `${wallet.name} Balance`;
   section.querySelector(".wallet-section-title").textContent = wallet.name;
   updateWalletBar(wallet, section);
@@ -674,11 +832,11 @@ function buildWalletSection(wallet) {
   section.className = "wallet-section";
   section.dataset.walletId = wallet.id;
   section.innerHTML = `
-    <h3 class="wallet-section-title">${wallet.name}</h3>
+    <h3 class="wallet-section-title">${esc(wallet.name)}</h3>
     <div class="card wallet-card" data-role="card">
-      <span data-role="budget-label">${wallet.name} Balance</span>
-      <h2 data-role="balance">${cur()} 0</h2>
-      <input type="number" inputmode="decimal" data-role="budget-input" placeholder="Set budget (${cur()})" class="hidden" />
+      <span data-role="budget-label">${esc(wallet.name)} Balance</span>
+      <h2 data-role="balance">${esc(cur())} 0</h2>
+      <input type="number" inputmode="decimal" data-role="budget-input" placeholder="Set budget (${esc(cur())})" class="hidden" />
       <div class="spend-bar-wrapper hidden" data-role="bar-wrapper">
         <div class="spend-bar-track"><div class="spend-bar-fill" data-role="bar-fill"></div></div>
         <span class="spend-bar-label" data-role="bar-label">0% spent</span>
@@ -686,16 +844,16 @@ function buildWalletSection(wallet) {
     </div>
     <div class="second-form wallet-form">
       <input type="text" data-role="item-name" placeholder="Item name" />
-      <input type="number" inputmode="decimal" data-role="item-amount" placeholder="Amount (${cur()})" />
+      <input type="number" inputmode="decimal" data-role="item-amount" placeholder="Amount (${esc(cur())})" />
       <div class="date-field">
         <input type="date" data-role="item-date" class="is-empty" aria-label="Date, optional, defaults to today" />
         <span class="date-placeholder">Date (Optional)</span>
       </div>
       <div class="actions">
-        <button data-role="add-btn" aria-label="Add money to ${wallet.name}">+ Add</button>
-        <button data-role="take-btn" aria-label="Take money from ${wallet.name}">- Take</button>
+        <button data-role="add-btn" aria-label="Add money to ${esc(wallet.name)}">+ Add</button>
+        <button data-role="take-btn" aria-label="Take money from ${esc(wallet.name)}">- Take</button>
       </div>
-      <button data-role="transfer-btn" class="transfer-btn" aria-label="Transfer money from ${wallet.name}">Transfer</button>
+      <button data-role="transfer-btn" class="transfer-btn" aria-label="Transfer money from ${esc(wallet.name)}">Transfer</button>
     </div>
     <table>
       <thead><tr><th>Item</th><th>Date</th><th>Amount</th></tr></thead>
@@ -737,7 +895,7 @@ function buildWalletSection(wallet) {
     }
     budgetInput.classList.remove("input-error");
     wd.budget = value;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    saveData();
     budgetInput.classList.add("hidden");
     renderWalletCard(wallet, section);
     calculateRemaining();
@@ -765,10 +923,17 @@ function buildWalletSection(wallet) {
       return;
     }
 
+    // Taking more than the wallet holds would push its balance negative, which
+    // the books cannot represent. Raise the budget first instead.
+    if (type === "take" && amount > getWalletBalance(wallet.id)) {
+      amountInput.classList.add("input-error");
+      return;
+    }
+
     const backdated = !!dateInput.value;
     const wd = ensureWalletData(wallet.id);
     wd.items.push({ name, amount, type, date: resolveDate(dateInput.value) });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    saveData();
 
     nameInput.value = "";
     amountInput.value = "";
@@ -778,12 +943,12 @@ function buildWalletSection(wallet) {
 
     if (backdated) {
       // A picked date can belong anywhere in the list, so re-sort the table
-      renderWalletItemsTable(wallet, tbody);
+      renderWalletItemsTable(wallet, tbody, section);
     } else {
       const emptyRow = tbody.querySelector("td.empty-state");
       if (emptyRow) emptyRow.closest("tr").remove();
       const newItem = wd.items[wd.items.length - 1];
-      const row = buildWalletItemRow(newItem);
+      const row = buildWalletItemRow(newItem, wallet, tbody, section);
       row.classList.add("item-enter");
       if (settings.sortOrder === "newest") {
         tbody.prepend(row);
@@ -831,7 +996,7 @@ function buildWalletSection(wallet) {
     el.addEventListener("input", () => el.classList.remove("input-error"));
   });
 
-  renderWalletItemsTable(wallet, tbody);
+  renderWalletItemsTable(wallet, tbody, section);
   renderWalletCard(wallet, section);
 
   return section;
@@ -840,7 +1005,7 @@ function buildWalletSection(wallet) {
 // Rebuilds every wallet section on the main page
 function renderWallets() {
   walletsContainer.innerHTML = "";
-  settings.wallets.forEach(wallet => {
+  activeWallets().forEach(wallet => {
     walletsContainer.appendChild(buildWalletSection(wallet));
   });
 }
@@ -854,25 +1019,30 @@ const transferSummary = document.getElementById("transfer-summary");
 const transferDestinations = document.getElementById("transfer-destinations");
 const cancelTransferBtn = document.getElementById("cancel-transfer");
 
-// Moves money out of a wallet into Main or another wallet
+// Moves money out of a wallet into Main or another wallet. Both halves share a
+// txId so deleting either one takes the other with it.
 function executeTransfer(sourceWallet, destId, name, amount, date) {
   const destName = transferPartyName(destId);
+  const txId = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
   ensureWalletData(sourceWallet.id).items.push({
-    name, amount, type: "out", toId: destId, toName: destName, date
+    name, amount, type: "out", toId: destId, toName: destName, date, txId
   });
 
   if (destId === "main") {
-    // Returned money re-enters the main balance and shows in Second choice
-    data.secondChoice.push({ name, category: "Transfer", amount, type: "add", date });
+    // Returned money re-enters the main balance and shows in Second choice.
+    // transfer:true keeps it out of Total Income - it is not new money.
+    data.secondChoice.push({
+      name, category: "Transfer", amount, type: "add", date, txId, transfer: true
+    });
   } else {
     // Wallet-to-wallet money already left main, so it must not be deducted again
     ensureWalletData(destId).items.push({
-      name, amount, type: "in", fromId: sourceWallet.id, fromName: sourceWallet.name, date
+      name, amount, type: "in", fromId: sourceWallet.id, fromName: sourceWallet.name, date, txId
     });
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
   renderWallets();
   renderSecondChoice();
   calculateRemaining();
@@ -885,16 +1055,16 @@ function openTransferModal(wallet, name, amount, date, onDone) {
 
   const destinations = [
     { id: "main", name: "Main wallet", sub: "Shows in Second choice" },
-    ...settings.wallets
+    ...activeWallets()
       .filter(w => w.id !== wallet.id)
-      .map(w => ({ id: w.id, name: w.name, sub: `Balance ${cur()} ${fmtInt(getWalletBalance(w.id))}` }))
+      .map(w => ({ id: w.id, name: w.name, sub: `Balance ${cur()} ${fmt(getWalletBalance(w.id))}` }))
   ];
 
   destinations.forEach(dest => {
     const btn = document.createElement("button");
     btn.className = "transfer-dest-btn";
     btn.setAttribute("aria-label", `Transfer to ${dest.name}`);
-    btn.innerHTML = `${dest.name}<span class="transfer-dest-sub">${dest.sub}</span>`;
+    btn.innerHTML = `${esc(dest.name)}<span class="transfer-dest-sub">${esc(dest.sub)}</span>`;
     btn.addEventListener("click", () => {
       executeTransfer(wallet, dest.id, name, amount, date);
       transferModal.classList.add("hidden");
@@ -914,16 +1084,38 @@ cancelTransferBtn.addEventListener("click", () => {
    SECOND CHOICE
 ========================= */
 
+// Deletes one Second choice entry (plus the wallet half if it was a transfer)
+function deleteSecondChoiceItem(item) {
+  const index = data.secondChoice.indexOf(item);
+  if (index === -1) return;
+
+  const snapshot = JSON.stringify(data);
+
+  data.secondChoice.splice(index, 1);
+  const pairedRemoved = removeTransferCounterparts(item.txId, item);
+
+  renderSecondChoice();
+  if (pairedRemoved) renderWallets();
+  calculateRemaining();
+
+  showUndo(
+    pairedRemoved ? `"${item.name}" transfer deleted` : `"${item.name}" deleted`,
+    () => saveData(),
+    () => restoreSnapshot(snapshot)
+  );
+}
+
 // Builds a single second choice table row
 function buildSecondChoiceRow(item) {
   const row = document.createElement("tr");
   const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
   row.innerHTML = `
-    <td>${item.name}</td>
-    <td>${item.category}</td>
+    <td>${esc(item.name)}</td>
+    <td>${esc(item.category)}</td>
     <td class="date-stamp">${dateStr}</td>
-    <td>${item.type === "add" ? "+" : "-"} ${cur()} ${fmt(item.amount)}</td>
+    <td>${item.type === "add" ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
+  makeRowDeletable(row, () => deleteSecondChoiceItem(item));
   return row;
 }
 
@@ -972,7 +1164,7 @@ function addSecondChoice(type) {
 
   const backdated = !!scDate.value;
   data.secondChoice.push({ name, category, amount, type, date: resolveDate(scDate.value) });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
 
   scName.value = "";
   scCategory.selectedIndex = 0;
@@ -1016,30 +1208,7 @@ document.querySelectorAll(".second-form input, .second-form select").forEach(el 
 
 // Returns the main remaining balance
 function getMainRemaining() {
-  if (data.income === null) return 0;
-
-  let remaining = Number(data.income);
-
-  data.priority.forEach(bill => {
-    if (bill.paid) remaining -= Number(bill.amount);
-  });
-
-  settings.wallets.forEach(w => {
-    const wd = data.walletData[w.id];
-    if (!wd) return;
-    if (wd.budget) remaining -= Number(wd.budget);
-    wd.items.forEach(item => {
-      if (item.type === "add") remaining -= Number(item.amount);
-    });
-  });
-
-  data.secondChoice.forEach(item => {
-    remaining += item.type === "add"
-      ? Number(item.amount)
-      : -Number(item.amount);
-  });
-
-  return remaining;
+  return mainRemainingOf(data, allWallets());
 }
 
 let displayedRemaining = null;
@@ -1131,48 +1300,6 @@ function calculateRemaining(skipChart = false) {
    CHART
 ========================= */
 
-// Breaks a month into what was actually spent per category, plus whatever is
-// still sitting in wallets. Budgeting money into a wallet only moves it, so it
-// counts as spending once it is taken out of that wallet, not before.
-function spendingBreakdownOf(d, walletsList) {
-  const categories = {};
-
-  (d.priority || []).forEach(bill => {
-    if (bill.paid) {
-      const cat = bill.category || "Others";
-      categories[cat] = (categories[cat] || 0) + Number(bill.amount);
-    }
-  });
-
-  (d.secondChoice || []).forEach(item => {
-    if (item.type === "take") {
-      const cat = item.category || "Others";
-      categories[cat] = (categories[cat] || 0) + Number(item.amount);
-    }
-  });
-
-  let inWallets = 0;
-  (walletsList || []).forEach(w => {
-    const wd = (d.walletData || {})[w.id];
-    if (!wd) return;
-
-    let balance = Number(wd.budget) || 0;
-    let spentHere = 0;
-    (wd.items || []).forEach(i => {
-      const amount = Number(i.amount);
-      balance += isWalletInflow(i) ? amount : -amount;
-      // Transfers out move money elsewhere, so only takes are spending
-      if (i.type === "take") spentHere += amount;
-    });
-
-    if (spentHere > 0) categories[w.name] = (categories[w.name] || 0) + spentHere;
-    inWallets += balance;
-  });
-
-  const spent = Object.values(categories).reduce((a, b) => a + b, 0);
-  return { categories, inWallets, spent };
-}
-
 // Renders the donut chart with category breakdown
 function renderChart() {
   if (!settings.showChart || !chartCtx) return;
@@ -1204,9 +1331,9 @@ function renderChart() {
     return;
   }
 
-  const breakdown = spendingBreakdownOf(data, settings.wallets);
+  const breakdown = spendingBreakdownOf(data, allWallets());
   const walletColorMap = {};
-  settings.wallets.forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
+  allWallets().forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
 
   const spent = breakdown.spent;
   const inWallets = Math.max(breakdown.inWallets, 0);
@@ -1266,9 +1393,9 @@ function renderChart() {
     <div class="legend-item">
       <div class="legend-left">
         <span class="legend-dot" style="background:${s.color}"></span>
-        <span>${s.label}</span>
+        <span>${esc(s.label)}</span>
       </div>
-      <span class="legend-amount">${cur()} ${fmt(s.amount)}</span>
+      <span class="legend-amount">${esc(cur())} ${fmt(s.amount)}</span>
     </div>
   `).join("");
 }
@@ -1315,7 +1442,7 @@ if (settings.showChart) chartSection.classList.remove("hidden");
 
 chartToggle.addEventListener("change", () => {
   settings.showChart = chartToggle.checked;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
 
   if (settings.showChart) {
     chartSection.classList.remove("hidden");
@@ -1334,7 +1461,7 @@ currencySelect.value = settings.currency;
 
 currencySelect.addEventListener("change", () => {
   settings.currency = currencySelect.value;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
   renderIncome();
   renderPriority();
   renderWallets();
@@ -1351,7 +1478,7 @@ sortSelect.value = settings.sortOrder;
 
 sortSelect.addEventListener("change", () => {
   settings.sortOrder = sortSelect.value;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
   renderWallets();
   renderSecondChoice();
 });
@@ -1367,7 +1494,7 @@ budgetLimitInput.addEventListener("change", () => {
   const val = Number(budgetLimitInput.value);
   settings.budgetLimit = val > 0 ? val : null;
   if (!val) budgetLimitInput.value = "";
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
   calculateRemaining(true);
 });
 
@@ -1398,28 +1525,27 @@ function walletNameConflict(name, excludeId) {
   const norm = name.trim().toLowerCase();
   if (!norm) return "empty";
   if (RESERVED_CATEGORY_NAMES.includes(norm)) return "reserved";
-  if (settings.wallets.some(w => w.id !== excludeId && w.name.trim().toLowerCase() === norm)) return "duplicate";
+  if (activeWallets().some(w => w.id !== excludeId && w.name.trim().toLowerCase() === norm)) return "duplicate";
   return null;
 }
 
 // Renders the wallet list inside settings
 function renderWalletsSettings() {
-  walletsCountEl.textContent = settings.wallets.length === 1
-    ? "1 wallet"
-    : `${settings.wallets.length} wallets`;
+  const shown = activeWallets();
+  walletsCountEl.textContent = shown.length === 1 ? "1 wallet" : `${shown.length} wallets`;
 
   walletsSettingsList.innerHTML = "";
-  if (settings.wallets.length === 0) {
+  if (shown.length === 0) {
     walletsSettingsList.innerHTML = '<p class="wallets-empty">No wallets yet.</p>';
     return;
   }
 
-  settings.wallets.forEach(wallet => {
+  shown.forEach(wallet => {
     const row = document.createElement("div");
     row.className = "wallet-setting-row";
     row.innerHTML = `
-      <input type="text" class="setting-input-wide wallet-name-input" value="${wallet.name}" />
-      <button class="wallet-delete-btn" aria-label="Delete ${wallet.name}">✕</button>
+      <input type="text" class="setting-input-wide wallet-name-input" value="${esc(wallet.name)}" />
+      <button class="wallet-delete-btn" aria-label="Delete ${esc(wallet.name)}">✕</button>
     `;
 
     const input = row.querySelector(".wallet-name-input");
@@ -1436,7 +1562,7 @@ function renderWalletsSettings() {
         return;
       }
       wallet.name = newName;
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      saveSettings();
       renderWallets();
       renderChart();
     });
@@ -1444,11 +1570,15 @@ function renderWalletsSettings() {
 
     row.querySelector(".wallet-delete-btn").addEventListener("click", () => {
       walletPendingDelete = wallet;
-      const wd = data.walletData[wallet.id];
-      const itemCount = wd ? wd.items.length : 0;
-      deleteWalletText.textContent = itemCount > 0
-        ? `Delete "${wallet.name}"? Its budget returns to your main balance and its ${itemCount} transaction${itemCount === 1 ? "" : "s"} this month will be lost.`
-        : `Delete "${wallet.name}"? This cannot be undone.`;
+      const leftover = getWalletBalance(wallet.id);
+      const spent = walletTakenOf(data.walletData[wallet.id]);
+
+      const parts = [`Close "${wallet.name}"?`];
+      if (leftover > 0) parts.push(`Its remaining ${cur()} ${fmt(leftover)} returns to your main balance.`);
+      if (spent > 0) parts.push(`The ${cur()} ${fmt(spent)} already spent from it stays in this month's totals.`);
+      parts.push("It disappears from this screen and cannot be reopened.");
+
+      deleteWalletText.textContent = parts.join(" ");
       deleteWalletModal.classList.remove("hidden");
     });
 
@@ -1486,7 +1616,7 @@ function confirmAddWallet() {
   }
 
   settings.wallets.push({ id: genWalletId(), name });
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  saveSettings();
   addWalletModal.classList.add("hidden");
   renderWallets();
   renderWalletsSettings();
@@ -1508,10 +1638,22 @@ cancelDeleteWalletBtn.addEventListener("click", () => {
 
 confirmDeleteWalletBtn.addEventListener("click", () => {
   if (!walletPendingDelete) return;
-  settings.wallets = settings.wallets.filter(w => w.id !== walletPendingDelete.id);
-  delete data.walletData[walletPendingDelete.id];
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  const wallet = walletPendingDelete;
+
+  // Return whatever is left to the main balance as a real transfer, so the
+  // money is accounted for rather than just vanishing with the wallet.
+  const leftover = getWalletBalance(wallet.id);
+  if (leftover > 0) {
+    executeTransfer(wallet, "main", `${wallet.name} closed`, leftover, new Date().toISOString());
+  }
+
+  // Soft delete: the record and its transactions stay in the books so any
+  // spending already made from this wallet is not silently un-spent. Closed
+  // wallets are dropped for good at the next month rollover.
+  wallet.deleted = true;
+
+  saveSettings();
+  saveData();
   deleteWalletModal.classList.add("hidden");
   walletPendingDelete = null;
   renderWallets();
@@ -1520,6 +1662,96 @@ confirmDeleteWalletBtn.addEventListener("click", () => {
 });
 
 renderWalletsSettings();
+
+/* =========================
+   EXPORT DATA
+========================= */
+
+/* =========================
+   IMPORT DATA
+========================= */
+
+const importBtn = document.getElementById("import-data-btn");
+const importFile = document.getElementById("import-file");
+const importModal = document.getElementById("import-modal");
+const importModalText = document.getElementById("import-modal-text");
+const confirmImportBtn = document.getElementById("confirm-import");
+const cancelImportBtn = document.getElementById("cancel-import");
+let pendingImport = null;
+
+// Accepts only files that really look like one of our exports, so a wrong
+// pick can't quietly replace a month with nonsense.
+function validateImport(obj) {
+  if (!obj || typeof obj !== "object") return "That file isn't valid JSON data.";
+  const d = obj.data;
+  if (!d || typeof d !== "object") return "That file has no month data in it.";
+  if (!("income" in d)) return "That file is missing the income field.";
+  if (!Array.isArray(d.priority)) return "That file is missing the priority bills list.";
+  if (!Array.isArray(d.secondChoice)) return "That file is missing the Second choice list.";
+  if (d.walletData && typeof d.walletData !== "object") return "That file's wallet data is malformed.";
+  if (obj.settings && typeof obj.settings !== "object") return "That file's settings are malformed.";
+  if (obj.archive && typeof obj.archive !== "object") return "That file's history is malformed.";
+  return null;
+}
+
+importBtn.addEventListener("click", () => importFile.click());
+
+importFile.addEventListener("change", () => {
+  const file = importFile.files && importFile.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(reader.result);
+    } catch (err) {
+      alert("Couldn't read that file - it isn't valid JSON.");
+      importFile.value = "";
+      return;
+    }
+
+    const problem = validateImport(parsed);
+    if (problem) {
+      alert(problem);
+      importFile.value = "";
+      return;
+    }
+
+    pendingImport = parsed;
+    const months = parsed.archive ? Object.keys(parsed.archive).length : 0;
+    const walletCount = parsed.settings && Array.isArray(parsed.settings.wallets)
+      ? parsed.settings.wallets.length : 0;
+    importModalText.textContent =
+      `This replaces everything currently in the app with the file's contents: ` +
+      `${parsed.data.month || "one month"}, ${walletCount} wallet${walletCount === 1 ? "" : "s"}, ` +
+      `and ${months} archived month${months === 1 ? "" : "s"}. Your current data cannot be recovered afterwards.`;
+    importModal.classList.remove("hidden");
+    importFile.value = "";
+  };
+  reader.onerror = () => {
+    alert("Couldn't read that file.");
+    importFile.value = "";
+  };
+  reader.readAsText(file);
+});
+
+cancelImportBtn.addEventListener("click", () => {
+  importModal.classList.add("hidden");
+  pendingImport = null;
+});
+
+confirmImportBtn.addEventListener("click", () => {
+  if (!pendingImport) return;
+  const ok =
+    save(STORAGE_KEY, pendingImport.data) &&
+    (!pendingImport.settings || save(SETTINGS_KEY, pendingImport.settings)) &&
+    (!pendingImport.archive || save(ARCHIVE_KEY, pendingImport.archive));
+
+  pendingImport = null;
+  importModal.classList.add("hidden");
+  if (ok) location.reload();
+});
 
 /* =========================
    EXPORT DATA
@@ -1601,31 +1833,8 @@ function normalizeArchiveEntry(entry) {
   return { data: d, wallets, currency: entry.currency, closedAt: entry.closedAt };
 }
 
-// Main remaining balance for an archived month
-function remainingOf(rawEntry) {
-  const entry = normalizeArchiveEntry(rawEntry);
-  const d = entry.data;
-  if (d.income === null) return 0;
-
-  let remaining = Number(d.income);
-  (d.priority || []).forEach(b => {
-    if (b.paid) remaining -= Number(b.amount);
-  });
-  entry.wallets.forEach(w => {
-    const wd = d.walletData[w.id];
-    if (!wd) return;
-    if (wd.budget) remaining -= Number(wd.budget);
-    (wd.items || []).forEach(i => {
-      if (i.type === "add") remaining -= Number(i.amount);
-    });
-  });
-  (d.secondChoice || []).forEach(i => {
-    remaining += i.type === "add" ? Number(i.amount) : -Number(i.amount);
-  });
-  return remaining;
-}
-
-// Income, gross spending, remaining, and category totals for an archived month
+// Income, spending, remaining, and category totals for an archived month.
+// Uses the same money.js formulas as the live month.
 function summarizeEntry(rawEntry) {
   const entry = normalizeArchiveEntry(rawEntry);
   const b = spendingBreakdownOf(entry.data, entry.wallets);
@@ -1633,7 +1842,7 @@ function summarizeEntry(rawEntry) {
     income: totalIncomeOf(entry.data),
     spent: b.spent,
     inWallets: b.inWallets,
-    remaining: remainingOf(rawEntry),
+    remaining: mainRemainingOf(entry.data, entry.wallets),
     totals: b.categories
   };
 }
@@ -1689,7 +1898,7 @@ function drawTrendChart(entries) {
       trendCtx.fillStyle = e.live ? "#666" : "#aaa";
       trendCtx.font = "10px -apple-system, sans-serif";
       trendCtx.textBaseline = "bottom";
-      trendCtx.fillText(fmtInt(e.spent), x + barW / 2, y - 4);
+      trendCtx.fillText(fmtWhole(e.spent), x + barW / 2, y - 4);
     }
   });
 }
@@ -1702,7 +1911,7 @@ function renderTrends(keys) {
     live: false
   }));
 
-  const liveSpent = spendingBreakdownOf(data, settings.wallets).spent;
+  const liveSpent = spendingBreakdownOf(data, allWallets()).spent;
   const entries = [...archivedEntries, { key: currentMonthKey, spent: liveSpent, live: true }];
 
   drawTrendChart(entries);
@@ -1720,16 +1929,16 @@ function renderTrends(keys) {
   trendStats.innerHTML = `
     <div class="stat-cell">
       <span class="stat-label">Avg Spent</span>
-      <span class="stat-value">${cur()} ${fmtInt(Math.round(avg))}</span>
+      <span class="stat-value">${esc(cur())} ${fmtWhole(avg)}</span>
     </div>
     <div class="stat-cell">
       <span class="stat-label">Lowest</span>
-      <span class="stat-value">${cur()} ${fmtInt(lowest.spent)}</span>
+      <span class="stat-value">${esc(cur())} ${fmtWhole(lowest.spent)}</span>
       <span class="stat-sub">${monthShort(lowest.key)}</span>
     </div>
     <div class="stat-cell">
       <span class="stat-label">Highest</span>
-      <span class="stat-value">${cur()} ${fmtInt(highest.spent)}</span>
+      <span class="stat-value">${esc(cur())} ${fmtWhole(highest.spent)}</span>
       <span class="stat-sub">${monthShort(highest.key)}</span>
     </div>
   `;
@@ -1747,7 +1956,7 @@ function buildHistoryRow(key) {
   const row = document.createElement("div");
   row.className = "history-row";
 
-  const incomeText = s.income !== null ? `${c} ${fmtInt(s.income)} in` : "no income set";
+  const incomeText = s.income !== null ? `${esc(c)} ${fmtWhole(s.income)} in` : "no income set";
 
   const walletColorMap = {};
   entry.wallets.forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
@@ -1760,9 +1969,9 @@ function buildHistoryRow(key) {
         <div class="legend-item">
           <div class="legend-left">
             <span class="legend-dot" style="background:${color}"></span>
-            <span>${label}</span>
+            <span>${esc(label)}</span>
           </div>
-          <span class="legend-amount">${c} ${fmt(amount)}</span>
+          <span class="legend-amount">${esc(c)} ${fmt(amount)}</span>
         </div>
       `;
     })
@@ -1774,7 +1983,7 @@ function buildHistoryRow(key) {
         <span class="legend-dot" style="background:${CHART_IN_WALLETS_COLOR}"></span>
         <span>In wallets</span>
       </div>
-      <span class="legend-amount">${c} ${fmt(s.inWallets)}</span>
+      <span class="legend-amount">${esc(c)} ${fmt(s.inWallets)}</span>
     </div>
   ` : "";
 
@@ -1784,7 +1993,7 @@ function buildHistoryRow(key) {
         <span class="legend-dot" style="background:${CHART_REMAINING_COLOR}"></span>
         <span>Remaining</span>
       </div>
-      <span class="legend-amount">${c} ${fmt(s.remaining)}</span>
+      <span class="legend-amount">${esc(c)} ${fmt(s.remaining)}</span>
     </div>
   ` : "";
 
@@ -1795,10 +2004,10 @@ function buildHistoryRow(key) {
     <div class="history-row-main">
       <div>
         <div class="history-month">${monthLabel(key)}</div>
-        <div class="history-sub">${incomeText} · ${c} ${fmtInt(s.spent)} spent · ${size}</div>
+        <div class="history-sub">${incomeText} · ${esc(c)} ${fmtWhole(s.spent)} spent · ${size}</div>
       </div>
       <div class="history-right">
-        <strong class="history-remaining">${c} ${fmtInt(s.remaining)}</strong>
+        <strong class="history-remaining">${esc(c)} ${fmtWhole(s.remaining)}</strong>
         <button class="history-delete" aria-label="Delete ${monthLabel(key)}">✕</button>
       </div>
     </div>
@@ -1831,11 +2040,11 @@ function deleteArchivedMonth(key) {
   showUndo(
     `${monthLabel(key)} deleted`,
     () => {
-      localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive));
+      saveArchive();
     },
     () => {
       archive[key] = removed;
-      localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive));
+      saveArchive();
       renderHistory();
     }
   );
@@ -1947,7 +2156,7 @@ confirmResetBtn.addEventListener("click", () => {
   }
 
   resetData();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  saveData();
   location.reload();
 });
 
