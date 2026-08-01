@@ -88,6 +88,13 @@
               </label>
             </div>
             <div class="setting-row">
+              <span>Carry balance forward</span>
+              <label class="toggle">
+                <input type="checkbox" id="carry-over-toggle" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
               <span>Currency</span>
               <select id="currency-select" class="setting-select">
                 <option value="RM">RM</option>
@@ -124,7 +131,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.15.2</div>
+            <div class="setting-version">v1.17.0</div>
           </div>
         </section>
       </div>
@@ -179,6 +186,12 @@
       <div class="card">
         <span>Remaining</span>
         <h2 id="remaining-money">RM 0</h2>
+        <!-- Money brought forward from last month. Hidden when there is none,
+             so a month that started from nothing shows no empty line. Kept out
+             of Total income on purpose: this money was not earned this month,
+             and the app would rather say so than quietly fold it into
+             earnings - the same reason a reimbursement is not income. -->
+        <p id="carry-over-line" class="carry-over-line hidden"></p>
         <div class="spend-bar-wrapper">
           <div class="spend-bar-track">
             <div id="spend-bar-fill" class="spend-bar-fill"></div>

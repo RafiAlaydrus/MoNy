@@ -590,6 +590,154 @@ test("covering a shortfall by transfer lands remaining at zero", () => {
   assertReconciles("covered shortfall", d, wallets);
 });
 
+/* ---------------------------------------------------------------------------
+   CARRY-OVER - money brought forward from the previous month
+
+   The rule that makes these work: carried money is available to spend, so it
+   must appear on BOTH sides of the invariant - in totalIncome and in
+   mainRemaining. Put it in only one and the books break immediately.
+
+   Wallet balances are carried as each wallet's opening BUDGET, not as extra
+   main balance, because mainRemainingOf already subtracts budgets. The
+   carryOver figure covers the whole amount, main and wallets together.
+--------------------------------------------------------------------------- */
+
+/* The reported case: a month closed with money left, the next opened empty.
+   Income is still null here - it is the 1st and nothing has been earned yet -
+   which is exactly why monthIsUnset has to treat carry-over as making a month
+   real, or the whole month reads as zero. */
+test("carry-over alone makes a month real and lands in main", () => {
+  const d = {
+    income: null, carryOver: 882,
+    priority: [], secondChoice: [], walletData: {}
+  };
+  assert.equal(M.monthIsUnset(d), false, "money in hand is not an empty month");
+  assert.equal(M.totalIncomeOf(d, []), 882);
+  assert.equal(M.mainRemainingOf(d, []), 882, "the money is spendable");
+  assertReconciles("carry-over only", d, []);
+});
+
+/* A genuinely empty month must still report null, not zero-with-carry-over. */
+test("no income and no carry-over is still an unset month", () => {
+  const d = { income: null, carryOver: 0, priority: [], secondChoice: [], walletData: {} };
+  assert.equal(M.monthIsUnset(d), true);
+  assert.equal(M.totalIncomeOf(d, []), null);
+  assert.ok(M.reconciles(d, []));
+});
+
+/* Carry-over stacks on top of income earned this month. */
+test("carry-over adds to income rather than replacing it", () => {
+  const d = {
+    income: 3000, carryOver: 882,
+    priority: [{ name: "Rent", category: "Bills", amount: 900, paid: true }],
+    secondChoice: [], walletData: {}
+  };
+  assert.equal(M.totalIncomeOf(d, []), 3882);
+  assert.equal(M.mainRemainingOf(d, []), 2982);
+  assertReconciles("carry-over plus income", d, []);
+});
+
+/* Wallet money brought forward. The wallet opens with a budget equal to what
+   it closed holding, and carryOver covers main AND that budget - so the money
+   is counted once, not twice. This is the arrangement most likely to be got
+   wrong by a later change, which is why it asserts every figure. */
+test("wallet balances carried as opening budgets do not double count", () => {
+  const wallets = W("Grocery");
+  const d = {
+    income: null, carryOver: 1082,          // 882 main + 200 wallet
+    priority: [], secondChoice: [],
+    walletData: { w0: { budget: 200, items: [] } }
+  };
+  assert.equal(M.totalIncomeOf(d, wallets), 1082);
+  assert.equal(M.mainRemainingOf(d, wallets), 882, "the wallet's 200 is not also in main");
+  assert.equal(M.spendingBreakdownOf(d, wallets).inWallets, 200);
+  assert.equal(M.spendingBreakdownOf(d, wallets).spent, 0, "carrying money is not spending");
+  assertReconciles("wallet carry-over", d, wallets);
+});
+
+/* Spending carried money behaves like spending any other money. */
+test("spending from a carried balance keeps the books straight", () => {
+  const wallets = W("Grocery");
+  const d = {
+    income: 3000, carryOver: 1082,
+    priority: [],
+    secondChoice: [{ name: "LRT", category: "Transport", amount: 45, type: "take" }],
+    walletData: { w0: { budget: 200, items: [{ name: "food", amount: 50, type: "take" }] } }
+  };
+  const b = M.spendingBreakdownOf(d, wallets);
+  assert.equal(b.spent, 95, "45 from main plus 50 from the carried wallet");
+  assert.equal(b.inWallets, 150);
+  assertReconciles("spending carried money", d, wallets);
+});
+
+/* Months saved before carry-over existed have no such field at all. They must
+   read exactly as they always did - this is what stops the change rewriting
+   everyone's history. */
+test("a month with no carryOver field behaves as it always did", () => {
+  const d = { income: 1000, priority: [], secondChoice: [], walletData: {} };
+  assert.equal(M.carryOverOf(d), 0);
+  assert.equal(M.totalIncomeOf(d, []), 1000);
+  assertReconciles("legacy month", d, []);
+});
+
+/* Junk in the field must not poison a month's totals. */
+test("a malformed carryOver is treated as none", () => {
+  [null, undefined, NaN, Infinity, -50, "abc", ""].forEach(bad => {
+    assert.equal(M.carryOverOf({ carryOver: bad }), 0, `${String(bad)} should read as 0`);
+  });
+  assert.equal(M.carryOverOf({ carryOver: "250" }), 250, "numeric strings are accepted");
+});
+
+/* What the rollover hands to the next month: main plus every wallet. */
+test("closing balance totals main and wallets together", () => {
+  const wallets = W("Grocery", "Fuel");
+  const d = {
+    income: 3000, priority: [{ name: "Rent", category: "Bills", amount: 900, paid: true }],
+    secondChoice: [],
+    walletData: { w0: { budget: 500, items: [{ name: "food", amount: 120, type: "take" }] },
+                  w1: { budget: 200, items: [] } }
+  };
+  const c = M.closingBalanceOf(d, wallets);
+  assert.equal(c.main, 1400, "3000 - 900 bill - 500 - 200 budgeted");
+  assert.equal(c.wallets.w0, 380);
+  assert.equal(c.wallets.w1, 200);
+  assert.equal(c.total, 1980);
+});
+
+/* An overspent month carries nothing rather than starting the next in debt.
+   Debt would be a second way to go negative, hidden inside a figure the user
+   never entered. */
+test("an overspent month carries nothing forward", () => {
+  const d = {
+    income: 1000, priority: [], walletData: {},
+    secondChoice: [{ name: "big", category: "Others", amount: 2000, type: "take" }]
+  };
+  assert.ok(M.mainRemainingOf(d, []) < 0, "this month is overspent");
+  assert.equal(M.closingBalanceOf(d, []).total, 0, "nothing to carry, and no debt either");
+});
+
+/* End to end: close a month, open the next from it, and confirm the money
+   that survived is exactly what was left. */
+test("a carried month opens holding what the last one closed with", () => {
+  const wallets = W("Grocery");
+  const july = {
+    income: 2056, priority: [{ name: "Rent", category: "Bills", amount: 960, paid: true }],
+    secondChoice: [], walletData: { w0: { budget: 200, items: [] } }
+  };
+  const closing = M.closingBalanceOf(july, wallets);
+  assert.equal(closing.main, 896);
+  assert.equal(closing.total, 1096);
+
+  const august = {
+    income: null, carryOver: closing.total,
+    priority: [], secondChoice: [],
+    walletData: { w0: { budget: closing.wallets.w0, items: [] } }
+  };
+  assert.equal(M.mainRemainingOf(august, wallets), 896, "main reopens with what it had");
+  assert.equal(M.spendingBreakdownOf(august, wallets).inWallets, 200, "so does the wallet");
+  assertReconciles("rolled month", august, wallets);
+});
+
 /* A wallet defined in settings but with no slot in this month's walletData -
    the normal state for a wallet created but not yet used, and for every
    wallet at the start of a fresh month. Every function must treat the missing

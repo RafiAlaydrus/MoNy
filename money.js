@@ -68,6 +68,28 @@
     return item.type === "add" && item.newMoney === false && !isTransferEntry(item);
   }
 
+  // Money brought forward from the previous month: what was left in main plus
+  // whatever the wallets still held when it closed. Zero for a month that
+  // started from nothing, and for every month saved before carry-over existed.
+  //
+  // It has to count as income for the month it lands in, even though it was
+  // not earned there, because the invariant has only one place to put money
+  // that is available to spend. The Total income card shows it on its own
+  // "Brought forward" line rather than folding it into earnings.
+  function carryOverOf(d) {
+    if (!d) return 0;
+    const n = Number(d.carryOver);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  // A month with no income typed and nothing brought forward has not been
+  // started yet, and reports null rather than zero. Carry-over alone is enough
+  // to make a month real - the first of the month with money still in hand is
+  // not an empty month.
+  function monthIsUnset(d) {
+    return (!d || d.income === null || d.income === undefined) && carryOverOf(d) === 0;
+  }
+
   // What a wallet currently holds.
   function walletBalanceOf(wd) {
     if (!wd) return 0;
@@ -149,13 +171,16 @@
     const spent = Object.values(categories).reduce((a, b) => a + b, 0);
 
     let totalIncome = null;
-    if (d && d.income !== null && d.income !== undefined) {
+    if (!monthIsUnset(d)) {
       const realAdds = (d.secondChoice || []).reduce((sum, i) => {
         if (i.type !== "add") return sum;
         if (isTransferEntry(i) || isReimbursement(i)) return sum;
         return sum + Number(i.amount);
       }, 0);
-      totalIncome = Number(d.income) + realAdds + excess;
+      // Income may be null while carry-over is not, on the 1st of a month
+      // before anything has been earned, so it is coerced rather than read
+      // directly.
+      totalIncome = (Number(d.income) || 0) + realAdds + excess + carryOverOf(d);
     }
 
     return {
@@ -172,16 +197,20 @@
   // Wallet transfers back and reimbursements are excluded - that money was
   // already counted when it first arrived.
   function totalIncomeOf(d, wallets) {
-    if (!d || d.income === null || d.income === undefined) return null;
+    if (monthIsUnset(d)) return null;
     return monthTotalsOf(d, wallets).totalIncome;
   }
 
   // What is left in the main balance: income, minus paid bills, minus money
   // handed over to wallets, plus or minus Second choice movements.
   function mainRemainingOf(d, wallets) {
-    if (!d || d.income === null || d.income === undefined) return 0;
+    if (monthIsUnset(d)) return 0;
 
-    let remaining = Number(d.income);
+    /* Carry-over lands in main, exactly like the income figure. Wallet
+       balances brought forward are NOT added here - they are written as each
+       wallet's opening budget, which this function already subtracts, and
+       counting them twice would invent money. */
+    let remaining = (Number(d.income) || 0) + carryOverOf(d);
 
     (d.priority || []).forEach(b => {
       if (b.paid) remaining -= Number(b.amount);
@@ -219,11 +248,38 @@
     return Math.abs(sum - t.totalIncome) < epsilon;
   }
 
+  /* What a month leaves behind when it closes: cash still in main plus every
+     wallet balance. This is the figure the next month opens with, and it is
+     computed here rather than in app.js so the rollover and the tests agree
+     on it. Never negative - an overspent month carries nothing forward rather
+     than starting the next one in debt, which would be a second, hidden way
+     to go negative. */
+  function closingBalanceOf(d, wallets) {
+    if (monthIsUnset(d)) return { main: 0, wallets: {}, total: 0 };
+
+    const main = Math.max(mainRemainingOf(d, wallets), 0);
+    const walletBalances = {};
+    let walletTotal = 0;
+
+    (wallets || []).forEach(w => {
+      const bal = walletBalanceOf((d.walletData || {})[w.id]);
+      if (bal > 0) {
+        walletBalances[w.id] = bal;
+        walletTotal += bal;
+      }
+    });
+
+    return { main, wallets: walletBalances, total: main + walletTotal };
+  }
+
   return {
     isWalletInflow,
     isTransferEntry,
     isReimbursement,
     isValidAmount,
+    carryOverOf,
+    monthIsUnset,
+    closingBalanceOf,
     minBudgetOf,
     walletsCovering,
     walletBalanceOf,

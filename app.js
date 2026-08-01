@@ -52,6 +52,11 @@ if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "oldest";
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
 if (!settings.collapsed) settings.collapsed = {};
+/* Carry the closing balance into the next month. Defaults ON, including for
+   existing installs, because the alternative is money silently disappearing
+   on the 1st - which is what it did before this existed. Set to false for a
+   clean slate each month. */
+if (settings.carryOver === undefined) settings.carryOver = true;
 // Backdating made date order meaningful, so switch existing installs to
 // oldest-first once. The Sort transactions setting still overrides it.
 if (!settings.dateOrderMigrated) {
@@ -71,13 +76,28 @@ function genWalletId() {
   return "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-function freshMonthData() {
+/* A new month. `carry` is the closing balance of the month just ended, from
+   closingBalanceOf() - main plus every wallet.
+
+   Wallet money is restored as each wallet's opening BUDGET, not as extra main
+   balance, because mainRemainingOf already subtracts budgets. carryOver holds
+   the whole figure, main and wallets together, so the money is counted exactly
+   once. Get this pairing wrong in either direction and the month either
+   invents money or loses it. */
+function freshMonthData(carry) {
+  const walletData = {};
+  if (carry && carry.wallets) {
+    Object.keys(carry.wallets).forEach(id => {
+      walletData[id] = { budget: carry.wallets[id], items: [] };
+    });
+  }
   return {
     month: currentMonthKey,
     income: null,
+    carryOver: carry ? carry.total : 0,
     priority: [],
     priorityLocked: false,
-    walletData: {},
+    walletData,
     secondChoice: []
   };
 }
@@ -95,7 +115,11 @@ function monthHasContent(d) {
   const hasBudgets = d.walletData
     ? Object.values(d.walletData).some(wd => Number(wd.budget) > 0)
     : Number(d.groceryBudget) > 0;
+  /* Carry-over counts as content. A month where you spent nothing but were
+     holding money brought forward is still a real month, and skipping it here
+     would leave a hole in the history for a month that genuinely happened. */
   return d.income !== null ||
+    carryOverOf(d) > 0 ||
     (d.priority || []).length > 0 ||
     walletItemsCount(d) > 0 ||
     hasBudgets ||
@@ -146,13 +170,91 @@ if (!data) {
   if ((data.priority || []).length > 0) {
     localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
   }
+  /* What the closing month leaves behind, measured BEFORE closed wallets are
+     purged below - a wallet closed during the month has already returned its
+     balance to main, but reading after the purge would risk missing anything
+     that had not. */
+  const carry = settings.carryOver === false
+    ? null
+    : closingBalanceOf(data, settings.wallets || []);
+
   // Closed wallets only needed to survive the month they were closed in;
   // their figures are in the archive now.
   if (settings.wallets.some(w => w.deleted)) {
     settings.wallets = settings.wallets.filter(w => !w.deleted);
     saveSettings();
   }
-  data = freshMonthData();
+
+  /* Only carry balances for wallets that still exist. A wallet closed in the
+     old month must not reappear holding money in the new one. */
+  if (carry) {
+    const live = new Set(settings.wallets.map(w => w.id));
+    Object.keys(carry.wallets).forEach(id => {
+      if (!live.has(id)) delete carry.wallets[id];
+    });
+    carry.total = carry.main + Object.values(carry.wallets).reduce((a, b) => a + b, 0);
+  }
+
+  data = freshMonthData(carry);
+  saveData();
+}
+
+/* MIGRATION: back-fill carry-over for a month that already rolled over.
+
+   Carry-over shipped after some months had already started, so the month on
+   screen can be missing the balance the previous one left behind. This runs
+   once for such a month and reads the figure straight out of the archive.
+
+   Three guards make it safe to run on every load:
+
+   - `carryOver` being ABSENT is what marks a month as not yet back-filled.
+     It is written as a number afterwards, even when that number is 0, so this
+     never applies twice and never keeps re-adding money.
+   - Only the immediately preceding month counts. Reopening the app after
+     skipping a month must not resurrect a balance from further back.
+   - A wallet is only re-opened if it is untouched this month (no budget, no
+     items). Anything already entered wins, and only the wallets actually
+     seeded are counted into the total - so a budget set by hand is never
+     overwritten and never double counted. */
+if (data && data.carryOver === undefined) {
+  let restored = null;
+
+  if (settings.carryOver !== false) {
+    const [y, m] = currentMonthKey.split("-").map(Number);
+    const prevKey = m === 1 ? `${y - 1}-12` : `${y}-${m - 1}`;
+    const prev = archive[prevKey];
+
+    if (prev) {
+      const prevEntry = normalizeArchiveEntry(prev);
+      const closing = closingBalanceOf(prevEntry.data, prevEntry.wallets || []);
+      const live = new Set((settings.wallets || []).map(w => w.id));
+      const seeded = {};
+
+      Object.keys(closing.wallets).forEach(id => {
+        if (!live.has(id)) return;
+        const wd = data.walletData && data.walletData[id];
+        const untouched = !wd || (!wd.budget && (wd.items || []).length === 0);
+        if (untouched) seeded[id] = closing.wallets[id];
+      });
+
+      const walletTotal = Object.values(seeded).reduce((a, b) => a + b, 0);
+      if (closing.main > 0 || walletTotal > 0) {
+        restored = { main: closing.main, wallets: seeded, total: closing.main + walletTotal };
+      }
+    }
+  }
+
+  if (restored) {
+    data.walletData = data.walletData || {};
+    Object.keys(restored.wallets).forEach(id => {
+      data.walletData[id] = data.walletData[id] || { budget: null, items: [] };
+      data.walletData[id].budget = restored.wallets[id];
+    });
+    data.carryOver = restored.total;
+  } else {
+    // Nothing to restore, but stamp the field so this never runs again.
+    data.carryOver = 0;
+  }
   saveData();
 }
 
@@ -356,10 +458,21 @@ monthText.textContent = now.toLocaleString("default", {
    INCOME (WORKING)
 ========================= */
 
-// Renders the income display
+/* Renders the income display.
+
+   Shows what was EARNED this month, with carry-over subtracted back out.
+   totalIncomeOf has to include carried money - the invariant needs every
+   spendable ringgit on that side of the equation - but the card would then
+   read "Total income RM 1,096" on the 1st of a month when nothing had been
+   earned at all, which is not true. The carried amount gets its own
+   "Brought forward" line under Remaining instead.
+
+   Same principle as refusing to count a reimbursement as income: money you
+   already had is not money you made. */
 function renderIncome() {
   const total = totalIncomeOf(data, allWallets());
-  incomeDisplay.textContent = total !== null ? `${cur()} ${fmt(total)}` : `${cur()} 0`;
+  const earned = total === null ? null : total - carryOverOf(data);
+  incomeDisplay.textContent = earned !== null ? `${cur()} ${fmt(earned)}` : `${cur()} 0`;
 }
 
 incomeCard.addEventListener("click", () => {
@@ -1478,10 +1591,28 @@ function updateRemainingDisplay(to) {
 }
 
 // Recalculates and renders the remaining balance, bars, and warnings
+/* The "Brought forward" line under Remaining. Hidden entirely when there is
+   nothing carried, so a month started from scratch shows no empty row. States
+   the figure and nothing else - it is information, not congratulation. */
+function renderCarryOverLine() {
+  const el = document.getElementById("carry-over-line");
+  if (!el) return;
+  const carried = carryOverOf(data);
+  el.classList.toggle("hidden", carried <= 0);
+  if (carried > 0) {
+    el.textContent = `Brought forward ${cur()} ${fmt(carried)}`;
+  }
+}
+
 function calculateRemaining(skipChart = false) {
   renderIncome();
+  renderCarryOverLine();
 
-  if (data.income === null) {
+  /* monthIsUnset rather than a bare income check: on the 1st, income is null
+     while carry-over is not, and that month has a real balance to show. A
+     plain `income === null` test here would blank the card and make the
+     carried money look like it had vanished all over again. */
+  if (monthIsUnset(data)) {
     remainingMoneyEl._shownValue = 0;
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
     return;
@@ -1739,6 +1870,18 @@ chartToggle.addEventListener("change", () => {
 /* =========================
    CURRENCY SETTING
 ========================= */
+
+/* Carry balance forward. Takes effect at the NEXT rollover - switching it off
+   does not claw back money already carried into the month on screen, which
+   would delete a balance the user can see. */
+const carryOverToggle = document.getElementById("carry-over-toggle");
+if (carryOverToggle) {
+  carryOverToggle.checked = settings.carryOver !== false;
+  carryOverToggle.addEventListener("change", () => {
+    settings.carryOver = carryOverToggle.checked;
+    saveSettings();
+  });
+}
 
 const currencySelect = document.getElementById("currency-select");
 currencySelect.value = settings.currency;

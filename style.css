@@ -1399,3 +1399,12 @@ td {
 .legend-overspent .legend-amount {
   color: #e8e8e8;
 }
+
+/* Money brought forward from last month, under the Remaining figure. Sized
+   and coloured as a caption: it explains where part of the balance came from
+   and should not compete with the figure itself. */
+.carry-over-line {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #777;
+}
