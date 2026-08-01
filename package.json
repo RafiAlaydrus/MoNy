@@ -1,6 +1,6 @@
 {
   "name": "monthly-money-tracker",
-  "version": "1.18.1",
+  "version": "1.19.0",
   "private": true,
   "description": "Offline-first monthly money tracker (vanilla PWA). No build step - package.json exists only to run the tests.",
   "scripts": {

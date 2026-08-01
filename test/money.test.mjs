@@ -766,6 +766,115 @@ test("a carried month opens holding what the last one closed with", () => {
 });
 
 /* ---------------------------------------------------------------------------
+   PROJECTED BALANCE - what is left once every bill is ticked
+
+   A forecast, not a state. No money has moved, so it takes no part in the
+   invariant and nothing is derived from it. Each test below therefore also
+   asserts the month still reconciles - the projection must never leak into
+   the books.
+--------------------------------------------------------------------------- */
+
+test("unpaid bills are the ones not yet ticked", () => {
+  const d = { income: 1000, walletData: {}, secondChoice: [],
+    priority: [
+      { name: "Electricity", category: "Bills", amount: 200, paid: false },
+      { name: "Water", category: "Bills", amount: 20, paid: false },
+      { name: "Rent", category: "Bills", amount: 500, paid: true }
+    ] };
+  assert.equal(M.unpaidPriorityOf(d), 220, "the paid one is excluded");
+});
+
+/* The reported case, with the real figures: a balance of 882.01 and four
+   unticked bills totalling 256.90. */
+test("projected balance subtracts every bill still owed", () => {
+  const d = { income: null, carryOver: 1095.97, walletData: { w0: { budget: 213.96, items: [] } },
+    secondChoice: [],
+    priority: [
+      { name: "Electricity", category: "Bills", amount: 200, paid: false },
+      { name: "Water", category: "Bills", amount: 20, paid: false },
+      { name: "Wifi", category: "Bills", amount: 28, paid: false },
+      { name: "Apple Music", category: "Subscription", amount: 8.9, paid: false }
+    ] };
+  const wallets = W("Grocery");
+  assert.ok(Math.abs(M.mainRemainingOf(d, wallets) - 882.01) < 1e-9, "balance now");
+  assert.ok(Math.abs(M.projectedRemainingOf(d, wallets) - 625.11) < 1e-9, "balance after bills");
+  assertReconciles("projection does not disturb the books", d, wallets);
+});
+
+/* Ticking a bill moves real money, so the two figures converge. When the last
+   one is ticked they are equal, which is when the UI stops showing the
+   projection. */
+test("projection converges on the balance as bills are ticked", () => {
+  const wallets = [];
+  const mk = paidFlags => ({ income: 1000, walletData: {}, secondChoice: [],
+    priority: [
+      { name: "A", category: "Bills", amount: 100, paid: paidFlags[0] },
+      { name: "B", category: "Bills", amount: 50, paid: paidFlags[1] }
+    ] });
+
+  const none = mk([false, false]);
+  assert.equal(M.mainRemainingOf(none, wallets), 1000);
+  assert.equal(M.projectedRemainingOf(none, wallets), 850);
+
+  const one = mk([true, false]);
+  assert.equal(M.mainRemainingOf(one, wallets), 900);
+  assert.equal(M.projectedRemainingOf(one, wallets), 850, "the forecast has not moved");
+
+  const all = mk([true, true]);
+  assert.equal(M.mainRemainingOf(all, wallets), 850);
+  assert.equal(M.projectedRemainingOf(all, wallets), 850, "equal once everything is ticked");
+  assertReconciles("all ticked", all, wallets);
+});
+
+/* Bills bigger than the balance. The projection is allowed to be negative -
+   that is the warning, and softening it would defeat the point. */
+test("a projection can be negative when the bills exceed the balance", () => {
+  const d = { income: 100, walletData: {}, secondChoice: [],
+    priority: [{ name: "Rent", category: "Bills", amount: 400, paid: false }] };
+  assert.equal(M.mainRemainingOf(d, []), 100, "nothing has actually gone yet");
+  assert.equal(M.projectedRemainingOf(d, []), -300);
+  assertReconciles("projected overspend is not a real one", d, []);
+});
+
+test("a month with no bills projects its own balance", () => {
+  const d = { income: 500, priority: [], walletData: {}, secondChoice: [] };
+  assert.equal(M.projectedRemainingOf(d, []), 500);
+});
+
+test("an unset month projects zero rather than a negative", () => {
+  const d = { income: null, priority: [{ name: "X", category: "Bills", amount: 50, paid: false }],
+    walletData: {}, secondChoice: [] };
+  assert.equal(M.projectedRemainingOf(d, []), 0, "no income set means nothing to project from");
+});
+
+/* ---------------------------------------------------------------------------
+   CARRY-IN BREAKDOWN - where the carried money landed
+--------------------------------------------------------------------------- */
+
+/* carryOver stays the single figure the maths uses; this is only the split,
+   so each history can show the part that arrived there. */
+test("the carry-in split reports main and wallets separately", () => {
+  const d = { carryOver: 1095.97, carryIn: { main: 882.01, wallets: { w0: 213.96 } } };
+  const c = M.carryInOf(d);
+  assert.equal(c.main, 882.01);
+  assert.equal(c.wallets.w0, 213.96);
+  assert.ok(Math.abs(c.main + c.wallets.w0 - d.carryOver) < 1e-9,
+    "the parts must add up to the total the maths uses");
+});
+
+test("a month carried before the split existed reports nothing", () => {
+  const c = M.carryInOf({ carryOver: 500 });
+  assert.equal(c.main, 0);
+  assert.deepEqual(c.wallets, {}, "no rows rather than a guessed division");
+});
+
+test("junk in the carry-in split is ignored", () => {
+  const c = M.carryInOf({ carryIn: { main: -5, wallets: { a: 0, b: NaN, c: "50", d: -1 } } });
+  assert.equal(c.main, 0, "a negative main is dropped");
+  assert.deepEqual(c.wallets, { c: 50 }, "only positive finite wallet amounts survive");
+});
+
+/* ---------------------------------------------------------------------------
    BUDGET CYCLES - months that do not start on the 1st
 
    Pure date maths, so these pin the behaviour precisely rather than relying

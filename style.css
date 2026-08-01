@@ -230,6 +230,8 @@ input[type="checkbox"] {
    bar intensifies rather than turning red. Both properties transition, so a
    change animates in step with the counting figure above. */
 .spend-bar-fill {
+  position: relative;
+  z-index: 1;
   height: 100%;
   border-radius: 3px;
   width: 0%;
@@ -1411,13 +1413,52 @@ td {
   color: #e8e8e8;
 }
 
-/* Money brought forward from last month, under the Remaining figure. Sized
-   and coloured as a caption: it explains where part of the balance came from
-   and should not compete with the figure itself. */
-.carry-over-line {
+/* Projected fill: where the bar lands once every unticked bill is paid.
+
+   Absolutely positioned so it can sit UNDER the real fill and reach further
+   right, with the real fill given a z-index to stay on top. A fixed dim grey
+   rather than a dimmed version of the live colour - the real bar already
+   shifts from dim grey to white by tier, so anything relative would vanish
+   at the low end. */
+.spend-bar-projected {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0%;
+  background: #4a4a4a;
+  border-radius: 3px;
+  z-index: 0;
+  transition: width 0.4s ease;
+}
+
+/* Balance now against balance after bills. Wraps rather than truncating on a
+   narrow screen - both figures matter, neither is decoration. */
+.projection-line {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.5;
   color: #777;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+}
+
+/* The projected half is dimmer than the actual: it has not happened yet. */
+.projection-part.is-projected {
+  color: #5f5f5f;
+}
+
+.projection-sep {
+  color: #3a3a3a;
+}
+
+/* Opening row of a history - money brought in from last month. Italic and
+   muted so it reads as a statement about the list rather than an entry in
+   it, which is exactly what it is: nothing here can be deleted. */
+.carried-row td {
+  color: #6f6f6f;
+  font-style: italic;
 }
 
 /* Note under a setting explaining when a change takes effect. Sits outside

@@ -114,6 +114,12 @@ function freshMonthData(carry, cycleStart) {
     cycleNext: nextCycleStartOf(start, settings.monthStartDay),
     income: null,
     carryOver: carry ? carry.total : 0,
+    /* The same money as carryOver, split by where it landed. carryOver stays
+       the figure every calculation uses; this exists only so each history can
+       show the part that arrived there. Kept as a record of what WAS carried,
+       so it stays accurate after a wallet budget is edited by hand - which is
+       exactly what makes carried money indistinguishable otherwise. */
+    carryIn: carry ? { main: carry.main, wallets: { ...carry.wallets } } : { main: 0, wallets: {} },
     priority: [],
     priorityLocked: false,
     walletData,
@@ -297,10 +303,47 @@ if (data && data.carryOver === undefined) {
       data.walletData[id].budget = restored.wallets[id];
     });
     data.carryOver = restored.total;
+    data.carryIn = { main: restored.main, wallets: { ...restored.wallets } };
   } else {
-    // Nothing to restore, but stamp the field so this never runs again.
+    // Nothing to restore, but stamp the fields so this never runs again.
     data.carryOver = 0;
+    data.carryIn = { main: 0, wallets: {} };
   }
+  saveData();
+}
+
+/* MIGRATION: back-fill the carry-in SPLIT for a month that was carried before
+   the breakdown was stored.
+
+   Such a month has a carryOver total but no idea how it divided between main
+   and the wallets, so it would show no history rows at all. The split is read
+   back out of the previous month's closing balance in the archive.
+
+   Only fills the split - carryOver itself is left exactly as it is, so the
+   totals on screen cannot shift. If the reconstructed parts do not add up to
+   the stored total the month has been edited since, and it is left alone
+   rather than shown a breakdown that contradicts its own total. */
+if (data && carryOverOf(data) > 0 && !data.carryIn) {
+  const [y, m] = String(data.month).split("-").map(Number);
+  const prevKey = m === 1 ? `${y - 1}-12` : `${y}-${m - 1}`;
+  const prev = archive[prevKey];
+  let split = null;
+
+  if (prev) {
+    const prevEntry = normalizeArchiveEntry(prev);
+    const closing = closingBalanceOf(prevEntry.data, prevEntry.wallets || []);
+    const live = new Set((settings.wallets || []).map(w => w.id));
+    const wallets = {};
+    Object.keys(closing.wallets).forEach(id => {
+      if (live.has(id)) wallets[id] = closing.wallets[id];
+    });
+    const total = closing.main + Object.values(wallets).reduce((a, b) => a + b, 0);
+    if (Math.abs(total - carryOverOf(data)) < 1e-6) {
+      split = { main: closing.main, wallets };
+    }
+  }
+
+  data.carryIn = split || { main: 0, wallets: {} };
   saveData();
 }
 
@@ -948,6 +991,30 @@ function deleteWalletItem(wallet, item, tbody, section) {
 }
 
 // Builds a single wallet transaction row
+/* The pinned opening row of a history: money brought in from last month.
+
+   DISPLAY ONLY, and that distinction is the whole safety of it. The amount is
+   already counted - in data.carryOver for the maths, and in the wallet's
+   opening budget for the balance - so writing it as a real entry would count
+   the same money twice and break the invariant. It is therefore built here at
+   render time, stored nowhere, and deliberately not deletable: there is no
+   transaction behind it to delete.
+
+   Always first, whatever the sort order, because it is where the money in
+   this list came from rather than something that happened during the month. */
+function buildCarriedRow(amount, columnCount) {
+  const row = document.createElement("tr");
+  row.className = "carried-row";
+  const spacer = columnCount === 4 ? "<td></td>" : "";
+  row.innerHTML = `
+    <td>Brought forward</td>
+    ${spacer}
+    <td class="date-stamp">last month</td>
+    <td>+ ${esc(cur())} ${fmt(amount)}</td>
+  `;
+  return row;
+}
+
 function buildWalletItemRow(item, wallet, tbody, section) {
   const row = document.createElement("tr");
   const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
@@ -1020,8 +1087,15 @@ function renderWalletItemsTable(wallet, tbody, section) {
   tbody.innerHTML = "";
   const wd = ensureWalletData(wallet.id);
 
+  // Money this wallet reopened holding, shown as its opening line.
+  const carried = carryInOf(data).wallets[wallet.id] || 0;
+  if (carried > 0) tbody.appendChild(buildCarriedRow(carried, 3));
+
   if (wd.items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No items yet.</td></tr>';
+    // The opening line alone is still a history worth showing.
+    if (carried <= 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No items yet.</td></tr>';
+    }
     return;
   }
 
@@ -1494,8 +1568,15 @@ function buildSecondChoiceRow(item) {
 function renderSecondChoice() {
   scTable.innerHTML = "";
 
+  // Second choice is the main balance's history, so main's share of the
+  // carried money opens it.
+  const carried = carryInOf(data).main;
+  if (carried > 0) scTable.appendChild(buildCarriedRow(carried, 4));
+
   if (data.secondChoice.length === 0) {
-    scTable.innerHTML = '<tr><td colspan="4" class="empty-state">No transactions yet.</td></tr>';
+    if (carried <= 0) {
+      scTable.innerHTML = '<tr><td colspan="4" class="empty-state">No transactions yet.</td></tr>';
+    }
     return;
   }
 
@@ -1682,22 +1763,58 @@ function updateRemainingDisplay(to) {
 }
 
 // Recalculates and renders the remaining balance, bars, and warnings
-/* The "Brought forward" line under Remaining. Hidden entirely when there is
-   nothing carried, so a month started from scratch shows no empty row. States
-   the figure and nothing else - it is information, not congratulation. */
-function renderCarryOverLine() {
-  const el = document.getElementById("carry-over-line");
-  if (!el) return;
-  const carried = carryOverOf(data);
-  el.classList.toggle("hidden", carried <= 0);
-  if (carried > 0) {
-    el.textContent = `Brought forward ${cur()} ${fmt(carried)}`;
+/* Balance now against balance once every outstanding bill is ticked, plus the
+   dim bar segment that shows the same thing.
+
+   Hidden entirely when nothing is owed, because the two figures are then
+   identical and repeating them says nothing. It reappears the moment a bill
+   is unticked.
+
+   Nothing here moves money. The projection is a forecast, so the real bar and
+   the real figure above are left exactly as they are and the projection is
+   drawn behind them. */
+function renderProjection() {
+  const line = document.getElementById("projection-line");
+  const bar = document.getElementById("spend-bar-projected");
+  if (!line || !bar) return;
+
+  const owed = unpaidPriorityOf(data);
+  if (monthIsUnset(data) || owed <= 0) {
+    line.classList.add("hidden");
+    bar.classList.add("hidden");
+    return;
   }
+
+  const remaining = getMainRemaining();
+  const projected = projectedRemainingOf(data, allWallets());
+
+  line.innerHTML =
+    `<span class="projection-part">Balance ${esc(cur())} ${fmt(remaining)}</span>` +
+    `<span class="projection-sep">·</span>` +
+    `<span class="projection-part is-projected">Projected Balance ${
+      projected < 0
+        ? `overspent by ${esc(cur())} ${fmt(-projected)}`
+        : `${esc(cur())} ${fmt(projected)}`
+    }</span>`;
+  line.classList.remove("hidden");
+
+  /* The dim segment reaches the point the bar WILL sit at once the bills are
+     paid, measured on the same scale as the real fill so the two line up.
+     Clamped to 100%: a projection past the income has nowhere further to go
+     on the bar, and the figure beside it already says overspent. */
+  const income = totalIncomeOf(data, allWallets());
+  if (!income || income <= 0) {
+    bar.classList.add("hidden");
+    return;
+  }
+  const projectedPct = Math.min(Math.max(((income - projected) / income) * 100, 0), 100);
+  bar.style.width = `${projectedPct}%`;
+  bar.classList.remove("hidden");
 }
 
 function calculateRemaining(skipChart = false) {
   renderIncome();
-  renderCarryOverLine();
+  renderProjection();
 
   /* monthIsUnset rather than a bare income check: on the 1st, income is null
      while carry-over is not, and that month has a real balance to show. A
@@ -2823,6 +2940,7 @@ function resetData() {
   data.month = currentMonthKey;
   data.income = null;
   data.carryOver = 0;
+  data.carryIn = { main: 0, wallets: {} };
   data.priority = [];
   data.priorityLocked = false;
   data.walletData = {};

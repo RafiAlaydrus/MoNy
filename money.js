@@ -54,6 +54,41 @@
     return Math.max(committed, 0);
   }
 
+  /* The carried balance split by where it landed: what stayed in main, and
+     what reopened inside each wallet. carryOver holds the same money as a
+     single total and remains the figure the maths uses - this is only the
+     breakdown, so the history rows can say where each part came from.
+
+     Absent on months carried before the split was stored; those report zero
+     and simply show no rows rather than guessing at a division. */
+  function carryInOf(d) {
+    const c = (d && d.carryIn) || {};
+    const main = Number(c.main);
+    const wallets = {};
+    Object.keys(c.wallets || {}).forEach(id => {
+      const v = Number(c.wallets[id]);
+      if (Number.isFinite(v) && v > 0) wallets[id] = v;
+    });
+    return { main: Number.isFinite(main) && main > 0 ? main : 0, wallets };
+  }
+
+  // Bills listed but not yet ticked off - what is still owed this month.
+  function unpaidPriorityOf(d) {
+    return ((d && d.priority) || []).reduce(
+      (sum, b) => sum + (b.paid ? 0 : Number(b.amount) || 0), 0);
+  }
+
+  /* What the main balance will be once every outstanding bill is paid.
+
+     A FORECAST, not a state: no money has moved, so this deliberately takes
+     no part in the invariant and nothing else is derived from it. It exists
+     so the balance after bills can be seen without ticking them, and it
+     converges on mainRemaining as they are ticked. */
+  function projectedRemainingOf(d, wallets) {
+    if (monthIsUnset(d)) return 0;
+    return mainRemainingOf(d, wallets) - unpaidPriorityOf(d);
+  }
+
   // A Second choice entry that is money coming back out of a wallet rather
   // than new income. Entries written before transfers were tagged only
   // carry the category, so both forms are recognised.
@@ -362,6 +397,9 @@
     isReimbursement,
     isValidAmount,
     carryOverOf,
+    carryInOf,
+    unpaidPriorityOf,
+    projectedRemainingOf,
     monthIsUnset,
     closingBalanceOf,
     daysInMonth,

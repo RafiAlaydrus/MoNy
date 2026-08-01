@@ -142,7 +142,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.18.1</div>
+            <div class="setting-version">v1.19.0</div>
           </div>
         </section>
       </div>
@@ -197,18 +197,20 @@
       <div class="card">
         <span>Remaining</span>
         <h2 id="remaining-money">RM 0</h2>
-        <!-- Money brought forward from last month. Hidden when there is none,
-             so a month that started from nothing shows no empty line. Kept out
-             of Total income on purpose: this money was not earned this month,
-             and the app would rather say so than quietly fold it into
-             earnings - the same reason a reimbursement is not income. -->
-        <p id="carry-over-line" class="carry-over-line hidden"></p>
         <div class="spend-bar-wrapper">
           <div class="spend-bar-track">
+            <!-- Projected fill sits BEHIND the real one and reaches further
+                 right, showing where the balance lands once every unticked
+                 bill is paid. A forecast only - no money has moved, which is
+                 why it is dimmer than the bar it sits under. -->
+            <div id="spend-bar-projected" class="spend-bar-projected hidden"></div>
             <div id="spend-bar-fill" class="spend-bar-fill"></div>
             <div id="spend-bar-limit" class="spend-bar-limit hidden"></div>
           </div>
           <span id="spend-bar-label" class="spend-bar-label">0% spent</span>
+          <!-- Balance now against balance after bills. Hidden entirely once
+               every bill is ticked, since the two figures are then equal. -->
+          <p id="projection-line" class="projection-line hidden"></p>
         </div>
         <p id="budget-warning" class="budget-warning hidden"></p>
       </div>
