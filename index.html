@@ -87,6 +87,15 @@
                 <span class="toggle-slider"></span>
               </label>
             </div>
+            <!-- Which day a budget cycle begins. Options are built by app.js
+                 so 1 can be labelled as the plain calendar month. Changing it
+                 never re-cuts the cycle on screen - it only moves the next
+                 rollover, and the note below says exactly when that is. -->
+            <div class="setting-row">
+              <span>Month starts</span>
+              <select id="month-start-select" class="setting-select"></select>
+            </div>
+            <p id="month-start-note" class="setting-note hidden"></p>
             <div class="setting-row">
               <span>Carry balance forward</span>
               <label class="toggle">
@@ -131,7 +140,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.17.1</div>
+            <div class="setting-version">v1.18.0</div>
           </div>
         </section>
       </div>

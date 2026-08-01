@@ -68,6 +68,90 @@
     return item.type === "add" && item.newMoney === false && !isTransferEntry(item);
   }
 
+  /* ---------------------------------------------------------------------
+     BUDGET CYCLES
+
+     A "month" does not have to start on the 1st. Someone paid on the 25th
+     budgets from the 25th, so a cycle runs from the chosen day of one
+     calendar month to the day before the next one starts.
+
+     Two formats, deliberately different so they cannot be confused:
+       - cycle start dates are "YYYY-MM-DD", zero padded, so plain string
+         comparison orders them correctly
+       - archive keys stay "YYYY-M", unpadded, exactly as before - a cycle is
+         keyed by the calendar month it STARTS in
+
+     The key property, which the tests check exhaustively: every calendar
+     month contains exactly one cycle start, so every day belongs to exactly
+     one cycle. No gaps, no overlaps, and no two cycles can ever compete for
+     the same archive key.
+     --------------------------------------------------------------------- */
+
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  // Days in a 1-based month. Day 0 of the next month is the last of this one,
+  // which handles leap years without a special case.
+  function daysInMonth(year, month) {
+    return new Date(year, month, 0).getDate();
+  }
+
+  /* The day a cycle actually starts in a given month, clamped to months that
+     are too short. Choose the 31st and February starts on the 28th - or the
+     29th in a leap year - and April on the 30th. Without this a cycle would
+     silently roll into the following month. */
+  function clampStartDay(year, month, chosenDay) {
+    const d = Math.floor(Number(chosenDay));
+    if (!Number.isFinite(d) || d < 1) return 1;
+    return Math.min(d, daysInMonth(year, month));
+  }
+
+  // The start date of the cycle that begins in a given calendar month.
+  function cycleStartInMonth(year, month, chosenDay) {
+    return `${year}-${pad2(month)}-${pad2(clampStartDay(year, month, chosenDay))}`;
+  }
+
+  function parseYmd(s) {
+    const [y, m, d] = String(s).split("-").map(Number);
+    return { y, m, d };
+  }
+
+  // "2026-08-05" -> "2026-8". The archive key is the month the cycle starts in.
+  function cycleKeyOf(startDate) {
+    const { y, m } = parseYmd(startDate);
+    return `${y}-${m}`;
+  }
+
+  /* When the cycle after this one begins: the chosen day in the NEXT calendar
+     month. Always a month ahead, which is what guarantees one cycle start per
+     month and therefore one cycle per archive key. */
+  function nextCycleStartOf(startDate, chosenDay) {
+    const { y, m } = parseYmd(startDate);
+    let ny = y, nm = m + 1;
+    if (nm > 12) { nm = 1; ny += 1; }
+    return cycleStartInMonth(ny, nm, chosenDay);
+  }
+
+  /* Which cycle a given date falls in. Before this month's start day the date
+     still belongs to the cycle that began last month. Used to open the very
+     first month, and to sanity-check a stored cycle. */
+  function cycleStartForDate(dateStr, chosenDay) {
+    const { y, m, d } = parseYmd(dateStr);
+    if (d >= clampStartDay(y, m, chosenDay)) return cycleStartInMonth(y, m, chosenDay);
+    let py = y, pm = m - 1;
+    if (pm < 1) { pm = 12; py -= 1; }
+    return cycleStartInMonth(py, pm, chosenDay);
+  }
+
+  /* The last day of a cycle: the day before the next one starts. Display
+     only - the rollover compares against the next start, never against this. */
+  function cycleEndOf(startDate, chosenDay) {
+    const { y, m, d } = parseYmd(nextCycleStartOf(startDate, chosenDay));
+    const prev = new Date(y, m - 1, d - 1);
+    return `${prev.getFullYear()}-${pad2(prev.getMonth() + 1)}-${pad2(prev.getDate())}`;
+  }
+
   // Money brought forward from the previous month: what was left in main plus
   // whatever the wallets still held when it closed. Zero for a month that
   // started from nothing, and for every month saved before carry-over existed.
@@ -280,6 +364,13 @@
     carryOverOf,
     monthIsUnset,
     closingBalanceOf,
+    daysInMonth,
+    clampStartDay,
+    cycleStartInMonth,
+    cycleKeyOf,
+    nextCycleStartOf,
+    cycleStartForDate,
+    cycleEndOf,
     minBudgetOf,
     walletsCovering,
     walletBalanceOf,

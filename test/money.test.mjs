@@ -765,6 +765,132 @@ test("a carried month opens holding what the last one closed with", () => {
   assertReconciles("rolled month", august, wallets);
 });
 
+/* ---------------------------------------------------------------------------
+   BUDGET CYCLES - months that do not start on the 1st
+
+   Pure date maths, so these pin the behaviour precisely rather than relying
+   on whatever today happens to be.
+--------------------------------------------------------------------------- */
+
+test("days in a month, including leap years", () => {
+  assert.equal(M.daysInMonth(2026, 1), 31);
+  assert.equal(M.daysInMonth(2026, 2), 28, "2026 is not a leap year");
+  assert.equal(M.daysInMonth(2024, 2), 29, "2024 is");
+  assert.equal(M.daysInMonth(2000, 2), 29, "2000 is - divisible by 400");
+  assert.equal(M.daysInMonth(1900, 2), 28, "1900 is not - divisible by 100 but not 400");
+  assert.equal(M.daysInMonth(2026, 4), 30);
+});
+
+/* The clamping rule: a chosen day longer than the month falls back to the
+   last day, so choosing the 31st starts February on the 28th and April on
+   the 30th. Without it a cycle would silently slide into the next month. */
+test("a start day longer than the month clamps to its last day", () => {
+  assert.equal(M.clampStartDay(2026, 2, 31), 28, "Feb has no 31st");
+  assert.equal(M.clampStartDay(2024, 2, 31), 29, "except 29 in a leap year");
+  assert.equal(M.clampStartDay(2026, 4, 31), 30, "April has no 31st");
+  assert.equal(M.clampStartDay(2026, 1, 31), 31, "January does");
+  assert.equal(M.clampStartDay(2026, 8, 5), 5, "a day that fits is untouched");
+});
+
+test("a nonsensical start day falls back to the 1st", () => {
+  [0, -5, NaN, null, undefined, "abc", ""].forEach(bad => {
+    assert.equal(M.clampStartDay(2026, 8, bad), 1, `${String(bad)} should fall back to 1`);
+  });
+});
+
+/* The archive key is the calendar month the cycle STARTS in, which is what
+   keeps the existing "YYYY-M" keys and all the archive sorting working
+   unchanged even though a cycle now spans two calendar months. */
+test("a cycle is keyed by the month it starts in", () => {
+  assert.equal(M.cycleKeyOf("2026-08-05"), "2026-8");
+  assert.equal(M.cycleKeyOf("2026-12-31"), "2026-12", "even though it runs into January");
+  assert.equal(M.cycleKeyOf("2026-01-01"), "2026-1");
+});
+
+test("the next cycle starts on the chosen day of the following month", () => {
+  assert.equal(M.nextCycleStartOf("2026-08-05", 5), "2026-09-05");
+  assert.equal(M.nextCycleStartOf("2026-01-31", 31), "2026-02-28", "clamped into February");
+  assert.equal(M.nextCycleStartOf("2024-01-31", 31), "2024-02-29", "leap year");
+  assert.equal(M.nextCycleStartOf("2026-02-28", 31), "2026-03-31", "and back out again");
+  assert.equal(M.nextCycleStartOf("2026-12-20", 20), "2027-01-20", "across the year boundary");
+});
+
+/* Changing the day only ever moves the NEXT start, never the current one -
+   which is what makes a settings change safe mid-cycle. */
+test("changing the start day moves only the next cycle", () => {
+  assert.equal(M.nextCycleStartOf("2026-08-05", 20), "2026-09-20",
+    "5 -> 20 gives a long August: 5 Aug to 19 Sep");
+  assert.equal(M.nextCycleStartOf("2026-08-20", 5), "2026-09-05",
+    "20 -> 5 gives a short August: 20 Aug to 4 Sep");
+});
+
+test("a date before this month's start day belongs to last month's cycle", () => {
+  assert.equal(M.cycleStartForDate("2026-08-10", 5), "2026-08-05", "on or after the start");
+  assert.equal(M.cycleStartForDate("2026-08-05", 5), "2026-08-05", "the boundary day itself");
+  assert.equal(M.cycleStartForDate("2026-08-04", 5), "2026-07-05", "the day before belongs to July");
+  assert.equal(M.cycleStartForDate("2026-01-03", 5), "2025-12-05", "back across the year boundary");
+  assert.equal(M.cycleStartForDate("2026-03-15", 31), "2026-02-28",
+    "mid-March still belongs to the cycle that opened on 28 Feb");
+});
+
+test("a cycle ends the day before the next one begins", () => {
+  assert.equal(M.cycleEndOf("2026-08-05", 5), "2026-09-04");
+  assert.equal(M.cycleEndOf("2026-01-31", 31), "2026-02-27");
+  assert.equal(M.cycleEndOf("2026-12-20", 20), "2027-01-19", "across the year boundary");
+  assert.equal(M.cycleEndOf("2026-08-01", 1), "2026-08-31", "the 1st behaves as it always did");
+});
+
+/* THE property that makes the whole scheme safe. Walk every day of two whole
+   years for every possible start day and assert that each day resolves to
+   exactly one cycle, that cycles are contiguous with no gap or overlap, and
+   that no two cycles ever produce the same archive key.
+
+   A collision here would mean the rollover archiving a month that already
+   exists, which is the one failure that could actually destroy data. */
+test("every day belongs to exactly one cycle, for every start day", () => {
+  for (let chosen = 1; chosen <= 31; chosen++) {
+    const seenKeys = new Set();
+    let prevStart = null;
+
+    for (let month = 1; month <= 24; month++) {
+      const y = 2025 + Math.floor((month - 1) / 12);
+      const m = ((month - 1) % 12) + 1;
+      const start = M.cycleStartInMonth(y, m, chosen);
+      const key = M.cycleKeyOf(start);
+
+      assert.ok(!seenKeys.has(key), `start day ${chosen}: key ${key} used twice`);
+      seenKeys.add(key);
+
+      if (prevStart) {
+        assert.equal(M.nextCycleStartOf(prevStart, chosen), start,
+          `start day ${chosen}: ${prevStart} should lead straight into ${start}`);
+        // Contiguous: the previous cycle ends the day before this one starts
+        const end = M.cycleEndOf(prevStart, chosen);
+        const next = new Date(end + "T00:00:00");
+        next.setDate(next.getDate() + 1);
+        const afterEnd = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,"0")}-${String(next.getDate()).padStart(2,"0")}`;
+        assert.equal(afterEnd, start, `start day ${chosen}: gap or overlap before ${start}`);
+      }
+      prevStart = start;
+    }
+  }
+});
+
+/* Walking actual days: each one must resolve to the cycle that contains it. */
+test("resolving a date always lands inside the cycle it belongs to", () => {
+  [1, 5, 15, 28, 29, 30, 31].forEach(chosen => {
+    const day = new Date(2026, 0, 1);
+    for (let i = 0; i < 400; i++) {
+      const ds = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,"0")}-${String(day.getDate()).padStart(2,"0")}`;
+      const start = M.cycleStartForDate(ds, chosen);
+      const end = M.cycleEndOf(start, chosen);
+      assert.ok(ds >= start && ds <= end,
+        `start day ${chosen}: ${ds} resolved to cycle ${start}..${end}, which does not contain it`);
+      day.setDate(day.getDate() + 1);
+    }
+  });
+});
+
 /* A wallet defined in settings but with no slot in this month's walletData -
    the normal state for a wallet created but not yet used, and for every
    wallet at the start of a fresh month. Every function must treat the missing

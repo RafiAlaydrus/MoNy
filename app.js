@@ -38,7 +38,11 @@ function saveSettings() { return save(SETTINGS_KEY, settings); }
 function saveArchive() { return save(ARCHIVE_KEY, archive); }
 
 const now = new Date();
-const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+
+// Today as "YYYY-MM-DD". Built in LOCAL time - toISOString would give the
+// previous day in negative-offset timezones and roll the cycle over early.
+const todayStr =
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
 let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
   showChart: false,
@@ -57,6 +61,11 @@ if (!settings.collapsed) settings.collapsed = {};
    on the 1st - which is what it did before this existed. Set to false for a
    clean slate each month. */
 if (settings.carryOver === undefined) settings.carryOver = true;
+/* The day a budget cycle begins. 1 is the calendar month and the default;
+   someone paid on the 25th sets 25 and their month runs 25th to 24th. Days
+   longer than a short month clamp to its last day, so 31 starts February on
+   the 28th. */
+if (settings.monthStartDay === undefined) settings.monthStartDay = 1;
 // Backdating made date order meaningful, so switch existing installs to
 // oldest-first once. The Sort transactions setting still overrides it.
 if (!settings.dateOrderMigrated) {
@@ -84,15 +93,25 @@ function genWalletId() {
    the whole figure, main and wallets together, so the money is counted exactly
    once. Get this pairing wrong in either direction and the month either
    invents money or loses it. */
-function freshMonthData(carry) {
+function freshMonthData(carry, cycleStart) {
   const walletData = {};
   if (carry && carry.wallets) {
     Object.keys(carry.wallets).forEach(id => {
       walletData[id] = { budget: carry.wallets[id], items: [] };
     });
   }
+  const start = cycleStart || cycleStartForDate(todayStr, settings.monthStartDay);
   return {
-    month: currentMonthKey,
+    month: cycleKeyOf(start),
+    /* When this cycle began, and when the next one does. Both are STORED
+       rather than recomputed from today, and that is the whole safety
+       argument for this feature: the month's identity is fixed the moment it
+       is created, so changing the start day later can only ever move
+       cycleNext. Recomputing the key from today would let a settings change
+       decide we are in a cycle that has already been archived, and the
+       rollover would then try to recreate a month that exists. */
+    cycleStart: start,
+    cycleNext: nextCycleStartOf(start, settings.monthStartDay),
     income: null,
     carryOver: carry ? carry.total : 0,
     priority: [],
@@ -155,9 +174,21 @@ if (data && !data.walletData) {
   saveData();
 }
 
+/* MIGRATION: months stored before cycles existed have no cycleStart. Every
+   one of them ran 1st to 1st, so that is what they are stamped with - the
+   inferred dates describe exactly what those months already meant, and
+   nothing is reinterpreted. Runs once; afterwards cycleStart is always
+   present. */
+if (data && !data.cycleStart) {
+  const [y, m] = String(data.month).split("-").map(Number);
+  data.cycleStart = `${y}-${String(m).padStart(2, "0")}-01`;
+  data.cycleNext = nextCycleStartOf(data.cycleStart, settings.monthStartDay);
+  saveData();
+}
+
 if (!data) {
   data = freshMonthData();
-} else if (data.month !== currentMonthKey) {
+} else if (todayStr >= data.cycleNext) {
   if (monthHasContent(data)) {
     archive[data.month] = {
       data,
@@ -195,9 +226,24 @@ if (!data) {
     carry.total = carry.main + Object.values(carry.wallets).reduce((a, b) => a + b, 0);
   }
 
-  data = freshMonthData(carry);
+  /* The new cycle begins where the old one said it would - cycleNext, not a
+     figure recomputed from today. If the app was not opened for a while it
+     may already be several cycles stale, so this walks forward until the
+     start it lands on actually contains today. Each step is a real cycle
+     boundary, so no month is skipped and none is invented. */
+  let nextStart = data.cycleNext;
+  while (todayStr >= nextCycleStartOf(nextStart, settings.monthStartDay)) {
+    nextStart = nextCycleStartOf(nextStart, settings.monthStartDay);
+  }
+
+  data = freshMonthData(carry, nextStart);
   saveData();
 }
+
+/* The cycle on screen, as an archive key. Derived from the month record that
+   the rollover above has just settled, NOT recomputed from today - which is
+   what keeps it stable when the start day changes. */
+const currentMonthKey = data.month;
 
 /* MIGRATION: back-fill carry-over for a month that already rolled over.
 
@@ -449,10 +495,55 @@ undoBtn.addEventListener("click", () => {
    HEADER
 ========================= */
 
-monthText.textContent = now.toLocaleString("default", {
-  month: "long",
-  year: "numeric"
-});
+/* The line under the title. Purely for orientation - it tells you which
+   stretch of days you are looking at and is wired into nothing, so it can
+   show real dates rather than a month name.
+
+   On the 1st it stays "August 2026", because a range would only restate what
+   the month name already says. On any other start day it shows the actual
+   span, with both years spelled out when the cycle crosses New Year. */
+function cycleLabel(startDate, endDate) {
+  const s = new Date(startDate + "T00:00:00");
+  const e = new Date(endDate + "T00:00:00");
+
+  if (settings.monthStartDay === 1) {
+    return s.toLocaleString("default", { month: "long", year: "numeric" });
+  }
+
+  const sameYear = s.getFullYear() === e.getFullYear();
+  const from = s.toLocaleString("default",
+    sameYear ? { day: "numeric", month: "short" }
+             : { day: "numeric", month: "short", year: "numeric" });
+  const to = e.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" });
+  return `${from} – ${to}`;
+}
+
+/* "5 Aug – 4 Sep 2026 · 31 days" for a history row. Takes the stored
+   cycleNext rather than a chosen day, so an archived month reports the span
+   it really ran, not the span today's setting would give it. */
+function dayRangeLabel(cycleStart, cycleNext) {
+  const s = new Date(cycleStart + "T00:00:00");
+  const n = new Date(cycleNext + "T00:00:00");
+  const end = new Date(n);
+  end.setDate(end.getDate() - 1);
+
+  const days = Math.round((n - s) / 86400000);
+  const sameYear = s.getFullYear() === end.getFullYear();
+  const from = s.toLocaleString("default",
+    sameYear ? { day: "numeric", month: "short" }
+             : { day: "numeric", month: "short", year: "numeric" });
+  const to = end.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" });
+  return `${from} – ${to} · ${days} days`;
+}
+
+function renderMonthLabel() {
+  monthText.textContent = cycleLabel(
+    data.cycleStart,
+    cycleEndOf(data.cycleStart, settings.monthStartDay)
+  );
+}
+
+renderMonthLabel();
 
 /* =========================
    INCOME (WORKING)
@@ -1871,6 +1962,99 @@ chartToggle.addEventListener("change", () => {
    CURRENCY SETTING
 ========================= */
 
+/* =========================
+   MONTH START DAY
+========================= */
+
+/* The dropdown of 1-31. A dropdown rather than a number field because this is
+   used on a phone and a mistyped "3" instead of "31" would silently move the
+   whole budget cycle. */
+const monthStartSelect = document.getElementById("month-start-select");
+const monthStartNote = document.getElementById("month-start-note");
+
+/* Ordinal suffix - 1st, 2nd, 3rd, 21st. The 11-13 exception is why this is
+   not just a lookup on the last digit. */
+function ordinal(n) {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] || "th"}`;
+}
+
+/* When a chosen start day would first take effect.
+
+   The next start is always in the calendar month AFTER the current cycle
+   began, so it is normally in the future. It can land in the past in one
+   case: a long cycle running into the next calendar month, where picking an
+   earlier day names a date already gone. Rolling over to it would archive
+   the month on screen the moment the setting changed, which is exactly what
+   "applies next month, not this one" rules out - so it is pushed on a
+   further month. */
+function startDayTakesEffect(chosenDay) {
+  let next = nextCycleStartOf(data.cycleStart, chosenDay);
+  if (next <= todayStr) next = nextCycleStartOf(next, chosenDay);
+  return next;
+}
+
+/* Shows the note whenever the chosen day has not taken effect yet.
+
+   The test is against the day the CURRENT CYCLE actually began, not against
+   settings.monthStartDay - the setting is written the moment the dropdown
+   changes, so comparing the two would always find them equal and the note
+   would never appear. It also survives a reload, which comparing to the
+   dropdown would not.
+
+   Clamping is applied before comparing: a cycle that opened on 28 February
+   under a chosen 31st HAS taken effect, and must not be reported as pending. */
+function renderMonthStartNote() {
+  if (!monthStartNote || !data.cycleStart) return;
+  const { y, m, d } = (() => {
+    const [yy, mm, dd] = data.cycleStart.split("-").map(Number);
+    return { y: yy, m: mm, d: dd };
+  })();
+  const effectiveNow = clampStartDay(y, m, settings.monthStartDay);
+
+  if (d === effectiveNow) {
+    monthStartNote.classList.add("hidden");
+    return;
+  }
+
+  const from = new Date(data.cycleNext + "T00:00:00");
+  monthStartNote.textContent =
+    `Applies from ${from.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" })}. ` +
+    `This month is unchanged.`;
+  monthStartNote.classList.remove("hidden");
+}
+
+renderMonthStartNote();
+
+if (monthStartSelect) {
+  for (let d = 1; d <= 31; d++) {
+    const opt = document.createElement("option");
+    opt.value = String(d);
+    opt.textContent = ordinal(d);
+    monthStartSelect.appendChild(opt);
+  }
+  monthStartSelect.value = String(settings.monthStartDay);
+
+  monthStartSelect.addEventListener("change", () => {
+    const chosen = Number(monthStartSelect.value);
+    const effective = startDayTakesEffect(chosen);
+
+    settings.monthStartDay = chosen;
+    saveSettings();
+
+    /* The cycle on screen keeps the start date it was created with; only the
+       date it ends on moves. That is the whole reason cycleStart is stored
+       rather than recomputed - the month being looked at can never be
+       re-cut underneath the user. */
+    data.cycleNext = effective;
+    saveData();
+
+    renderMonthLabel();
+    renderMonthStartNote();
+  });
+}
+
 /* Carry balance forward. Takes effect at the NEXT rollover - switching it off
    does not claw back money already carried into the month on screen, which
    would delete a balance the user can see. */
@@ -2486,6 +2670,18 @@ function buildHistoryRow(key) {
   const walletItemCount = Object.values(d.walletData || {}).reduce((n, wd) => n + (wd.items || []).length, 0);
   const counts = `${(d.priority || []).length} bills · ${walletItemCount} wallet items · ${(d.secondChoice || []).length} transactions`;
 
+  /* The days this month actually covered. Read from the record's own
+     cycleStart/cycleNext rather than recomputed from the current setting, so
+     history keeps telling the truth about months that ran on a different
+     start day - including the odd-length one produced when the day changes.
+
+     Absent on months archived before cycles existed; those all ran 1st to
+     1st, and the month name already says so, so the line is simply omitted
+     rather than guessing a span. */
+  const spanLine = d.cycleStart && d.cycleNext
+    ? `<span class="history-meta">${esc(dayRangeLabel(d.cycleStart, d.cycleNext))}</span>`
+    : "";
+
   row.innerHTML = `
     <div class="history-row-main">
       <div>
@@ -2501,6 +2697,7 @@ function buildHistoryRow(key) {
       ${detailRows || '<span class="history-sub">No spending recorded.</span>'}
       ${inWalletsRow}
       ${remainingRow}
+      ${spanLine}
       <span class="history-meta">${counts}</span>
     </div>
   `;
