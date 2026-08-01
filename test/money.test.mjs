@@ -618,6 +618,33 @@ test("carry-over alone makes a month real and lands in main", () => {
 });
 
 /* A genuinely empty month must still report null, not zero-with-carry-over. */
+/* REGRESSION: the secret reset left the money behind.
+
+   resetData() in app.js clears the month field by field, and when carryOver
+   was added it was not added to that list. The month emptied but
+   mainRemaining stayed at 0 + carryOver, so the balance reappeared and the
+   reset looked like it had done nothing at all.
+
+   This pins the SHAPE resetData has to produce. It cannot call resetData
+   directly - that lives in app.js and touches the DOM - so the guard is the
+   arithmetic: a month still carrying a balance is NOT empty, and only becomes
+   empty once carryOver is cleared as well. Any field added to a month in
+   future must be cleared in resetData or this contract breaks again. */
+test("REGRESSION: a reset month must clear carry-over too, or the money returns", () => {
+  const everyOtherFieldCleared = {
+    month: "2026-8", income: null, carryOver: 882,
+    priority: [], priorityLocked: false, walletData: {}, secondChoice: []
+  };
+  assert.equal(M.mainRemainingOf(everyOtherFieldCleared, []), 882,
+    "clearing every field EXCEPT carryOver leaves the balance behind - the bug");
+
+  const properlyReset = { ...everyOtherFieldCleared, carryOver: 0 };
+  assert.equal(M.monthIsUnset(properlyReset, []), true, "a properly reset month is unset");
+  assert.equal(M.mainRemainingOf(properlyReset, []), 0, "and holds nothing");
+  assert.equal(M.totalIncomeOf(properlyReset, []), null);
+  assert.ok(M.reconciles(properlyReset, []));
+});
+
 test("no income and no carry-over is still an unset month", () => {
   const d = { income: null, carryOver: 0, priority: [], secondChoice: [], walletData: {} };
   assert.equal(M.monthIsUnset(d), true);

@@ -2610,10 +2610,22 @@ confirmArchiveDeleteBtn.addEventListener("click", () => {
    SECRET RESET (DOUBLE CLICK HEADER)
 ========================= */
 
-// Resets data in place to avoid stale object references
+/* Resets data in place to avoid stale object references.
+
+   EVERY field of the month has to be cleared here. Anything left behind
+   survives the reset and reappears, which is exactly what happened when
+   carryOver was added and this function was not updated: the month emptied
+   but mainRemaining stayed at 0 + carryOver, so the balance came straight
+   back and reset looked broken.
+
+   carryOver is set to 0 rather than deleted on purpose. The back-fill
+   migration treats an ABSENT carryOver as "not yet done" and would helpfully
+   restore last month's balance on the next load - undoing the reset. Writing
+   a real 0 marks the month as handled and makes the reset stick. */
 function resetData() {
   data.month = currentMonthKey;
   data.income = null;
+  data.carryOver = 0;
   data.priority = [];
   data.priorityLocked = false;
   data.walletData = {};
