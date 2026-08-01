@@ -133,14 +133,16 @@
             </div>
             <div id="wallets-settings-list" class="wallets-settings-list"></div>
             <button id="add-wallet-btn" class="setting-btn-action">+ Add Wallet</button>
-            <div class="setting-row" style="margin-top:10px;">
+            <!-- Inline margin removed: the ~ combinator in style.css now
+                 spaces this correctly even with the Add Wallet button above. -->
+            <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
             <div class="setting-row">
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.18.0</div>
+            <div class="setting-version">v1.18.1</div>
           </div>
         </section>
       </div>

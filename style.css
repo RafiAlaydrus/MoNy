@@ -151,7 +151,18 @@ input[type="checkbox"] {
   color: #ccc;
 }
 
-.setting-row + .setting-row {
+/* Every settings row after the first is spaced from the one above.
+
+   The general sibling combinator (~), not the adjacent one (+). Rows are not
+   always directly adjacent - a note, a wallet list, or a button can sit
+   between two of them - and with + the spacing silently vanishes the moment
+   anything is inserted, leaving two rows touching. That happened twice: once
+   to the Add Wallet button, patched over with an inline margin, and again to
+   the "Month starts" note.
+
+   ~ matches any later row that has a row before it, so spacing survives
+   whatever gets added between. */
+.setting-row ~ .setting-row {
   margin-top: 10px;
 }
 
