@@ -592,21 +592,25 @@ renderMonthLabel();
    INCOME (WORKING)
 ========================= */
 
-/* Renders the income display.
+/* Renders the income display: everything available to spend this month,
+   carried balance included.
 
-   Shows what was EARNED this month, with carry-over subtracted back out.
-   totalIncomeOf has to include carried money - the invariant needs every
-   spendable ringgit on that side of the equation - but the card would then
-   read "Total income RM 1,096" on the 1st of a month when nothing had been
-   earned at all, which is not true. The carried amount gets its own
-   "Brought forward" line under Remaining instead.
+   This shows totalIncomeOf unmodified, which is the same figure the donut
+   divides up and the spend bar measures against. An earlier version
+   subtracted the carried amount back out so the card meant "earned this
+   month", but that made the top of the screen contradict itself - the chart
+   apportioning 1,095.97 directly beneath a card reading 0.00. One number,
+   one meaning.
 
-   Same principle as refusing to count a reimbursement as income: money you
-   already had is not money you made. */
+   Where the carried part came from is answered in the histories, which open
+   with a "Brought forward" row, rather than by making this figure mean
+   something different from every other total on screen.
+
+   Tapping the card still edits only the typed income - the carried amount and
+   any Second choice earnings are added on top and are not editable here. */
 function renderIncome() {
   const total = totalIncomeOf(data, allWallets());
-  const earned = total === null ? null : total - carryOverOf(data);
-  incomeDisplay.textContent = earned !== null ? `${cur()} ${fmt(earned)}` : `${cur()} 0`;
+  incomeDisplay.textContent = total !== null ? `${cur()} ${fmt(total)}` : `${cur()} 0`;
 }
 
 incomeCard.addEventListener("click", () => {
