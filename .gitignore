@@ -4,3 +4,6 @@ node_modules/
 
 # macOS Finder metadata
 .DS_Store
+
+# Local-only project reference. Never published to the public repo.
+PROGRESS.md
