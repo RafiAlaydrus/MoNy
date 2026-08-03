@@ -489,6 +489,31 @@ test("the budget floor accounts for money that came back in", () => {
   assert.equal(M.walletBalanceOf({ ...wd, budget: 150 }), 0, "at the floor the balance is exactly zero");
 });
 
+/* REGRESSION: reported bug. A wallet budgeted at 208, topped up by a 174
+   wallet-to-wallet transfer (balance 382), then had 25.70 taken out of it.
+   The progress bar stayed stuck at 0% no matter how much was taken,
+   because it divided walletSpentOf (which nets the transfer-in against the
+   take, landing deeply negative) by the original budget alone. Fixed by
+   walletAllocatedOf/walletUsedOf: the denominator grows with the transfer,
+   and the numerator only counts money leaving, never inflows. */
+test("REGRESSION: a transfer-in no longer masks later spending on the bar", () => {
+  const wd = {
+    budget: 208,
+    items: [
+      { name: "top up", amount: 174, type: "in", fromId: "w2", fromName: "Fuel" },
+      { name: "snack", amount: 25.7, type: "take" }
+    ]
+  };
+  assert.equal(M.walletBalanceOf(wd), 356.3, "208 + 174 - 25.70");
+  // The old bar math: this is what used to drive the bar, and it is deeply
+  // negative even after real spending - which is the bug.
+  assert.ok(M.walletSpentOf(wd) < 0, "walletSpentOf alone is misleading here");
+  assert.equal(M.walletAllocatedOf(wd), 382, "208 budget + 174 transferred in");
+  assert.equal(M.walletUsedOf(wd), 25.7, "only the take counts as used");
+  const pct = (M.walletUsedOf(wd) / M.walletAllocatedOf(wd)) * 100;
+  assert.ok(pct > 0, "the bar must move once money has actually been taken");
+});
+
 /* Nothing committed, no floor - the guard must not restrict a wallet that has
    never been used. */
 test("an untouched wallet can have its budget lowered freely", () => {

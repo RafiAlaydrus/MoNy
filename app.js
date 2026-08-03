@@ -1056,6 +1056,8 @@ function ensureWalletData(id) {
 // agree on the arithmetic
 function getWalletBalance(id) { return walletBalanceOf(ensureWalletData(id)); }
 function getWalletSpent(id) { return walletSpentOf(ensureWalletData(id)); }
+function getWalletAllocated(id) { return walletAllocatedOf(ensureWalletData(id)); }
+function getWalletUsed(id) { return walletUsedOf(ensureWalletData(id)); }
 
 // Resolves a transfer counterparty's current name, falling back to the stored one
 function transferPartyName(id, fallback) {
@@ -1265,17 +1267,16 @@ function updateWalletBar(wallet, section) {
   const wrapper = section.querySelector("[data-role='bar-wrapper']");
   const fill = section.querySelector("[data-role='bar-fill']");
   const label = section.querySelector("[data-role='bar-label']");
-  const wd = ensureWalletData(wallet.id);
+  const allocated = getWalletAllocated(wallet.id);
 
-  if (!wd.budget || wd.budget <= 0) {
+  if (!allocated || allocated <= 0) {
     wrapper.classList.add("hidden");
     return;
   }
 
   wrapper.classList.remove("hidden");
-  const budget = Number(wd.budget);
-  const spent = getWalletSpent(wallet.id);
-  const pct = Math.min(Math.max((spent / budget) * 100, 0), 100);
+  const used = getWalletUsed(wallet.id);
+  const pct = Math.min(Math.max((used / allocated) * 100, 0), 100);
 
   fill.style.width = `${pct}%`;
   label.textContent = `${Math.round(pct)}% spent`;

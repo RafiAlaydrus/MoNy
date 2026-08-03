@@ -217,11 +217,41 @@
     }, Number(wd.budget) || 0);
   }
 
-  // Net outflow from a wallet, used for its progress bar.
+  // Net outflow from a wallet: outflows minus inflows. Kept for backward
+  // compatibility; the progress bar uses walletAllocatedOf/walletUsedOf
+  // instead (see the note on walletAllocatedOf for why).
   function walletSpentOf(wd) {
     if (!wd) return 0;
     return (wd.items || []).reduce((sum, i) => {
       return sum + (isWalletInflow(i) ? -Number(i.amount) : Number(i.amount));
+    }, 0);
+  }
+
+  // Every cent ever put into a wallet: its budget plus every inflow item
+  // (add + in). This is the progress bar's denominator - unlike wd.budget
+  // alone, it grows when a wallet-to-wallet transfer tops the wallet up, so
+  // a wallet funded partly or wholly by transfers still gets a meaningful
+  // percentage instead of dividing by a budget that never reflected that
+  // money.
+  function walletAllocatedOf(wd) {
+    if (!wd) return 0;
+    return (wd.items || []).reduce((sum, i) => {
+      return sum + (isWalletInflow(i) ? Number(i.amount) : 0);
+    }, Number(wd.budget) || 0);
+  }
+
+  // Every cent that has left a wallet for any reason - taken and spent, or
+  // transferred out. This is the progress bar's numerator. Using this
+  // instead of walletSpentOf matters once a wallet has received a transfer:
+  // walletSpentOf nets outflows against inflows, so a wallet topped up by a
+  // large transfer looks like it has "negative" spending and its bar gets
+  // stuck at 0% no matter how much is later taken out. walletUsedOf only
+  // counts money leaving, so balance always equals
+  // walletAllocatedOf(wd) - walletUsedOf(wd).
+  function walletUsedOf(wd) {
+    if (!wd) return 0;
+    return (wd.items || []).reduce((sum, i) => {
+      return sum + (isWalletInflow(i) ? 0 : Number(i.amount));
     }, 0);
   }
 
@@ -413,6 +443,8 @@
     walletsCovering,
     walletBalanceOf,
     walletSpentOf,
+    walletAllocatedOf,
+    walletUsedOf,
     walletTakenOf,
     totalIncomeOf,
     mainRemainingOf,
