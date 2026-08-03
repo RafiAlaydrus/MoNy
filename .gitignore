@@ -7,3 +7,4 @@ node_modules/
 
 # Local-only project reference. Never published to the public repo.
 PROGRESS.md
+CLAUDE.md
