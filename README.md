@@ -11,7 +11,7 @@ your own phone.
 ## Table of contents
 
 1. [What this app does](#what-this-app-does)
-2. [How to use it on your phone — no install needed](#how-to-use-it-on-your-phone--no-install-needed)
+2. [How to use it on your phone — no app store needed](#how-to-use-it-on-your-phone--no-app-store-needed)
 3. [The four places your money lives](#the-four-places-your-money-lives)
 4. [Full feature list](#full-feature-list)
 5. [Getting started — first month](#getting-started--first-month)
@@ -51,23 +51,43 @@ across every month you've tracked.
 
 ---
 
-## How to use it on your phone — no install needed
+## How to use it on your phone — no app store needed
 
-You do **not** need to install anything, create an account, or download
-anything from an app store. MoNy is just a webpage that happens to work like
-an app.
+You do **not** need an account, and you won't find MoNy on the App Store or
+Play Store — it isn't distributed that way. Instead, you add it to your home
+screen straight from your browser, and it behaves just like a normal app
+from then on: its own icon, full-screen, no address bar, works offline.
+This takes under a minute and there's nothing to download or approve.
 
-1. Open your phone's browser (Safari on iPhone, Chrome on Android).
+### On iPhone (Safari)
+
+1. Open **Safari** (this only works from Safari, not Chrome, on iPhone).
 2. Go to **https://rafialaydrus.github.io/MoNy/**
-3. Start using it right away.
+3. Tap the **Share** icon (the square with an arrow pointing up), found in
+   the bottom toolbar.
+4. Scroll down and tap **"Add to Home Screen"**.
+5. Tap **Add** in the top-right corner.
 
-That's it. Everything you type is saved automatically to that browser, on
-that phone, and will still be there the next time you open the page — even
-if you close the tab, lock your phone, or turn it off. It works offline
-after the first visit, too, so you can log an expense with no signal.
+MoNy now sits on your home screen with its own icon. Tap it any time — it
+opens full-screen, like any other app, with no browser bar.
 
-**A few things to know when using it straight from the browser (not
-installed):**
+### On Android (Chrome)
+
+1. Open **Chrome**.
+2. Go to **https://rafialaydrus.github.io/MoNy/**
+3. Tap the **⋮ menu** (three dots, top-right).
+4. Tap **"Install app"** (or **"Add to Home screen"**, depending on your
+   Chrome version).
+5. Confirm by tapping **Install** / **Add**.
+
+MoNy is now installed like a regular app, with its own icon in your app
+drawer and on your home screen.
+
+### If you'd rather just use it in the browser
+
+That works too — nothing above is required. Just open the link in your
+phone's browser and use it as a normal webpage; everything is saved
+automatically. A few things to know if you go this route:
 
 - **Use the same browser every time.** Your data lives inside that one
   browser app (e.g. Safari). If you open the link in a different browser
@@ -81,13 +101,17 @@ installed):**
 - **Bookmark the page** so you can get back to it quickly without retyping
   the address. On iPhone: tap the Share icon → "Add Bookmark". On Android:
   tap the ⋮ menu → "Add bookmark" or "Add to bookmarks".
-- If you'd rather have it feel like a real app (its own icon, full-screen, no
-  browser bar) later, your browser's "Add to Home Screen" option does that —
-  but it is entirely optional. Everything above works fine without it.
+
+### Either way
+
+- Everything you type is saved automatically, on that phone, and will still
+  be there the next time you open it — even if you close it, lock your
+  phone, or turn it off. It works fully offline after the first load, so you
+  can log an expense with no signal.
 - **Back up your data occasionally** (see [Backing up and moving your
   data](#backing-up-and-moving-your-data)) — since everything lives only on
-  this one phone in this one browser, a lost phone means lost data unless
-  you've exported a backup.
+  this one phone, a lost phone means lost data unless you've exported a
+  backup.
 
 ---
 
@@ -355,9 +379,11 @@ worth backing it up now and then, and definitely before you get a new phone.
 
 ## FAQ
 
-**Do I need to install anything?**
-No. Just open the link in your phone's browser and start using it. See
-[How to use it on your phone](#how-to-use-it-on-your-phone--no-install-needed).
+**Do I need to install anything from an app store?**
+No — MoNy isn't on the App Store or Play Store. Adding it to your home
+screen from your browser (recommended) or just using it as a webpage both
+work with nothing to download or approve. See
+[How to use it on your phone](#how-to-use-it-on-your-phone--no-app-store-needed).
 
 **Will I lose my data if I close the tab or turn off my phone?**
 No — it's saved automatically as you go. It will still be there next time
