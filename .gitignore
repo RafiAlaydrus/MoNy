@@ -1,0 +1,6 @@
+# Test-only dependency tree. The shipped app has no dependencies at all -
+# nothing in here is served, and GitHub Pages never sees it.
+node_modules/
+
+# macOS Finder metadata
+.DS_Store

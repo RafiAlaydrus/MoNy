@@ -44,7 +44,43 @@ const now = new Date();
 const todayStr =
   `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-let settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {
+/* Reads a stored key, surviving a corrupt one.
+ *
+ * Every load used to be a bare JSON.parse. One malformed byte - a write
+ * interrupted by a full disk, a browser bug, a hand-edited value - threw
+ * before a single pixel rendered, and the app died to a blank screen with the
+ * user's data sitting intact but unreachable.
+ *
+ * A corrupt value is now kept, not overwritten: it is moved aside under a
+ * `-corrupt` key so it can still be recovered by hand, and the app carries on
+ * with the fallback. Overwriting would destroy the only copy of whatever was
+ * in there.
+ *
+ * The names of the damaged keys are collected so the UI can say what happened
+ * rather than silently pretending the data never existed. */
+const corruptKeys = [];
+
+function load(key, fallback) {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    // `null` parses fine but is not a usable object; treat it as absent.
+    return parsed === null ? fallback : parsed;
+  } catch (err) {
+    console.error(`Corrupt storage in ${key} - set aside, continuing without it`, err);
+    corruptKeys.push(key);
+    try {
+      localStorage.setItem(`${key}-corrupt`, raw);
+    } catch (_) {
+      /* Quota is likely why it broke in the first place. Nothing more to do -
+         the original is still in place under its own key either way. */
+    }
+    return fallback;
+  }
+}
+
+let settings = load(SETTINGS_KEY, null) || {
   showChart: false,
   currency: "RM",
   sortOrder: "newest",
@@ -79,7 +115,7 @@ if ("keepData" in settings) {
   saveSettings();
 }
 
-let archive = JSON.parse(localStorage.getItem(ARCHIVE_KEY)) || {};
+let archive = load(ARCHIVE_KEY, null) || {};
 
 function genWalletId() {
   return "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -151,7 +187,7 @@ function monthHasContent(d) {
     (d.secondChoice || []).length > 0;
 }
 
-let data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+let data = load(STORAGE_KEY, null);
 
 // Migrate the old single Second Wallet into the wallets list
 if (!settings.wallets) {
@@ -194,6 +230,15 @@ if (data && !data.cycleStart) {
 
 if (!data) {
   data = freshMonthData();
+  /* Persist immediately rather than waiting for the first edit.
+
+     This matters after a corrupt read: the damaged value is still sitting
+     under the real key, since load() copies it aside rather than destroying
+     it. Leaving it there would warn the user again on every single load and
+     leave the app unsaved until they happened to change something. Writing
+     the fresh month now settles the state, and the copy under `-corrupt`
+     remains the recovery path. */
+  saveData();
 } else if (todayStr >= data.cycleNext) {
   if (monthHasContent(data)) {
     archive[data.month] = {
@@ -588,6 +633,30 @@ function renderMonthLabel() {
 
 renderMonthLabel();
 
+/* If anything was unreadable at load, say so once.
+
+   The app has already carried on with defaults, so staying silent would look
+   exactly like the data simply vanishing - and the user would have no reason
+   to suspect a recoverable copy is still there. Deferred a tick so the first
+   paint happens before the dialog blocks it. */
+if (corruptKeys.length > 0) {
+  setTimeout(() => {
+    const names = corruptKeys
+      .map(k => k.replace(BACKUP_PRIORITY_KEY, "saved priority bills")
+                 .replace(ARCHIVE_KEY, "history")
+                 .replace(SETTINGS_KEY, "settings")
+                 .replace(STORAGE_KEY, "this month"))
+      .map(n => `  - ${n}`)
+      .join("\n");
+    alert(
+      "Some saved data could not be read and has been skipped:\n\n" + names +
+      "\n\nThe app has started with the rest. The unreadable copy was kept, " +
+      "not overwritten, so nothing is lost yet - export your data before " +
+      "making changes."
+    );
+  }, 0);
+}
+
 /* =========================
    INCOME (WORKING)
 ========================= */
@@ -883,7 +952,7 @@ addPriorityBtn.addEventListener("click", () => {
 ========================= */
 
 const copyLastBtn = document.getElementById("copy-last-priority");
-const backupPriority = JSON.parse(localStorage.getItem(BACKUP_PRIORITY_KEY));
+const backupPriority = load(BACKUP_PRIORITY_KEY, null);
 
 // Shows or hides the "Copy Last Priority" button
 function updateCopyLastBtn() {
@@ -2409,17 +2478,84 @@ let pendingImport = null;
 
 // Accepts only files that really look like one of our exports, so a wrong
 // pick can't quietly replace a month with nonsense.
+/* Import is the only place arbitrary data enters the app, so it is the only
+   place that has to distrust what it is given.
+ *
+ * The month KEY matters as much as the contents. `data.month` is split and
+ * parsed by the cycle migration, and a missing or malformed one produces a
+ * cycleStart of "NaN-NaN-01" - a state no migration can repair, because every
+ * later run reads it as already migrated. Rejecting it here is the only
+ * chance to stop that.
+ *
+ * Anything checked here is checked because getting it wrong corrupts the books
+ * or wedges the app, not merely because it looks untidy. Optional fields that
+ * the app can safely default are left alone - carryOver and carryIn are
+ * normalised by carryOverOf/carryInOf, and a missing cycleStart is filled in
+ * by the migration, so none of those need to be present. */
+const MONTH_KEY_RE = /^\d{4}-([1-9]|1[0-2])$/;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 function validateImport(obj) {
   if (!obj || typeof obj !== "object") return "That file isn't valid JSON data.";
+
   const d = obj.data;
-  if (!d || typeof d !== "object") return "That file has no month data in it.";
+  if (!d || typeof d !== "object" || Array.isArray(d)) return "That file has no month data in it.";
+
+  // The key the whole archive and every migration is addressed by.
+  if (!("month" in d)) return "That file's month is missing.";
+  if (!MONTH_KEY_RE.test(String(d.month))) {
+    return `That file's month ("${d.month}") isn't a valid month like 2026-8.`;
+  }
+
   if (!("income" in d)) return "That file is missing the income field.";
+  if (d.income !== null && !Number.isFinite(Number(d.income))) {
+    return "That file's income isn't a number.";
+  }
+
   if (!Array.isArray(d.priority)) return "That file is missing the priority bills list.";
   if (!Array.isArray(d.secondChoice)) return "That file is missing the Second choice list.";
-  if (d.walletData && typeof d.walletData !== "object") return "That file's wallet data is malformed.";
-  if (obj.settings && typeof obj.settings !== "object") return "That file's settings are malformed.";
-  if (obj.archive && typeof obj.archive !== "object") return "That file's history is malformed.";
-  if (obj.priorityBackup && !Array.isArray(obj.priorityBackup)) return "That file's saved priority bills are malformed.";
+  if (d.walletData && (typeof d.walletData !== "object" || Array.isArray(d.walletData))) {
+    return "That file's wallet data is malformed.";
+  }
+
+  /* Cycle dates are optional - a file from before v1.18.0 has none, and the
+     migration fills them in. But a PRESENT one has to be usable, because the
+     rollover compares against it as a string and a malformed value would
+     either never fire or fire immediately. */
+  for (const field of ["cycleStart", "cycleNext"]) {
+    if (d[field] !== undefined && !ISO_DATE_RE.test(String(d[field]))) {
+      return `That file's ${field} isn't a valid date like 2026-08-01.`;
+    }
+  }
+  if (d.cycleStart && d.cycleNext && d.cycleNext <= d.cycleStart) {
+    return "That file's month ends before it starts.";
+  }
+
+  if (obj.settings && (typeof obj.settings !== "object" || Array.isArray(obj.settings))) {
+    return "That file's settings are malformed.";
+  }
+  if (obj.settings && obj.settings.wallets !== undefined && !Array.isArray(obj.settings.wallets)) {
+    return "That file's wallet list is malformed.";
+  }
+
+  if (obj.archive && (typeof obj.archive !== "object" || Array.isArray(obj.archive))) {
+    return "That file's history is malformed.";
+  }
+  /* Every archive key is fed to monthLabel and the chronological sort. One bad
+     key renders as "Invalid Date" and sorts unpredictably. */
+  if (obj.archive) {
+    const badKey = Object.keys(obj.archive).find(k => !MONTH_KEY_RE.test(k));
+    if (badKey !== undefined) return `That file's history has an invalid month ("${badKey}").`;
+    const badEntry = Object.keys(obj.archive).find(k => {
+      const e = obj.archive[k];
+      return !e || typeof e !== "object" || !e.data || typeof e.data !== "object";
+    });
+    if (badEntry !== undefined) return `That file's history entry for ${badEntry} is malformed.`;
+  }
+
+  if (obj.priorityBackup && !Array.isArray(obj.priorityBackup)) {
+    return "That file's saved priority bills are malformed.";
+  }
   return null;
 }
 
@@ -2521,7 +2657,7 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
     data,
     settings,
     archive,
-    priorityBackup: JSON.parse(localStorage.getItem(BACKUP_PRIORITY_KEY)) || []
+    priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
   };
   const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
