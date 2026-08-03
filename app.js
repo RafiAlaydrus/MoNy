@@ -715,6 +715,57 @@ incomeInput.addEventListener("keydown", (e) => {
 ========================= */
 
 // Builds a single priority bill list item
+/* Loads a priority bill into the form above the list.
+
+   Only while the list is unlocked. The lock exists precisely to freeze the
+   month's bills, so allowing an edit through it would defeat it - and the
+   form is hidden in that state anyway. `paid` is untouched: editing a bill is
+   not the same as ticking it. */
+function editPriorityBill(bill) {
+  if (data.priorityLocked || !isEditable(bill)) return;
+  cancelEdit();
+
+  const pbName = document.getElementById("pb-name");
+  const pbCategory = document.getElementById("pb-category");
+  const pbAmount = document.getElementById("pb-amount");
+  const root = document.getElementById("priority-form");
+
+  pbName.value = bill.name;
+  pbCategory.value = bill.category;
+  pbAmount.value = bill.amount;
+
+  editing = {
+    item: bill, root,
+    clear() { pbName.value = ""; pbCategory.selectedIndex = 0; pbAmount.value = ""; },
+    save() {
+      const name = pbName.value.trim();
+      const category = pbCategory.value;
+      const amount = Number(pbAmount.value);
+      const fields = [
+        { el: pbName, valid: !!name },
+        { el: pbCategory, valid: !!category },
+        { el: pbAmount, valid: isValidAmount(amount) }
+      ];
+      let bad = false;
+      fields.forEach(f => {
+        if (!f.valid) { f.el.classList.add("input-error"); bad = true; }
+        else f.el.classList.remove("input-error");
+      });
+      if (bad) return false;
+
+      bill.name = name;
+      bill.category = category;
+      bill.amount = amount;
+      saveData();
+      renderPriority();
+      calculateRemaining();
+      return true;
+    }
+  };
+  setFormEditing(root, true);
+  pbName.focus();
+}
+
 function buildPriorityItem(bill) {
   const wrapper = document.createElement("div");
   wrapper.className = "swipe-wrapper";
@@ -731,6 +782,11 @@ function buildPriorityItem(bill) {
     </label>
     <strong>${esc(cur())} ${fmt(bill.amount)}</strong>
   `;
+
+  /* Tapping the row opens it for editing. The checkbox and its label own their
+     own clicks - makeRowEditable ignores anything originating in a control -
+     so ticking a bill never opens the form. */
+  makeRowEditable(li, bill, () => editPriorityBill(bill));
 
   const checkbox = li.querySelector("input");
   checkbox.addEventListener("change", (e) => {
@@ -765,6 +821,7 @@ function buildPriorityItem(bill) {
       // stale after any earlier deletion and remove the wrong bill.
       const index = data.priority.indexOf(bill);
       if (index === -1) return;
+      cancelEditIfEditing(bill);
       data.priority.splice(index, 1);
 
       renderPriority();
@@ -909,6 +966,12 @@ confirmPriorityBtn.addEventListener("click", () => {
 addPriorityBtn.addEventListener("click", () => {
   if (data.priorityLocked) return;
 
+  // While editing, the primary button saves rather than adding a second bill.
+  if (editing && editing.root === document.getElementById("priority-form")) {
+    if (editing.save()) cancelEdit();
+    return;
+  }
+
   const pbName = document.getElementById("pb-name");
   const pbCategory = document.getElementById("pb-category");
   const pbAmount = document.getElementById("pb-amount");
@@ -1038,6 +1101,7 @@ function restoreSnapshot(snapshot) {
 
 // Deletes one wallet transaction (plus the other half if it was a transfer)
 function deleteWalletItem(wallet, item, tbody, section) {
+  cancelEditIfEditing(item);
   const wd = ensureWalletData(wallet.id);
   const index = wd.items.indexOf(item);
   if (index === -1) return;
@@ -1107,6 +1171,9 @@ function buildWalletItemRow(item, wallet, tbody, section) {
 
   if (wallet) {
     makeRowDeletable(row, () => deleteWalletItem(wallet, item, tbody, section));
+    /* The section owns the form this row edits in, so the handler is attached
+       there and reached through the section rather than from here. */
+    if (section && section._editItem) makeRowEditable(row, item, () => section._editItem(item));
   }
   return row;
 }
@@ -1121,6 +1188,10 @@ function makeRowDeletable(row, onDelete) {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     dx = 0; active = true; decided = false;
+    /* Reset on every touch so tap-to-edit can tell a tap from the tail of a
+       drag. Read by makeRowEditable, which ignores a click that followed any
+       real movement. */
+    row._swipeMoved = false;
     row.style.transition = "none";
   }, { passive: true });
 
@@ -1128,6 +1199,7 @@ function makeRowDeletable(row, onDelete) {
     if (!active) return;
     const mx = e.touches[0].clientX - startX;
     const my = e.touches[0].clientY - startY;
+    if (Math.abs(mx) > 6 || Math.abs(my) > 6) row._swipeMoved = true;
     if (!decided) {
       if (Math.abs(my) > Math.abs(mx) && Math.abs(my) > 8) { active = false; return; }
       if (Math.abs(mx) > 8) decided = true;
@@ -1253,10 +1325,11 @@ function buildWalletSection(wallet) {
         <span class="date-placeholder">Date (Optional)</span>
       </div>
       <div class="actions">
-        <button data-role="add-btn" aria-label="Add money to ${esc(wallet.name)}">+ Add</button>
-        <button data-role="take-btn" aria-label="Take money from ${esc(wallet.name)}">- Take</button>
+        <button data-role="add-btn" data-edit="primary" aria-label="Add money to ${esc(wallet.name)}">+ Add</button>
+        <button data-role="take-btn" data-edit="hide-while-editing" aria-label="Take money from ${esc(wallet.name)}">- Take</button>
+        <button data-role="cancel-edit" data-edit="cancel" class="hidden" aria-label="Cancel editing this item">Cancel</button>
       </div>
-      <button data-role="transfer-btn" class="transfer-btn" aria-label="Transfer money from ${esc(wallet.name)}">Transfer</button>
+      <button data-role="transfer-btn" data-edit="hide-while-editing" class="transfer-btn" aria-label="Transfer money from ${esc(wallet.name)}">Transfer</button>
     </div>
     <table>
       <thead><tr><th>Item</th><th>Date</th><th>Amount</th></tr></thead>
@@ -1410,7 +1483,73 @@ function buildWalletSection(wallet) {
     commitItem(type, name, amount, dateValue, false);
   }
 
-  section.querySelector("[data-role='add-btn']").addEventListener("click", () => addItem("add"));
+  /* Loads a wallet item into this section's own form. Each wallet has its own
+     form, so the edit is scoped to the section the row belongs to. */
+  function editItem(item) {
+    if (!isEditable(item)) return;
+    cancelEdit();
+
+    const form = section.querySelector(".wallet-form");
+    nameInput.value = item.name;
+    amountInput.value = item.amount;
+    dateInput.value = dateInputValue(item.date);
+    dateInput.classList.toggle("is-empty", !dateInput.value);
+
+    editing = {
+      item, root: form,
+      clear() {
+        nameInput.value = ""; amountInput.value = "";
+        dateInput.value = ""; dateInput.classList.add("is-empty");
+      },
+      save() {
+        const name = nameInput.value.trim();
+        const amount = Number(amountInput.value);
+        const fields = [
+          { el: nameInput, valid: !!name },
+          { el: amountInput, valid: isValidAmount(amount) }
+        ];
+        let bad = false;
+        fields.forEach(f => {
+          if (!f.valid) { f.el.classList.add("input-error"); bad = true; }
+          else f.el.classList.remove("input-error");
+        });
+        if (bad) return false;
+
+        /* The take cap has to be re-checked against the balance WITHOUT this
+           item, otherwise its own current amount counts against the headroom
+           and an unchanged edit would be rejected. */
+        if (item.type === "take") {
+          const balanceExcludingThis = getWalletBalance(wallet.id) + Number(item.amount);
+          if (amount > balanceExcludingThis) {
+            amountInput.classList.add("input-error");
+            return false;
+          }
+        }
+
+        item.name = name;
+        item.amount = amount;
+        item.date = resolveDate(dateInput.value);
+        saveData();
+        renderWallets();
+        calculateRemaining();
+        return true;
+      }
+    };
+    setFormEditing(form, true);
+    nameInput.focus();
+  }
+
+  section._editItem = editItem;
+  section.querySelector("[data-role='cancel-edit']").addEventListener("click", cancelEdit);
+
+  section.querySelector("[data-role='add-btn']").addEventListener("click", () => {
+    const form = section.querySelector(".wallet-form");
+    if (editing && editing.root === form) {
+      if (editing.save()) cancelEdit();
+      return;
+    }
+    addItem("add");
+  });
   section.querySelector("[data-role='take-btn']").addEventListener("click", () => addItem("take"));
   section.querySelector("[data-role='transfer-btn']").addEventListener("click", () => {
     const name = nameInput.value.trim();
@@ -1598,6 +1737,7 @@ cancelOverspendBtn.addEventListener("click", () => {
 
 // Deletes one Second choice entry (plus the wallet half if it was a transfer)
 function deleteSecondChoiceItem(item) {
+  cancelEditIfEditing(item);
   const index = data.secondChoice.indexOf(item);
   if (index === -1) return;
 
@@ -1618,6 +1758,27 @@ function deleteSecondChoiceItem(item) {
 }
 
 // Builds a single second choice table row
+/* Makes a row open in its form when tapped.
+
+   Rows already carry swipe-to-delete and a double-click delete fallback, so
+   this has to distinguish a tap from the end of a drag. makeRowDeletable
+   records how far the finger travelled on `_swipeMoved`; anything that moved
+   is a gesture, not a tap.
+
+   A row with no editable entry behind it - a transfer half, a carried-forward
+   line - simply does not get the handler, so it stays inert rather than
+   opening a form that could not save. */
+function makeRowEditable(row, item, onEdit) {
+  if (!isEditable(item)) return;
+  row.classList.add("row-editable");
+  row.addEventListener("click", (e) => {
+    if (row._swipeMoved) return;
+    // The checkbox on a priority row owns its own click.
+    if (e.target.closest("input, button, a")) return;
+    onEdit();
+  });
+}
+
 function buildSecondChoiceRow(item) {
   const row = document.createElement("tr");
   const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
@@ -1634,6 +1795,7 @@ function buildSecondChoiceRow(item) {
     <td>${item.type === "add" ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
   makeRowDeletable(row, () => deleteSecondChoiceItem(item));
+  makeRowEditable(row, item, () => editSecondChoice(item));
   return row;
 }
 
@@ -1670,6 +1832,80 @@ function renderSecondChoice() {
 
 // Validates the Second choice form, marking any bad fields. Returns the
 // values when they are all usable.
+/* =========================
+   EDITING AN ENTRY
+========================= */
+
+/* What is currently being edited, or null.
+
+   `item` is the stored object itself, not an index. Positions shift when
+   anything earlier is deleted - the same trap that once made priority deletion
+   remove the wrong bill - so the entry is held by identity and written to in
+   place, which also keeps it where it is in the list.
+
+   Editing reuses the form that created the entry rather than adding a second
+   one, so there is exactly one place that knows how to validate a bill, a
+   wallet item, or a Second choice row. */
+let editing = null;
+
+/* Not everything in a table is editable.
+
+   A transfer half cannot be: its amount is mirrored in a twin sharing a txId,
+   and changing one without the other would create or destroy money - while
+   changing both could drive the destination wallet negative, a state the app
+   has no way to show. Deleting a transfer already removes both halves
+   atomically, so delete-and-redo stays the way to change one.
+
+   A carried-forward row cannot be either: there is no transaction behind it. */
+function isEditable(item) {
+  return !!item && !item.txId && !isTransferEntry(item);
+}
+
+// Formats a stored timestamp for a date input, which needs exactly YYYY-MM-DD.
+function dateInputValue(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/* Puts a form into edit mode: primary button becomes Save, everything else
+   that would create a NEW entry is hidden so there is no way to add one while
+   an edit is open, and a Cancel appears. */
+function setFormEditing(root, on, saveLabel = "Save changes") {
+  const primary = root.querySelector("[data-edit='primary']");
+  const others = root.querySelectorAll("[data-edit='hide-while-editing']");
+  const cancel = root.querySelector("[data-edit='cancel']");
+
+  if (primary) {
+    if (on) {
+      if (primary.dataset.originalLabel === undefined) primary.dataset.originalLabel = primary.textContent;
+      primary.textContent = saveLabel;
+    } else if (primary.dataset.originalLabel !== undefined) {
+      primary.textContent = primary.dataset.originalLabel;
+    }
+  }
+  others.forEach(el => el.classList.toggle("hidden", on));
+  if (cancel) cancel.classList.toggle("hidden", !on);
+  root.classList.toggle("is-editing", on);
+}
+
+// Leaves edit mode without writing anything, and clears the form.
+function cancelEdit() {
+  if (!editing) return;
+  const { root, clear } = editing;
+  editing = null;
+  if (clear) clear();
+  if (root) setFormEditing(root, false);
+}
+
+/* Called whenever an entry is deleted or the month is rebuilt. An edit whose
+   target no longer exists would otherwise write to an orphaned object on save,
+   silently doing nothing. */
+function cancelEditIfEditing(item) {
+  if (editing && editing.item === item) cancelEdit();
+}
+
 function readSecondChoiceForm() {
   const name = scName.value.trim();
   const category = scCategory.value;
@@ -1743,12 +1979,62 @@ const cancelSourceBtn = document.getElementById("cancel-source");
 
 // Asks whether an addition is income or money returning, because a repayment
 // should raise what you have left without inflating what you earned.
+/* Loads a Second choice entry into the form above it.
+
+   The type is deliberately NOT changeable here: an add and a take are
+   different transactions, and flipping one into the other silently would move
+   money in a direction the user never asked for. Same for newMoney - a
+   reimbursement stays a reimbursement, and the question is not re-asked. */
+function editSecondChoice(item) {
+  if (!isEditable(item)) return;
+  cancelEdit();
+
+  scName.value = item.name;
+  scCategory.value = item.category;
+  scAmount.value = item.amount;
+  scDate.value = dateInputValue(item.date);
+  scDate.classList.toggle("is-empty", !scDate.value);
+
+  const root = document.getElementById("second-choice-form");
+  editing = {
+    item, root,
+    clear() {
+      scName.value = ""; scCategory.selectedIndex = 0;
+      scAmount.value = ""; scDate.value = ""; scDate.classList.add("is-empty");
+    },
+    save() {
+      const form = readSecondChoiceForm();
+      if (!form) return false;
+      /* Written in place so the entry keeps its position in the list and its
+         identity - deletion resolves rows by object, not index. */
+      item.name = form.name;
+      item.category = form.category;
+      item.amount = form.amount;
+      item.date = resolveDate(scDate.value);
+      saveData();
+      renderSecondChoice();
+      calculateRemaining();
+      return true;
+    }
+  };
+  setFormEditing(root, true);
+  scName.focus();
+}
+
 addMoneyBtn.addEventListener("click", () => {
+  // While editing, the primary button saves rather than creating a new entry.
+  if (editing && editing.root === document.getElementById("second-choice-form")) {
+    if (editing.save()) cancelEdit();
+    return;
+  }
   const form = readSecondChoiceForm();
   if (!form) return;
   sourceSummary.textContent = `Adding ${cur()} ${fmt(form.amount)} - is this new money, or money coming back to you?`;
   sourceModal.classList.remove("hidden");
 });
+
+document.getElementById("cancel-sc-edit").addEventListener("click", cancelEdit);
+document.getElementById("cancel-priority-edit").addEventListener("click", cancelEdit);
 
 sourceNewBtn.addEventListener("click", () => {
   sourceModal.classList.add("hidden");

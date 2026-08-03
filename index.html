@@ -142,7 +142,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.20.0</div>
+            <div class="setting-version">v1.21.0</div>
           </div>
         </section>
       </div>
@@ -245,9 +245,14 @@
 
         <!-- Filled button = primary action, outlined = secondary. The app is
              greyscale, so shape carries the emphasis instead of colour. -->
+        <!-- data-edit marks each button's role while an entry is being edited:
+             the primary becomes "Save changes", anything that would create a
+             NEW entry is hidden so one cannot be added mid-edit, and Cancel
+             appears. -->
         <div class="actions">
-          <button id="add-priority" aria-label="Add priority bill">Add Priority Bill</button>
-          <button id="save-priority" aria-label="Save and lock priority bills">Save Priority</button>
+          <button id="add-priority" data-edit="primary" aria-label="Add priority bill">Add Priority Bill</button>
+          <button id="save-priority" data-edit="hide-while-editing" aria-label="Save and lock priority bills">Save Priority</button>
+          <button id="cancel-priority-edit" data-edit="cancel" class="hidden" aria-label="Cancel editing this bill">Cancel</button>
         </div>
         <!-- Only shown when a backup from last month exists, the list is
              empty, and it is not locked - see updateCopyLastBtn(). -->
@@ -265,7 +270,7 @@
     <section>
       <h3>Second choice</h3>
 
-      <div class="second-form">
+      <div class="second-form" id="second-choice-form">
         <input id="sc-name" placeholder="Name" />
         <select id="sc-category">
           <option value="" disabled selected>Category</option>
@@ -288,8 +293,9 @@
         </div>
 
         <div class="actions">
-          <button id="add-money" aria-label="Add to second choice">+ Add</button>
-          <button id="take-money" aria-label="Take from second choice">- Take</button>
+          <button id="add-money" data-edit="primary" aria-label="Add to second choice">+ Add</button>
+          <button id="take-money" data-edit="hide-while-editing" aria-label="Take from second choice">- Take</button>
+          <button id="cancel-sc-edit" data-edit="cancel" class="hidden" aria-label="Cancel editing this entry">Cancel</button>
         </div>
       </div>
 

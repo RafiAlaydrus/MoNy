@@ -1470,3 +1470,33 @@ td {
   line-height: 1.4;
   color: #777;
 }
+
+/* The Cancel that appears while editing. Styled like every other secondary
+   action - transparent with a hairline border - rather than inheriting the
+   browser's default button, which renders as a grey slab and reads as the
+   most prominent thing in the form. */
+/* Scoped through .actions deliberately. A bare [data-edit="cancel"] loses to
+   `.actions button` on specificity (0,1,0 against 0,1,1), so `border: none`
+   would win and this would render as the browser's default grey slab - the
+   most prominent thing in the form, for the least important action in it. */
+.actions button[data-edit="cancel"] {
+  background: transparent;
+  border: 1px solid #333;
+  color: #ccc;
+}
+
+/* A row that can be opened for editing. Only a cursor hint on desktop - no
+   badge or icon, because every row in these tables is editable and marking
+   them all would be noise. Transfer halves and carried-forward lines never
+   get this class, so they stay visibly inert. */
+.row-editable {
+  cursor: pointer;
+}
+
+/* The form an entry is being edited in. A left edge is enough to say "this is
+   no longer a blank form" without moving anything on the page. */
+.second-form.is-editing,
+.wallet-form.is-editing {
+  border-left: 2px solid #6f6f6f;
+  border-radius: 0 14px 14px 0;
+}

@@ -398,6 +398,246 @@ test("a pre-multi-wallet month is upgraded to walletData", () => {
 });
 
 /* ---------------------------------------------------------------------------
+   EDITING AN ENTRY
+
+   Editing writes to the stored object in place, so the entry keeps its
+   position and its identity - deletion resolves rows by object, not index.
+   These check that the books follow the edit and that the things which must
+   NOT be editable stay inert.
+--------------------------------------------------------------------------- */
+
+const dated = "2026-08-05T10:00:00.000Z";
+
+test("editing a Second choice entry updates the books", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        secondChoice: [{ name: "Lnuch", category: "Food / Drink", amount: 30, type: "take", date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+
+  assert.equal(w.__app.run("mainRemainingOf(data, allWallets())"), 970);
+
+  w.__app.run(`editSecondChoice(data.secondChoice[0])`);
+  const doc = w.document;
+  doc.getElementById("sc-name").value = "Lunch";
+  doc.getElementById("sc-amount").value = "45";
+  doc.getElementById("add-money").click();
+
+  const item = w.__app.data.secondChoice[0];
+  assert.equal(item.name, "Lunch", "the typo is fixed");
+  assert.equal(item.amount, 45);
+  assert.equal(item.type, "take", "the type is not changed by an edit");
+  assert.equal(w.__app.run("mainRemainingOf(data, allWallets())"), 955);
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+test("editing preserves the entry's date rather than moving it to today", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        secondChoice: [{ name: "Taxi", category: "Transport", amount: 20, type: "take", date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+  w.__app.run(`editSecondChoice(data.secondChoice[0])`);
+  assert.equal(w.document.getElementById("sc-date").value, "2026-08-05",
+    "the form opens on the entry's own date");
+  w.document.getElementById("sc-amount").value = "25";
+  w.document.getElementById("add-money").click();
+  assert.match(w.__app.data.secondChoice[0].date, /^2026-08-05/, "and the date survives the save");
+});
+
+test("a reimbursement stays a reimbursement through an edit", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        secondChoice: [
+          { name: "Meal", category: "Food / Drink", amount: 50, type: "take", date: dated },
+          { name: "Repaid", category: "Food / Drink", amount: 50, type: "add", newMoney: false, date: dated }
+        ] })
+    },
+    today: "2026-08-15"
+  });
+  const before = w.__app.run("totalIncomeOf(data, allWallets())");
+  w.__app.run(`editSecondChoice(data.secondChoice[1])`);
+  w.document.getElementById("sc-name").value = "Repaid by Sam";
+  w.document.getElementById("add-money").click();
+
+  const item = w.__app.data.secondChoice[1];
+  assert.equal(item.newMoney, false, "the question is not silently re-answered");
+  assert.equal(w.__app.run("totalIncomeOf(data, allWallets())"), before, "income is unchanged");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+test("an edit is rejected when the amount is invalid", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        secondChoice: [{ name: "Taxi", category: "Transport", amount: 20, type: "take", date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+  w.__app.run(`editSecondChoice(data.secondChoice[0])`);
+  w.document.getElementById("sc-amount").value = "-5";
+  w.document.getElementById("add-money").click();
+
+  assert.equal(w.__app.data.secondChoice[0].amount, 20, "the bad value is not written");
+  assert.ok(w.__app.run("editing !== null"), "and the form stays open to be corrected");
+});
+
+test("cancelling an edit leaves the entry alone", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        secondChoice: [{ name: "Taxi", category: "Transport", amount: 20, type: "take", date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+  w.__app.run(`editSecondChoice(data.secondChoice[0])`);
+  w.document.getElementById("sc-amount").value = "999";
+  w.document.getElementById("cancel-sc-edit").click();
+
+  assert.equal(w.__app.data.secondChoice[0].amount, 20, "nothing is written");
+  assert.ok(w.__app.run("editing === null"), "and edit mode ends");
+  assert.equal(w.document.getElementById("sc-amount").value, "", "the form is cleared");
+});
+
+/* A transfer's amount is mirrored in a twin sharing a txId. Editing one half
+   alone would create or destroy money, so transfers are not editable at all -
+   deletion already removes both halves atomically. */
+test("REGRESSION: a transfer half cannot be edited", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        walletData: { w0: { budget: 300, items: [
+          { name: "back", amount: 50, type: "out", toId: "main", txId: "t1", date: dated }] } },
+        secondChoice: [
+          { name: "back", category: "Transfer", amount: 50, type: "add", transfer: true, txId: "t1", date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+
+  assert.equal(w.__app.run("isEditable(data.secondChoice[0])"), false, "the main-side half");
+  assert.equal(w.__app.run("isEditable(data.walletData.w0.items[0])"), false, "and the wallet-side half");
+
+  w.__app.run(`editSecondChoice(data.secondChoice[0])`);
+  assert.ok(w.__app.run("editing === null"), "opening an edit on one does nothing");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+test("editing a wallet item updates the wallet and the books", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        walletData: { w0: { budget: 300, items: [{ name: "food", amount: 50, type: "take", date: dated }] } } })
+    },
+    today: "2026-08-15"
+  });
+  assert.equal(w.__app.run("getWalletBalance('w0')"), 250);
+
+  const section = w.document.querySelector("#wallets-container .wallet-section");
+  w.__app.run(`document.querySelector("#wallets-container .wallet-section")._editItem(data.walletData.w0.items[0])`);
+  section.querySelector("[data-role='item-amount']").value = "80";
+  section.querySelector("[data-role='add-btn']").click();
+
+  assert.equal(w.__app.data.walletData.w0.items[0].amount, 80);
+  assert.equal(w.__app.run("getWalletBalance('w0')"), 220);
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+/* The take cap has to be measured against the balance WITHOUT the item being
+   edited, or its own amount counts against the headroom and an unchanged save
+   would be refused. */
+test("a wallet take can be edited up to the full balance", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        walletData: { w0: { budget: 300, items: [{ name: "food", amount: 100, type: "take", date: dated }] } } })
+    },
+    today: "2026-08-15"
+  });
+  const section = w.document.querySelector("#wallets-container .wallet-section");
+
+  w.__app.run(`document.querySelector("#wallets-container .wallet-section")._editItem(data.walletData.w0.items[0])`);
+  section.querySelector("[data-role='item-amount']").value = "300";
+  section.querySelector("[data-role='add-btn']").click();
+  assert.equal(w.__app.data.walletData.w0.items[0].amount, 300, "the whole balance is allowed");
+  assert.equal(w.__app.run("getWalletBalance('w0')"), 0);
+
+  // Beyond it is still refused - that would drive the wallet negative.
+  w.__app.run(`document.querySelector("#wallets-container .wallet-section")._editItem(data.walletData.w0.items[0])`);
+  w.document.querySelector("#wallets-container .wallet-section [data-role='item-amount']").value = "400";
+  w.document.querySelector("#wallets-container .wallet-section [data-role='add-btn']").click();
+  assert.equal(w.__app.data.walletData.w0.items[0].amount, 300, "over the balance is refused");
+});
+
+test("editing a priority bill leaves its paid state alone", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        priority: [{ name: "Electricty", category: "Bills", amount: 200, paid: true, date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+  assert.equal(w.__app.run("mainRemainingOf(data, allWallets())"), 800);
+
+  w.__app.run(`editPriorityBill(data.priority[0])`);
+  w.document.getElementById("pb-name").value = "Electricity";
+  w.document.getElementById("pb-amount").value = "220";
+  w.document.getElementById("add-priority").click();
+
+  const bill = w.__app.data.priority[0];
+  assert.equal(bill.name, "Electricity");
+  assert.equal(bill.paid, true, "editing a bill is not the same as unticking it");
+  assert.equal(w.__app.run("mainRemainingOf(data, allWallets())"), 780);
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+/* The lock exists to freeze the month's bills. Editing through it would defeat
+   the point, and the form is hidden in that state anyway. */
+test("a locked priority list cannot be edited", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000, priorityLocked: true,
+        priority: [{ name: "Rent", category: "Bills", amount: 900, paid: false, date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+  w.__app.run(`editPriorityBill(data.priority[0])`);
+  assert.ok(w.__app.run("editing === null"), "no edit opens while locked");
+  assert.equal(w.__app.data.priority[0].name, "Rent");
+});
+
+/* An edit whose target is deleted would write to an orphaned object on save,
+   silently doing nothing. */
+test("deleting the entry being edited closes the edit", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 1000,
+        secondChoice: [{ name: "Taxi", category: "Transport", amount: 20, type: "take", date: dated }] })
+    },
+    today: "2026-08-15"
+  });
+  w.__app.run(`editSecondChoice(data.secondChoice[0])`);
+  assert.ok(w.__app.run("editing !== null"));
+  w.__app.run(`deleteSecondChoiceItem(data.secondChoice[0])`);
+  assert.ok(w.__app.run("editing === null"), "the edit is abandoned with its target");
+});
+
+/* ---------------------------------------------------------------------------
    IMPORT VALIDATION
 
    Import is the only place arbitrary data enters the app. The month KEY is the
