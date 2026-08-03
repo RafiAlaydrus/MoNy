@@ -27,7 +27,8 @@ your own phone.
 15. [Settings](#settings)
 16. [Backing up and moving your data](#backing-up-and-moving-your-data)
 17. [Privacy](#privacy)
-18. [FAQ](#faq)
+18. [Tips and things worth knowing](#tips-and-things-worth-knowing)
+19. [FAQ](#faq)
 
 ---
 
@@ -169,16 +170,20 @@ paid, the money you've handed to wallets, and your Second choice spending.
 
 ## Getting started — first month
 
-1. Open the app.
-2. Tap the **Total Income** field and enter what you earned this month, then
-   confirm.
-3. Add your bills under **Priority** — name, category, amount — then tap
-   **+ Add**.
-4. Optionally set up a **wallet** (see below) for something like groceries.
-5. Log day-to-day spending under **Second choice** as it happens.
+1. Open the app. At the top you'll see a **Total Income** card reading
+   "RM 0" (or whichever currency symbol is set).
+2. Tap directly on that card. It turns into a text field.
+3. Type your income for the month and confirm — the card switches back to
+   showing the figure, and the **Remaining** card below it updates to match.
+4. Scroll to **Priority** and add your bills (see
+   [Priority bills](#priority-bills) below).
+5. Optionally add a **wallet** for something like groceries (see
+   [Wallets](#wallets) below).
+6. Log day-to-day spending under **Second choice** as it happens (see
+   [Second choice](#second-choice-everyday-spending) below).
 
 Your **Remaining** figure and the donut chart update instantly with every
-change.
+change you make.
 
 ---
 
@@ -187,20 +192,45 @@ change.
 This is your fixed, must-pay list for the month — rent, subscriptions,
 loan payments, whatever recurs.
 
-- Add a bill with a **name**, **category**, and **amount**.
-- Tick the checkbox once you've actually paid it — this is what deducts it
-  from your Remaining balance. Adding a bill doesn't deduct anything by
-  itself; ticking it does.
-- **Swipe left** on a bill to delete it (with 3 seconds to undo).
-- **Tap** a bill to edit its details.
-- **Lock the list** once your bills are finalized for the month, to stop
-  yourself from editing it by accident. This is one-way for the month — the
-  only way to unlock it early is the hidden reset (see [FAQ](#faq)).
-- **"Copy Last Priority"** appears when your list is empty and unlocked — it
-  pulls in last month's bills so you don't have to retype recurring ones.
+### Add a bill
 
-If ticking a bill would put you over budget, MoNy will ask you how you'd
-like to handle it — see [Overspending](#overspending).
+1. Scroll to the **Priority** section.
+2. Fill in the three fields: **Bill name**, the **category** dropdown, and
+   **Amount**.
+3. Tap **"Add Priority Bill"**.
+
+The bill appears in the list below, unchecked. Adding a bill does **not**
+deduct anything from your balance yet — only ticking it off does.
+
+### Mark a bill as paid
+
+Tap the **checkbox** next to the bill once you've actually paid it. This is
+what deducts it from your **Remaining** balance. If paying it would put you
+over budget, MoNy stops and asks how to handle it — see
+[Overspending](#overspending). If you cancel, the checkbox unticks itself.
+
+### Edit or delete a bill
+
+- **Tap anywhere on the row** (not the checkbox) to load it back into the
+  form above, which switches its button to **"Save changes"**. Edit the
+  fields and tap **Save changes**, or tap **Cancel** to back out without
+  saving.
+- **Swipe the row left** to delete it. A toast appears for 3 seconds with an
+  **Undo** button before the deletion is final.
+
+### Lock the list for the month
+
+Once your bills are finalized, tap **"Save Priority"**. A confirmation
+pop-up appears — tap **"Yes, Save"** to lock the list. While locked, a
+**"Locked"** badge shows next to the Priority heading and the form to add
+new bills is hidden. This is one-way for the rest of the month; the only way
+to unlock it early is the hidden reset (see [FAQ](#faq)).
+
+### Reuse last month's bills
+
+If your Priority list is empty and not locked, a **"Copy Last Priority"**
+button appears below the list. Tap it to pull in the exact bill list from
+last month instead of retyping everything (paid ticks reset to unpaid).
 
 ---
 
@@ -210,20 +240,71 @@ Wallets are named sub-budgets you carve out of your main balance — for
 example "Grocery" or "Fuel" — each with its own running balance and its own
 transaction history.
 
-- **Add a wallet** from Settings, giving it a name.
-- **Set a budget** for a wallet — this moves that much money out of your
-  main balance and into the wallet. It's not spending yet, it's just set
-  aside.
-- **Add** money to a wallet (moves more from main into it) or **Take** money
-  out (this *is* counted as spending).
-- **Transfer** money from one wallet to another, or from a wallet back to
-  your main balance — both sides of a transfer are always linked, so
-  deleting one half removes the other automatically.
-- **Rename** a wallet any time — old transfer labels update to match.
-- **Close a wallet** when you're done with it. Any leftover balance is
-  automatically transferred back to your main balance first, so nothing is
-  lost, and its spending history stays on the books.
-- Tap any wallet entry to edit it; swipe to delete it.
+### Add a wallet
+
+1. Tap the **Settings** icon (the sliders/gear icon in the top-right of the
+   header).
+2. Scroll to the **Wallets** area and tap **"+ Add Wallet"**.
+3. Type a name in the pop-up (e.g. "Grocery", "Fuel") and tap **Add**.
+
+The wallet immediately appears as its own card on the main screen, below
+Second choice. Notes:
+- The name can't be blank, can't duplicate another wallet, and can't reuse
+  one of the built-in category names (like "Bills") — you'll see an error
+  message if it conflicts.
+- There's no limit to how many wallets you can create.
+
+### Set (or change) a wallet's budget
+
+1. Tap the wallet's **balance card** (the big number at the top of its
+   section — showing "Grocery Balance", for example).
+2. A "Set budget" field appears. Type the amount.
+3. Confirm. That amount moves out of your main balance and into the wallet —
+   it isn't spending, it's just been set aside. You can come back and raise
+   or lower this figure at any time; lowering it is blocked if you've
+   already taken out more than the new amount would leave (the app tells you
+   the lowest it can go).
+
+### Add or take money in a wallet
+
+Inside the wallet's own section:
+- **"+ Add"** — puts more money into the wallet from your main balance. Not
+  counted as spending.
+- **"- Take"** — removes money from the wallet for something you actually
+  spent it on. This **is** counted as spending.
+
+Both need a name and an amount; the date is optional (leave blank for
+today, or pick an earlier date to back-date it).
+
+### Transfer between wallets, or back to main
+
+1. In the wallet's section, tap **"Transfer"**.
+2. Enter a name and amount.
+3. Pick a destination — **"Main wallet"** or any other active wallet — and
+   confirm.
+
+Both halves of a transfer are permanently linked: deleting either side
+removes the other automatically, so money can't be created or destroyed by
+a partial delete. Because of this, transfers can't be edited afterward —
+delete and re-enter instead.
+
+### Edit or delete a wallet item
+
+- **Tap** any row in the wallet's table to edit it (name, amount, date).
+  Transfer rows and "Brought forward" rows can't be edited — see
+  [Editing and deleting entries](#editing-and-deleting-entries).
+- **Swipe the row left** to delete it, with 3 seconds to undo.
+
+### Rename or close a wallet
+
+1. Open **Settings** → scroll to the **Wallets** list.
+2. Tap directly on a wallet's name to rename it inline — old transfer labels
+   elsewhere update automatically to the new name.
+3. Tap the **delete/close** button next to a wallet to close it. A
+   confirmation pop-up appears — confirming will automatically transfer any
+   leftover balance back to your main balance first (so nothing is lost),
+   then hide the wallet from the main screen. Its past spending stays on the
+   books and still shows correctly in that month's History.
 
 Money you *budget into* a wallet isn't spending — you've only moved it. It
 only counts as spent once you actually **take** it out.
@@ -236,16 +317,34 @@ This is your free-form log for day-to-day money in and out that doesn't fit
 Priority or a wallet — a coffee, a taxi ride, a bit of freelance income, a
 friend paying you back.
 
-- **Take**: money that left your pocket — give it a name, category, and
-  amount.
-- **Add**: money that came in. MoNy will ask whether this is:
-  - **New income** — genuinely new money, which raises your Total Income, or
-  - **Money coming back to you** — a reimbursement, which doesn't count as
-    new income but does put the cash back in your Remaining balance and
-    cancels out the original spending it repaid.
-- Every entry supports an **optional back-date**, for logging something you
-  forgot to enter on the actual day.
-- Tap an entry to edit it; swipe to delete it.
+### Log a take (money spent)
+
+1. Scroll to **Second choice**.
+2. Fill in **Name**, the **category** dropdown, and **Amount**.
+3. Optionally tap the **date field** and pick an earlier day if you're
+   logging something from the past — leave it blank for today.
+4. Tap **"- Take"**.
+
+If this would put you over your Remaining balance, MoNy stops and asks how
+to handle it — see [Overspending](#overspending).
+
+### Log an add (money received)
+
+1. Fill in the same **Name**, **category**, and **Amount** fields (and
+   optional date).
+2. Tap **"+ Add"**.
+3. A pop-up asks **"Where's this from?"** with two options:
+   - **New money** — genuinely new income (a gift, freelance pay, salary
+     top-up). This raises your **Total Income**.
+   - **Money coming back** — a reimbursement (a friend repaying you, a
+     refund). This does **not** raise your income, but it does put the cash
+     back into your Remaining balance and cancels out the spending it repaid.
+
+### Edit or delete an entry
+
+- **Tap** a row in the Second choice table to edit it — the form switches to
+  **"Save changes"**; tap **Cancel** to back out.
+- **Swipe the row left** to delete it, with 3 seconds to undo.
 
 ---
 
@@ -268,14 +367,18 @@ friend paying you back.
 ## Overspending
 
 If an action would push your Remaining balance below zero — ticking a bill,
-taking money in Second choice, or adding money to a wallet — MoNy stops and
-offers you a choice:
+taking money in Second choice, or adding money to a wallet — a **"Not
+enough left"** pop-up appears with your options:
 
-1. **Cover it from a wallet** that has enough to fully cover the shortfall
-   (a real transfer from that wallet back to main)
-2. **Record it anyway** — your Remaining goes negative, and the app clearly
-   marks the month as overspent rather than hiding it
-3. **Cancel**
+1. **"Cover [amount] from [wallet name]"** — one button per wallet that has
+   enough to fully cover the shortfall on its own. Tapping it performs a
+   real transfer from that wallet back to main, landing your Remaining
+   exactly at zero. Only wallets that can cover the *whole* shortfall are
+   offered.
+2. **"Record it anyway"** — goes ahead with the action; your Remaining goes
+   negative and the card shows **"Overspent by [amount]"** instead of
+   hiding it.
+3. **Cancel** — backs out, nothing is recorded.
 
 ---
 
@@ -289,20 +392,28 @@ A hand-drawn donut chart (no images, no library) shows:
 - An "Overspent" line instead of a slice if you've gone over, since going
   over your income isn't a share of it
 
-Tap the chart icon to show or hide it. There's also a monthly **trend chart**
-in History, comparing spending across your last several months.
+To show or hide it: open **Settings** → toggle **"Show chart"**.
+
+There's also a monthly **trend chart** in History, comparing spending
+across your last several months — see [Month history](#month-history).
 
 ---
 
 ## Budget cycles (not everyone gets paid on the 1st)
 
 By default your month runs the 1st to the end of the month, like a
-calendar. If you get paid on a different day — say the 25th — you can set
-your month to start on the 25th instead, in Settings. Your "month" then runs
-25th to 24th.
+calendar. If you get paid on a different day — say the 25th — you can
+change that:
 
-Changing this only affects the *next* cycle onward — it won't cut your
-current month short.
+1. Open **Settings**.
+2. Find the **"Month starts"** dropdown and choose your day (1–31).
+
+Your budgeting month then runs from that day to the day before it repeats
+(e.g. 25th to 24th). A note under the dropdown shows exactly when the new
+start day takes effect — changing this never cuts your *current* cycle
+short, it only applies from the next one onward. Days that don't exist in a
+shorter month (like the 31st in April) automatically land on that month's
+last real day.
 
 ---
 
@@ -310,8 +421,9 @@ current month short.
 
 By default, whatever you have left at the end of a month — your main
 balance plus every wallet's balance — carries forward into the new month
-automatically, so you don't start every month back at zero. You can turn
-this off in Settings if you'd rather each month start fresh.
+automatically, so you don't start every month back at zero. To turn this
+off (so every month starts fresh at zero instead): open **Settings** →
+toggle **"Carry balance forward"** off.
 
 If a month ends overspent, nothing carries forward into debt — the new
 month simply starts at zero.
@@ -324,29 +436,46 @@ where a month's opening balance came from.
 ## Month history
 
 Every finished month is filed away automatically — you never need to
-manually "close" a month. In **History** you get:
+manually "close" a month. It happens the moment you open the app after your
+cycle has rolled over.
 
-- A full breakdown per month: income, spending by category, money in
-  wallets, remaining balance
-- A trend chart across your recent months
-- Average / lowest / highest spending stats
-- How much storage each month is using
-- The ability to delete any past month (with undo)
+### Open History
+
+Tap the **history icon** in the top-left of the header (next to the
+Settings icon). Tap the **back arrow** in its header to return to the main
+tracker.
+
+Inside you'll find:
+
+- A **trend chart** — a bar per month, up to your last 12
+- **Average / lowest / highest** spending stat tiles
+- One row per past month — tap a row to expand it and see the full
+  breakdown: income, spending by category, money in wallets, remaining
+  balance, and item counts
+- A **storage line** at the bottom showing how much space your data is
+  using in the browser
+- A **delete button** on each row (with undo), and a **"Delete All
+  History"** button at the bottom if you want to clear everything
 
 ---
 
 ## Settings
 
-- **Currency** — choose from RM, $, S$, €, £, ¥, ₩, Rp
-- **Chart** — show or hide the donut chart
-- **Sort order** — oldest or newest first in your transaction lists
-- **Budget limit** — get warned when your Remaining balance drops below a
-  figure you choose
-- **Carry balance forward** — on by default; turn off to start every month
-  at zero
-- **Month start day** — pick any day 1–31 for when your budgeting month
-  begins
-- **Wallets** — add, rename, or close wallets from here
+Open Settings by tapping the **sliders/gear icon** in the top-right of the
+header. Tap anywhere outside the panel to close it. Every control saves
+immediately — there's no separate "Save" button.
+
+| Setting | What it does |
+|---|---|
+| **Show chart** (toggle) | Shows or hides the donut chart |
+| **Month starts** (dropdown) | Pick day 1–31 for when your budgeting cycle begins — see [Budget cycles](#budget-cycles-not-everyone-gets-paid-on-the-1st) |
+| **Carry balance forward** (toggle) | On by default — carries last month's leftover into the new one. Turn off to start every month at zero |
+| **Currency** (dropdown) | RM, $, S$, €, £, ¥, ₩, Rp |
+| **Sort order** (dropdown) | Oldest-first or newest-first in every transaction list |
+| **Budget limit** (number field) | Leave as "Off", or enter a figure to get warned once your Remaining balance drops below it |
+| **Wallets** (list) | Add, rename, or close wallets — see [Wallets](#wallets) |
+| **Export Data (JSON)** (button) | Downloads your full backup — see below |
+| **Import Data (JSON)** (button) | Restores from a backup file — see below |
 
 ---
 
@@ -355,13 +484,32 @@ manually "close" a month. In **History** you get:
 Since your data lives only in this one browser on this one phone, it's
 worth backing it up now and then, and definitely before you get a new phone.
 
-- **Export**: Settings → Export. This downloads a single JSON file with
-  everything — your current month, all history, and your settings.
-- **Import**: Settings → Import, then choose a previously exported file.
-  Importing **replaces everything currently in the app** with what's in the
-  file, so only import a file you trust and mean to restore.
-- To move to a new phone or a different browser, export from the old one and
-  import into the new one.
+### Export a backup
+
+1. Open **Settings**.
+2. Tap **"Export Data (JSON)"**.
+3. Your phone downloads (or offers to save/share) a single `.json` file
+   containing everything — your current month, all history, and your
+   settings.
+
+Keep this file somewhere safe (a cloud drive, email it to yourself, etc.) —
+it's the only copy outside of this device.
+
+### Import a backup
+
+1. Open **Settings**.
+2. Tap **"Import Data (JSON)"** and choose a previously exported file.
+3. A confirmation pop-up appears — tap **"Replace"** to confirm.
+
+**Importing replaces everything currently in the app** with what's in the
+file — your current month, history, and settings are all overwritten to
+match the file exactly. Only import a file you trust and genuinely mean to
+restore.
+
+### Moving to a new phone or browser
+
+Export from the old one, transfer the file however you like (email,
+AirDrop, cloud storage), then import it on the new one.
 
 ---
 
@@ -377,6 +525,33 @@ worth backing it up now and then, and definitely before you get a new phone.
 
 ---
 
+## Tips and things worth knowing
+
+- **Entries can be dated outside the current month.** If you back-date an
+  entry to, say, last month, it still counts toward *this* month's totals —
+  it displays the day you picked, but the money is booked to the cycle you
+  were in when you entered it.
+- **Once Priority is locked, it stays locked for the month.** There's no
+  in-app "unlock" — only the hidden reset (see FAQ) escapes it, and that
+  clears the whole month.
+- **A wallet "Take" can't go over what the wallet holds.** Unlike your main
+  balance, there's no overspend prompt for wallets — the field just shows a
+  red border if you try. Raise the wallet's budget first if you need more
+  room.
+- **Only the very last deletion can be undone.** If you delete a second
+  thing, the undo option for the first one is gone.
+- **Only one thing on this month is inert:** the "Brought forward" row that
+  opens History for a wallet or Second choice — it's just a label for money
+  already counted elsewhere, not a real entry, so it can't be tapped or
+  deleted.
+- **A wallet closed and later re-created with the exact same name** merges
+  with the old one in the chart, since chart categories are grouped by name.
+  Use a slightly different name if you want it kept separate.
+- If your browser ever shows a blank white screen instead of the app, it's
+  almost always a stale cached version — see the FAQ entry below.
+
+---
+
 ## FAQ
 
 **Do I need to install anything from an app store?**
@@ -385,23 +560,59 @@ screen from your browser (recommended) or just using it as a webpage both
 work with nothing to download or approve. See
 [How to use it on your phone](#how-to-use-it-on-your-phone--no-app-store-needed).
 
-**Will I lose my data if I close the tab or turn off my phone?**
-No — it's saved automatically as you go. It will still be there next time
-you open the same link in the same browser.
+**Will I lose my data if I close the tab, close the app, or turn off my
+phone?**
+No — it's saved automatically as you go, with no "Save" step to remember.
+It will still be there next time you open it, on that same phone, in that
+same browser (or as the installed app if you added it to your home screen).
 
-**Can I use it on more than one phone?**
-Each browser/device keeps its own separate copy. Use Export/Import to move
-data between them; there's no automatic syncing.
+**Can I use it on more than one phone, or share data between an installed
+app and the browser?**
+Each installation — a browser, or a home-screen app — keeps its own
+separate copy of your data, even on the same phone. There's no automatic
+syncing between them. Use Export/Import (see
+[Backing up and moving your data](#backing-up-and-moving-your-data)) to
+move data from one to another.
 
-**What happens if I clear my browser's data or storage?**
-Your entries for this app will be permanently deleted, unless you exported a
-backup first.
+**What happens if I clear my browser's data, cache, or storage for this
+site?**
+Your entries for this app will be permanently deleted, unless you exported
+a backup first. Clearing your browser's *history* alone is safe — it's
+specifically *site data* / *site storage* / *cookies and site data* that
+wipes it.
+
+**What if I uninstall the home-screen app, or remove its icon?**
+Removing the icon from your home screen does not delete your data by
+itself — it's stored in the browser engine behind it (Safari/Chrome), not
+in the icon. Re-adding it to your home screen from the same browser will
+show your data again. Still, export a backup before removing it if you're
+not sure.
 
 **I locked my Priority list by mistake / want to start the month over.**
-Double-tapping the header opens a hidden reset that clears the current
-month's data (after backing up your bill list for reuse). Past months in
-History are unaffected.
+Double-tap the app's title at the top of the screen. This opens a hidden
+**"Reset Everything?"** confirmation. Confirming clears the *current
+month's* data only (after backing up your bill list so you can reuse it
+with "Copy Last Priority"). Past months already in History are
+unaffected.
 
 **Is there a way to undo a delete?**
-Yes — every swipe-to-delete shows a 3-second undo toast. Only the most
-recent deletion can be undone.
+Yes — every swipe-to-delete shows a 3-second **Undo** toast at the bottom of
+the screen. Only the most recent deletion can be undone; a second deletion
+replaces the undo slot.
+
+**The app looks broken, frozen, or shows old data after an update.**
+This is almost always a caching issue, not lost data. Try a normal
+pull-to-refresh first (drag down from the top of the list). If that
+doesn't help: on iPhone, close the app fully (swipe it away from the app
+switcher) and reopen it; in a browser tab, clear that site's cache (not
+its storage/data) and reload. Your entries themselves are untouched by
+either of these.
+
+**Does it work with no internet connection?**
+Yes, fully, once you've opened it at least once. All your data and the app
+itself are stored on your device — nothing needs a live connection to work.
+
+**Is my data backed up automatically anywhere?**
+No. Nothing leaves your device unless you tap **Export**. There's no cloud
+account, so a lost or wiped phone means lost data unless you exported a
+backup beforehand.
