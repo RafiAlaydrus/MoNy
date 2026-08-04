@@ -135,6 +135,21 @@
             <button id="add-wallet-btn" class="setting-btn-action">+ Add Wallet</button>
             <!-- Inline margin removed: the ~ combinator in style.css now
                  spaces this correctly even with the Add Wallet button above. -->
+            <!-- Spending categories. Both lists are built by app.js from
+                 settings.categories; the markup holds no category names, so
+                 there is only one place they are defined. -->
+            <div class="setting-row wallets-header">
+              <span>Bill categories</span>
+              <span id="cat-priority-count" class="wallets-count">0</span>
+            </div>
+            <div id="cat-priority-list" class="wallets-settings-list"></div>
+            <button id="add-cat-priority-btn" class="setting-btn-action" data-list="priority">+ Add Bill Category</button>
+            <div class="setting-row wallets-header">
+              <span>Spending categories</span>
+              <span id="cat-secondChoice-count" class="wallets-count">0</span>
+            </div>
+            <div id="cat-secondChoice-list" class="wallets-settings-list"></div>
+            <button id="add-cat-secondChoice-btn" class="setting-btn-action" data-list="secondChoice">+ Add Spending Category</button>
             <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
@@ -142,7 +157,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.21.1</div>
+            <div class="setting-version">v1.22.0</div>
           </div>
         </section>
       </div>
@@ -227,7 +242,10 @@
         <!-- Shown once the list is locked for the month. The lock is one-way -
              there is no unlock, and the secret reset is the only escape. -->
         <h3>Priority</h3>
-        <span id="priority-lock-badge" class="lock-badge hidden">Locked</span>
+        <!-- A button, not a label: it is the way back out of the lock. The
+             lock exists to stop accidental edits, not to be permanent for the
+             month - the only escape used to be the hidden full reset. -->
+        <button id="priority-lock-badge" class="lock-badge hidden" aria-label="Priority list locked - tap to unlock">Locked</button>
       </div>
 
       <!-- PRIORITY FORM - hidden entirely once locked.
@@ -235,11 +253,11 @@
            the chart colours them by exact name; a wallet may not reuse one. -->
       <div class="second-form" id="priority-form">
         <input id="pb-name" placeholder="Bill name" />
+        <!-- Options are built by renderCategoryOptions() from
+             settings.categories, so the list is editable and defined in one
+             place. Only the disabled prompt is markup. -->
         <select id="pb-category">
           <option value="" disabled selected>Category</option>
-          <option value="Bills">Bills</option>
-          <option value="Subscription">Subscription</option>
-          <option value="Others">Others</option>
         </select>
         <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
 
@@ -272,11 +290,9 @@
 
       <div class="second-form" id="second-choice-form">
         <input id="sc-name" placeholder="Name" />
+        <!-- Built by renderCategoryOptions(), same as the bill categories. -->
         <select id="sc-category">
           <option value="" disabled selected>Category</option>
-          <option value="Food / Drink">Food / Drink</option>
-          <option value="Transport">Transport</option>
-          <option value="Others">Others</option>
         </select>
         <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
         <!-- input[type=date] ignores the placeholder attribute, and iOS
@@ -413,6 +429,41 @@
     </div>
   </div>
 
+  <!-- ADD CATEGORY - one modal serving both category lists. Which list it is
+       adding to is held in a dataset flag set by whichever button opened it,
+       so there is no second copy of this markup to keep in step.
+
+       Rejects the same three things a wallet name does: empty, a duplicate
+       within its own list, and a name already taken by a wallet (which would
+       merge the two into one chart slice, since slices are keyed by name). -->
+  <div id="add-category-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="add-category-title">Add Category</h3>
+      <input type="text" id="add-category-name" placeholder="Category name" class="setting-input-wide modal-input" />
+      <p id="add-category-error" class="modal-error hidden"></p>
+
+      <div class="modal-actions">
+        <button id="cancel-add-category" aria-label="Cancel adding category">Cancel</button>
+        <button id="confirm-add-category" class="danger" aria-label="Confirm add category">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE CATEGORY - confirms removing a category from its dropdown.
+       Entries already filed under it are deliberately left alone, so the
+       confirmation says so rather than implying the spending disappears. -->
+  <div id="delete-category-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Remove Category?</h3>
+      <p id="delete-category-text"></p>
+
+      <div class="modal-actions">
+        <button id="cancel-delete-category" aria-label="Cancel removing category">Cancel</button>
+        <button id="confirm-delete-category" class="danger" aria-label="Confirm remove category">Yes, Remove</button>
+      </div>
+    </div>
+  </div>
+
   <!-- OVERSPEND - shown when an action would push Remaining below zero.
        Three things can trigger it: a Second choice take, ticking a bill paid,
        and a wallet add.
@@ -541,17 +592,19 @@
        month. Genuinely one-way: there is no unlock, and the secret reset is
        the only escape. Hence the blunt wording and the .danger button on what
        is nominally just a save. -->
+  <!-- Serves both locking and unlocking. The heading, body and confirm label
+       are rewritten by app.js for whichever direction it was opened in, so
+       there is only one copy of this markup to keep in step. -->
   <div id="priority-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Save Priority Bills?</h3>
-      <p>
-        Are you sure?<br />
-        Once saved, you cannot change priority bills again.
+      <h3 id="priority-modal-title">Save Priority Bills?</h3>
+      <p id="priority-modal-text">
+        Are you sure? Once saved, the list is locked for this month.
       </p>
 
       <div class="modal-actions">
-        <button id="cancel-priority" aria-label="Cancel saving priority bills">Cancel</button>
-        <button id="confirm-priority" class="danger" aria-label="Confirm save and lock priority bills">Yes, Save</button>
+        <button id="cancel-priority" aria-label="Cancel">Cancel</button>
+        <button id="confirm-priority" class="danger" aria-label="Confirm">Yes, Save</button>
       </div>
     </div>
   </div>

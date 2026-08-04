@@ -39,10 +39,21 @@ function saveArchive() { return save(ARCHIVE_KEY, archive); }
 
 const now = new Date();
 
-// Today as "YYYY-MM-DD". Built in LOCAL time - toISOString would give the
-// previous day in negative-offset timezones and roll the cycle over early.
-const todayStr =
-  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+/* Today as "YYYY-MM-DD". Built in LOCAL time - toISOString would give the
+   previous day in negative-offset timezones and roll the cycle over early.
+
+   A FUNCTION, not a captured constant, because an installed PWA is not a page
+   load: it stays resident in memory for days, so anything that captured the
+   date at startup keeps reporting the day the app was opened. That is what
+   used to strand entries in an already-archived month after midnight. */
+function todayString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// The startup snapshot. Migrations below are one-shot and settle before the
+// app can outlive a day, so they read this rather than re-deriving it.
+const todayStr = todayString();
 
 /* Reads a stored key, surviving a corrupt one.
  *
@@ -102,6 +113,60 @@ if (settings.carryOver === undefined) settings.carryOver = true;
    longer than a short month clamp to its last day, so 31 starts February on
    the 28th. */
 if (settings.monthStartDay === undefined) settings.monthStartDay = 1;
+
+/* The categories offered by the two entry forms.
+ *
+ * These were hardcoded as <option> markup until v1.22.0, which capped
+ * everyday spending at three labels and made the donut chart far less
+ * informative than it could be. They live in settings now so they can be
+ * edited, and the markup holds none of them.
+ *
+ * MIGRATION: an install predating this has no `categories`, and is seeded
+ * with exactly the list that used to be in the HTML - so nothing an existing
+ * user sees changes, and no stored entry is left pointing at a category that
+ * has stopped existing. */
+const DEFAULT_CATEGORIES = {
+  priority: ["Bills", "Subscription", "Others"],
+  secondChoice: ["Food / Drink", "Transport", "Others"]
+};
+/* "Others" is where monthTotalsOf files anything with no category of its own,
+   so it has to exist in both lists and cannot be removed. */
+const FALLBACK_CATEGORY = "Others";
+
+if (!settings.categories || typeof settings.categories !== "object") {
+  settings.categories = {
+    priority: [...DEFAULT_CATEGORIES.priority],
+    secondChoice: [...DEFAULT_CATEGORIES.secondChoice]
+  };
+  saveSettings();
+}
+/* Repair a half-written or hand-edited shape rather than throwing later.
+   Each list must be an array of non-empty strings and must contain the
+   fallback, since an entry saved with no category is filed under it. */
+["priority", "secondChoice"].forEach(list => {
+  const seen = new Set();
+  const cleaned = (Array.isArray(settings.categories[list]) ? settings.categories[list] : [])
+    .filter(c => typeof c === "string" && c.trim())
+    .map(c => c.trim())
+    .filter(c => {
+      const key = c.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  /* Emptiness is decided BEFORE the fallback is added, or a list that survived
+     cleaning with nothing left would end up as a lone "Others" - technically
+     valid, useless in practice, and impossible to tell apart from a list the
+     user had deliberately pared down. */
+  if (!cleaned.length) {
+    settings.categories[list] = [...DEFAULT_CATEGORIES[list]];
+    return;
+  }
+  if (!cleaned.some(c => c.toLowerCase() === FALLBACK_CATEGORY.toLowerCase())) {
+    cleaned.push(FALLBACK_CATEGORY);
+  }
+  settings.categories[list] = cleaned;
+});
 // Backdating made date order meaningful, so switch existing installs to
 // oldest-first once. The Sort transactions setting still overrides it.
 if (!settings.dateOrderMigrated) {
@@ -136,7 +201,7 @@ function freshMonthData(carry, cycleStart) {
       walletData[id] = { budget: carry.wallets[id], items: [] };
     });
   }
-  const start = cycleStart || cycleStartForDate(todayStr, settings.monthStartDay);
+  const start = cycleStart || cycleStartForDate(todayString(), settings.monthStartDay);
   return {
     month: cycleKeyOf(start),
     /* When this cycle began, and when the next one does. Both are STORED
@@ -240,9 +305,21 @@ if (!data) {
      remains the recovery path. */
   saveData();
 } else if (todayStr >= data.cycleNext) {
+  performRollover(todayStr);
+}
+
+/* Closes the month on screen and opens the one containing `today`.
+ *
+ * Extracted from the startup path so the exact same code can run later
+ * without a reload - see checkCycleRollover at the bottom of this file.
+ * `data` is mutated IN PLACE rather than reassigned, the same reason
+ * restoreSnapshot does: by the time this runs live, closures and cached
+ * nodes already exist, and swapping the object out from under them would
+ * leave them writing into a month that is no longer on screen. */
+function performRollover(today) {
   if (monthHasContent(data)) {
     archive[data.month] = {
-      data,
+      data: JSON.parse(JSON.stringify(data)),
       wallets: settings.wallets.map(w => ({ id: w.id, name: w.name })),
       currency: settings.currency,
       closedAt: new Date().toISOString()
@@ -283,18 +360,24 @@ if (!data) {
      start it lands on actually contains today. Each step is a real cycle
      boundary, so no month is skipped and none is invented. */
   let nextStart = data.cycleNext;
-  while (todayStr >= nextCycleStartOf(nextStart, settings.monthStartDay)) {
+  while (today >= nextCycleStartOf(nextStart, settings.monthStartDay)) {
     nextStart = nextCycleStartOf(nextStart, settings.monthStartDay);
   }
 
-  data = freshMonthData(carry, nextStart);
+  const fresh = freshMonthData(carry, nextStart);
+  Object.keys(data).forEach(k => { delete data[k]; });
+  Object.assign(data, fresh);
   saveData();
 }
 
 /* The cycle on screen, as an archive key. Derived from the month record that
    the rollover above has just settled, NOT recomputed from today - which is
-   what keeps it stable when the start day changes. */
-const currentMonthKey = data.month;
+   what keeps it stable when the start day changes.
+
+   `let`, not `const`: a live rollover moves the app to a new cycle without a
+   reload, and everything keyed by this (the export filename, the trend
+   chart's live bar, resetData) has to follow it. */
+let currentMonthKey = data.month;
 
 /* MIGRATION: back-fill carry-over for a month that already rolled over.
 
@@ -425,6 +508,51 @@ const chartCanvas = document.getElementById("summary-chart");
 const chartCtx = chartCanvas ? chartCanvas.getContext("2d") : null;
 const chartLegend = document.getElementById("chart-legend");
 
+/* Matches a canvas's backing store to the device's pixel density.
+ *
+ * Both charts are hand-drawn, and both used to draw into a fixed backing
+ * store sized by the width/height ATTRIBUTES while CSS displayed them at a
+ * different size. On a phone at devicePixelRatio 3 that meant every arc and
+ * label was resampled twice - once by the CSS box, once by the screen - and
+ * the result read as soft.
+ *
+ * The backing store is sized in device pixels; the context is then scaled so
+ * every drawing call below can keep using plain CSS pixels and none of the
+ * layout maths has to change. Returns the LOGICAL size to draw against, or
+ * null when the canvas has no layout box yet (hidden chart, history view
+ * closed) - there is nothing to draw in that case.
+ *
+ * Deliberately writes NO inline styles: style.css gives both canvases an
+ * explicit width and height, so the attributes rewritten here cannot affect
+ * layout and the trend chart stays fluid at `width: 100%`.
+ */
+function fitCanvas(canvas, ctx) {
+  if (!canvas || !ctx) return null;
+  const rect = canvas.getBoundingClientRect();
+  const cssW = Math.round(rect.width);
+  const cssH = Math.round(rect.height);
+  // Zero in jsdom, and for anything inside a hidden ancestor.
+  if (!cssW || !cssH) return null;
+
+  /* Capped at 3: past that the extra pixels are invisible and the memory is
+     not - a 440x190 chart at dpr 4 is a 5.3-megapixel buffer. */
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const backingW = Math.round(cssW * dpr);
+  const backingH = Math.round(cssH * dpr);
+
+  /* Assigning width/height clears the canvas AND resets the transform, so
+     only do it when the size actually changed. The setTransform below then
+     runs every time, which is what keeps the scale correct on the redraws
+     that did not resize. */
+  if (canvas.width !== backingW || canvas.height !== backingH) {
+    canvas.width = backingW;
+    canvas.height = backingH;
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { w: cssW, h: cssH };
+}
+
 // Only the chart and its legend use color - the rest of the app stays monochrome
 const CATEGORY_COLORS = {
   "Bills": "#e74c3c",
@@ -433,6 +561,75 @@ const CATEGORY_COLORS = {
   "Transport": "#16a085",
   "Others": "#8a8a8a",
 };
+
+/* Colours for user-defined categories, which by definition are not in the map
+   above. Chosen to sit apart from both the built-in category colours and the
+   wallet ramp, so a custom category is never confusable with either. */
+const CUSTOM_CATEGORY_RAMP = [
+  "#4a90d9", "#d95f9a", "#57b894", "#c9a227", "#8e7cc3", "#d9734a", "#4aa3a3"
+];
+
+/* Picks a colour for a category name deterministically.
+ *
+ * Deliberately a hash of the NAME rather than a position in the list: the
+ * chart sorts its slices by amount and the settings list can be reordered by
+ * adding or removing entries, so an index-based colour would make a category
+ * change colour without the user changing anything. Hashing means "Groceries"
+ * is the same colour today, tomorrow, and in an archived month. */
+function categoryColor(name) {
+  if (CATEGORY_COLORS[name]) return CATEGORY_COLORS[name];
+  const key = String(name || "");
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return CUSTOM_CATEGORY_RAMP[hash % CUSTOM_CATEGORY_RAMP.length];
+}
+
+/* Every category currently offered, both lists together, lowercased. Wallet
+   names are checked against this: a wallet sharing a category's name would
+   merge into that slice, since the chart keys slices by name. */
+function allCategoryNames() {
+  return [
+    ...(settings.categories.priority || []),
+    ...(settings.categories.secondChoice || [])
+  ];
+}
+
+/* Fills a <select> with the categories for one list, preserving the disabled
+   prompt that is the only option in the markup. `keep` re-selects a value
+   that may no longer be offered - an entry being edited can hold a category
+   the user has since removed, and silently reassigning it would rewrite
+   history the user did not ask to change. */
+function renderCategoryOptions(select, list, keep) {
+  if (!select) return;
+  const names = settings.categories[list] || [];
+  const prompt = select.querySelector('option[value=""]');
+  select.innerHTML = "";
+  if (prompt) select.appendChild(prompt);
+
+  names.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+
+  if (keep && !names.includes(keep)) {
+    const opt = document.createElement("option");
+    opt.value = keep;
+    opt.textContent = `${keep} (removed)`;
+    select.appendChild(opt);
+  }
+  if (keep) select.value = keep;
+  else select.selectedIndex = 0;
+}
+
+// Rebuilds both category dropdowns from settings.
+function renderAllCategoryOptions() {
+  renderCategoryOptions(document.getElementById("pb-category"), "priority");
+  renderCategoryOptions(document.getElementById("sc-category"), "secondChoice");
+}
 
 const CHART_IN_WALLETS_COLOR = "#f1c40f";
 const CHART_REMAINING_COLOR = "#3498db";
@@ -489,6 +686,42 @@ function resolveDate(value) {
   ).toISOString();
 }
 
+/* The date shown on a transaction row.
+ *
+ * Rows used to render a bare "15 Jun" with no year, which hid two genuinely
+ * confusing cases: an entry back-dated into a previous cycle, and one dated in
+ * another year entirely - a 2027 entry was indistinguishable from this year's.
+ *
+ * Both still count toward the month they were entered in, which is deliberate:
+ * a cycle's books are what was recorded during it, and silently moving money
+ * between months to match a typed date would change totals the user has
+ * already checked. So rather than block or move them, the row says so - the
+ * year appears, and `outside` marks it for a tooltip and dimmer styling.
+ */
+function entryDateLabel(iso) {
+  if (!iso) return { text: "", outside: false };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { text: "", outside: false };
+
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const outside = !!(data.cycleStart && data.cycleNext)
+    && (day < data.cycleStart || day >= data.cycleNext);
+
+  return {
+    text: d.toLocaleDateString("en-GB", outside
+      ? { day: "numeric", month: "short", year: "numeric" }
+      : { day: "numeric", month: "short" }),
+    outside
+  };
+}
+
+// The cell markup for a row's date, shared by both transaction tables.
+function dateCellHtml(iso) {
+  const { text, outside } = entryDateLabel(iso);
+  if (!outside) return `<td class="date-stamp">${esc(text)}</td>`;
+  return `<td class="date-stamp is-outside" title="Dated outside this month, but counted in it">${esc(text)}</td>`;
+}
+
 // Greys out a date input while it is empty so it reads as a placeholder
 function wireDateInput(el) {
   const sync = () => el.classList.toggle("is-empty", !el.value);
@@ -535,13 +768,48 @@ const undoText = document.getElementById("undo-text");
 const undoBtn = document.getElementById("undo-btn");
 const undoBar = document.getElementById("undo-bar");
 let undoTimeout = null;
-let undoCallback = null;
 
-// Shows an undo toast for 3 seconds
-function showUndo(message, onExpire, onUndo) {
-  if (undoTimeout) { clearTimeout(undoTimeout); }
+/* Pending undoable actions, oldest first.
+ *
+ * This was a single slot, so deleting two things in quick succession stranded
+ * the first one - the toast showed only the second and the first could never
+ * be taken back. It is a stack now: each Undo takes back the most recent
+ * action and then re-offers the one before it, so a run of mistaken deletions
+ * can be walked back one at a time.
+ *
+ * Order matters and must stay LIFO. Several of these undos restore a whole
+ * month snapshot taken before their own action, so replaying them out of
+ * order would reinstate a state that never existed.
+ */
+let undoStack = [];
 
-  undoText.textContent = message;
+/* Full-month snapshots are not small, and the stack only exists to cover a
+   burst of quick mistakes. Past this, the oldest is committed for real. */
+const UNDO_STACK_LIMIT = 10;
+
+// Commits one entry - the action becomes permanent and leaves the stack.
+function commitUndoEntry(entry) {
+  if (entry && typeof entry.onExpire === "function") entry.onExpire();
+}
+
+/* Commits everything still pending. Called when the toast times out: the
+   window has closed on all of them, not just the one being shown. Oldest
+   first, so each writes over the last in the order the user acted. */
+function flushUndoStack() {
+  const pending = undoStack;
+  undoStack = [];
+  pending.forEach(commitUndoEntry);
+}
+
+// Paints the toast for whatever is currently on top and restarts the timer.
+function showTopUndo() {
+  const top = undoStack[undoStack.length - 1];
+  if (!top) return;
+
+  if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
+
+  undoText.textContent = top.message;
+  undoBtn.classList.remove("hidden");
   undoToast.classList.remove("hidden", "fading");
 
   undoBar.style.transition = "none";
@@ -551,17 +819,30 @@ function showUndo(message, onExpire, onUndo) {
     undoBar.style.width = "0%";
   });
 
-  undoCallback = onUndo;
   undoTimeout = setTimeout(() => {
     undoToast.classList.add("fading");
     setTimeout(() => {
       undoToast.classList.add("hidden");
       undoToast.classList.remove("fading");
-      onExpire();
       undoTimeout = null;
-      undoCallback = null;
+      flushUndoStack();
     }, 300);
   }, 3000);
+}
+
+/* Registers an undoable action and shows the toast.
+ *
+ * Signature unchanged, so every caller keeps working: `onExpire` commits the
+ * action once the window closes, `onUndo` takes it back. */
+function showUndo(message, onExpire, onUndo) {
+  undoStack.push({ message, onExpire, onUndo });
+
+  // Past the cap the oldest is no longer offerable, so make it permanent.
+  while (undoStack.length > UNDO_STACK_LIMIT) {
+    commitUndoEntry(undoStack.shift());
+  }
+
+  showTopUndo();
 }
 
 // Hides the undo toast
@@ -575,8 +856,15 @@ function hideUndo() {
 
 undoBtn.addEventListener("click", () => {
   if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
-  hideUndo();
-  if (undoCallback) { undoCallback(); undoCallback = null; }
+
+  const entry = undoStack.pop();
+  if (entry && typeof entry.onUndo === "function") entry.onUndo();
+
+  /* Re-offer the previous action rather than dropping it. Without this the
+     stack would still hold it but nothing would ever show it again, which is
+     the single-slot bug wearing a different hat. */
+  if (undoStack.length > 0) showTopUndo();
+  else hideUndo();
 });
 
 /* =========================
@@ -731,12 +1019,20 @@ function editPriorityBill(bill) {
   const root = document.getElementById("priority-form");
 
   pbName.value = bill.name;
-  pbCategory.value = bill.category;
+  /* Re-offer the bill's own category even if it has since been removed from
+     the list, marked "(removed)". Without this the select would fall back to
+     the empty prompt and an otherwise untouched save would silently
+     recategorise the bill. */
+  renderCategoryOptions(pbCategory, "priority", bill.category);
   pbAmount.value = bill.amount;
 
   editing = {
     item: bill, root,
-    clear() { pbName.value = ""; pbCategory.selectedIndex = 0; pbAmount.value = ""; },
+    clear() {
+      pbName.value = "";
+      renderCategoryOptions(pbCategory, "priority");
+      pbAmount.value = "";
+    },
     save() {
       const name = pbName.value.trim();
       const category = pbCategory.value;
@@ -937,30 +1233,68 @@ function renderPriority() {
 }
 
 // Updates the priority lock UI
+/* Reflects the lock in both directions.
+ *
+ * This only ever hid the form before, never restored it, because the lock had
+ * no way out short of the hidden full reset. Now that unlocking exists it has
+ * to be symmetric - an else branch that never ran is exactly how a one-way
+ * door gets built by accident. */
 function updatePriorityLockUI() {
   const form = document.getElementById("priority-form");
   const lockBadge = document.getElementById("priority-lock-badge");
   if (data.priorityLocked) {
     if (form) form.style.display = "none";
     if (lockBadge) lockBadge.classList.remove("hidden");
+  } else {
+    if (form) form.style.display = "";
+    if (lockBadge) lockBadge.classList.add("hidden");
   }
+}
+
+/* Which direction the shared confirm modal was opened in. */
+let priorityLockIntent = "lock";
+
+const priorityModalTitle = document.getElementById("priority-modal-title");
+const priorityModalText = document.getElementById("priority-modal-text");
+const priorityLockBadge = document.getElementById("priority-lock-badge");
+
+function openPriorityModal(intent) {
+  priorityLockIntent = intent;
+  if (intent === "unlock") {
+    priorityModalTitle.textContent = "Unlock Priority Bills?";
+    priorityModalText.textContent =
+      "You'll be able to add, edit and delete bills again. Nothing already recorded changes, and you can lock the list again afterwards.";
+    confirmPriorityBtn.textContent = "Yes, Unlock";
+  } else {
+    priorityModalTitle.textContent = "Save Priority Bills?";
+    priorityModalText.textContent =
+      "Are you sure? Once saved, the list is locked so it cannot be changed by accident.";
+    confirmPriorityBtn.textContent = "Yes, Save";
+  }
+  priorityModal.classList.remove("hidden");
 }
 
 savePriorityBtn.addEventListener("click", () => {
   if (data.priority.length === 0) return;
-  priorityModal.classList.remove("hidden");
+  openPriorityModal("lock");
 });
+
+if (priorityLockBadge) {
+  priorityLockBadge.addEventListener("click", () => openPriorityModal("unlock"));
+}
 
 cancelPriorityBtn.addEventListener("click", () => {
   priorityModal.classList.add("hidden");
 });
 
 confirmPriorityBtn.addEventListener("click", () => {
-  data.priorityLocked = true;
+  data.priorityLocked = priorityLockIntent !== "unlock";
   saveData();
   priorityModal.classList.add("hidden");
   renderPriority();
   updatePriorityLockUI();
+  // "Copy Last Priority" is only offered on an empty, unlocked list.
+  updateCopyLastBtn();
 });
 
 addPriorityBtn.addEventListener("click", () => {
@@ -1156,7 +1490,6 @@ function buildCarriedRow(amount, columnCount) {
 
 function buildWalletItemRow(item, wallet, tbody, section) {
   const row = document.createElement("tr");
-  const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
 
   let label = esc(item.name);
   if (item.type === "out") {
@@ -1167,7 +1500,7 @@ function buildWalletItemRow(item, wallet, tbody, section) {
 
   row.innerHTML = `
     <td>${label}</td>
-    <td class="date-stamp">${dateStr}</td>
+    ${dateCellHtml(item.date)}
     <td>${isWalletInflow(item) ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
 
@@ -1461,10 +1794,20 @@ function buildWalletSection(wallet) {
     });
     if (hasError) return;
 
-    // Taking more than the wallet holds would push its balance negative, which
-    // the books cannot represent. Raise the budget first instead.
+    /* Taking more than the wallet holds would push its balance negative, which
+       the books cannot represent. Rather than a bare red border, offer the
+       ways to make it legal - top up from main, or from another wallet. */
     if (type === "take" && amount > getWalletBalance(wallet.id)) {
-      amountInput.classList.add("input-error");
+      askWalletShortfall({
+        wallet,
+        amount,
+        available: getWalletBalance(wallet.id),
+        transferName: name,
+        // Every option above rebuilds the sections, so the cached nodes this
+        // closure holds are detached - commit with `rebuilt` set.
+        proceed: () => commitItem(type, name, amount, dateValue, true),
+        onCancel: () => amountInput.classList.add("input-error")
+      });
       return;
     }
 
@@ -1721,6 +2064,76 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
   overspendModal.classList.remove("hidden");
 }
 
+/* Taking more than a wallet holds.
+ *
+ * The main balance has askOverspend, which can always fall back to "record it
+ * anyway" because a negative Remaining is a real, representable state. A
+ * wallet has no equivalent: a negative wallet balance cannot be drawn in the
+ * donut, and would make `inWallets` meaningless. So this offers the ways to
+ * make the take legal rather than the way to force it through - top the
+ * wallet up first, then spend.
+ *
+ * Until now this case was a bare red border with no explanation, and the only
+ * route forward was to work out for yourself that the budget had to be raised.
+ */
+function askWalletShortfall({ wallet, amount, available, transferName, proceed, onCancel }) {
+  const shortfall = Math.round((amount - available) * 100) / 100;
+
+  overspendSummary.textContent =
+    `Taking ${cur()} ${fmt(amount)} is ${cur()} ${fmt(shortfall)} more than the ${cur()} ${fmt(available)} in ${wallet.name}. Top it up first:`;
+  overspendOptions.innerHTML = "";
+
+  // Straight from main, as a wallet `add` - the same thing the + Add button
+  // writes, so it is deducted from Remaining exactly once.
+  const mainAvailable = getMainRemaining();
+  if (mainAvailable >= shortfall) {
+    const fromMain = document.createElement("button");
+    fromMain.className = "transfer-dest-btn";
+    fromMain.setAttribute("aria-label", "Top up from the main balance");
+    fromMain.innerHTML = `Add ${esc(cur())} ${fmt(shortfall)} from main balance` +
+      `<span class="transfer-dest-sub">You have ${esc(cur())} ${fmt(mainAvailable)} left. Remaining drops to ${esc(cur())} ${fmt(mainAvailable - shortfall)}.</span>`;
+    fromMain.addEventListener("click", () => {
+      closeOverspend();
+      ensureWalletData(wallet.id).items.push({
+        name: `Top up for ${transferName}`, amount: shortfall, type: "add", date: new Date().toISOString()
+      });
+      saveData();
+      proceed();
+    });
+    overspendOptions.appendChild(fromMain);
+  }
+
+  /* Or from another wallet that can cover it in full - a real linked transfer,
+     so deleting either half removes both. Only full covers are offered, for
+     the same reason askOverspend does: a partial one leaves the take still
+     illegal and the user no further forward. */
+  walletsCovering(data, allWallets().filter(w => w.id !== wallet.id), shortfall)
+    .forEach(({ wallet: source, balance }) => {
+      const btn = document.createElement("button");
+      btn.className = "transfer-dest-btn";
+      btn.setAttribute("aria-label", `Move the shortfall from ${source.name}`);
+      btn.innerHTML = `Move ${esc(cur())} ${fmt(shortfall)} from ${esc(source.name)}` +
+        `<span class="transfer-dest-sub">Has ${esc(cur())} ${fmt(balance)}. Transfers straight into ${esc(wallet.name)}.</span>`;
+      btn.addEventListener("click", () => {
+        closeOverspend();
+        executeTransfer(source, wallet.id, `Top up for ${transferName}`, shortfall, new Date().toISOString());
+        proceed();
+      });
+      overspendOptions.appendChild(btn);
+    });
+
+  // Nothing anywhere can cover it - say so, rather than showing only Cancel.
+  if (!overspendOptions.children.length) {
+    const none = document.createElement("p");
+    none.className = "transfer-dest-sub";
+    none.textContent = "Nothing else has enough to cover it. Raise this wallet's budget, or take a smaller amount.";
+    overspendOptions.appendChild(none);
+  }
+
+  overspendCancel = onCancel || null;
+  overspendModal.classList.remove("hidden");
+}
+
 function closeOverspend() {
   overspendModal.classList.add("hidden");
   overspendCancel = null;
@@ -1782,7 +2195,6 @@ function makeRowEditable(row, item, onEdit) {
 
 function buildSecondChoiceRow(item) {
   const row = document.createElement("tr");
-  const dateStr = item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
   // Mark money that came back, so months later it is clear which additions
   // were repayments rather than earnings
   const mark = isReimbursement(item)
@@ -1792,7 +2204,7 @@ function buildSecondChoiceRow(item) {
   row.innerHTML = `
     <td>${esc(item.name)}${mark}</td>
     <td>${esc(item.category)}</td>
-    <td class="date-stamp">${dateStr}</td>
+    ${dateCellHtml(item.date)}
     <td>${item.type === "add" ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
   makeRowDeletable(row, () => deleteSecondChoiceItem(item));
@@ -1991,7 +2403,9 @@ function editSecondChoice(item) {
   cancelEdit();
 
   scName.value = item.name;
-  scCategory.value = item.category;
+  // Keeps the entry's own category selectable even if it was removed since -
+  // see the matching comment in editPriorityBill.
+  renderCategoryOptions(scCategory, "secondChoice", item.category);
   scAmount.value = item.amount;
   scDate.value = dateInputValue(item.date);
   scDate.classList.toggle("is-empty", !scDate.value);
@@ -2000,7 +2414,8 @@ function editSecondChoice(item) {
   editing = {
     item, root,
     clear() {
-      scName.value = ""; scCategory.selectedIndex = 0;
+      scName.value = "";
+      renderCategoryOptions(scCategory, "secondChoice");
       scAmount.value = ""; scDate.value = ""; scDate.classList.add("is-empty");
     },
     save() {
@@ -2247,10 +2662,15 @@ function renderChart() {
   const ctx = chartCtx;
   const legend = chartLegend;
 
+  // Logical drawing size, density-corrected. Null means nothing is on screen.
+  const box = fitCanvas(canvas, ctx);
+  if (!box) return;
+  // The donut is square; the shorter side keeps it circular in any box.
+  const size = Math.min(box.w, box.h);
+
   const income = totalIncomeOf(data, allWallets()) || 0;
   if (income === 0) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const size = canvas.width;
+    ctx.clearRect(0, 0, box.w, box.h);
     const center = size / 2;
 
     /* Empty-state ring. Two arcs drawn in opposite directions and closed into
@@ -2303,7 +2723,7 @@ function renderChart() {
     .map(([label, amount]) => ({
       label,
       amount,
-      color: CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a",
+      color: walletColorMap[label] || categoryColor(label),
     }));
 
   // Money budgeted to a wallet has left the main balance but is not spent yet
@@ -2326,7 +2746,6 @@ function renderChart() {
     segments.push({ label: "Remaining", amount: income, color: CHART_REMAINING_COLOR });
   }
 
-  const size = canvas.width;
   const center = size / 2;
   const radius = size / 2 - 10;
   const innerRadius = radius * 0.55;
@@ -2421,7 +2840,14 @@ const chartToggle = document.getElementById("chart-toggle");
 const chartSection = document.getElementById("chart-section");
 
 chartToggle.checked = settings.showChart;
-if (settings.showChart) chartSection.classList.remove("hidden");
+if (settings.showChart) {
+  chartSection.classList.remove("hidden");
+  /* Draw only now that the section has a layout box. calculateRemaining()
+     above already called renderChart() once, but the section was still
+     hidden at that point, so fitCanvas() had a zero-sized rect to measure
+     and correctly declined to draw into it. */
+  renderChart();
+}
 
 chartToggle.addEventListener("change", () => {
   settings.showChart = chartToggle.checked;
@@ -2590,7 +3016,13 @@ budgetLimitInput.addEventListener("change", () => {
    WALLETS SETTING
 ========================= */
 
-const RESERVED_CATEGORY_NAMES = ["bills", "subscription", "food / drink", "transport", "others"];
+/* Was a hardcoded list of the five built-in categories. Now derived, because
+   categories are user-editable: a wallet must not take the name of ANY
+   category currently offered, including one the user just added, or the two
+   would merge into a single chart slice. */
+function reservedCategoryNames() {
+  return allCategoryNames().map(c => c.trim().toLowerCase());
+}
 
 const walletsSettingsList = document.getElementById("wallets-settings-list");
 const walletsCountEl = document.getElementById("wallets-count");
@@ -2612,7 +3044,7 @@ let walletPendingDelete = null;
 function walletNameConflict(name, excludeId) {
   const norm = name.trim().toLowerCase();
   if (!norm) return "empty";
-  if (RESERVED_CATEGORY_NAMES.includes(norm)) return "reserved";
+  if (reservedCategoryNames().includes(norm)) return "reserved";
   if (activeWallets().some(w => w.id !== excludeId && w.name.trim().toLowerCase() === norm)) return "duplicate";
   return null;
 }
@@ -2719,6 +3151,179 @@ addWalletNameInput.addEventListener("input", () => {
 });
 cancelAddWalletBtn.addEventListener("click", () => addWalletModal.classList.add("hidden"));
 
+/* =========================
+   CATEGORY SETTINGS
+
+   Two editable lists, one per entry form. Adding is the common case; removing
+   only takes a category out of the dropdown and deliberately leaves every
+   entry already filed under it untouched, because rewriting them would change
+   figures the user has already checked - including in archived months, which
+   are supposed to be a record of what happened.
+========================= */
+
+const CATEGORY_LIST_LABELS = { priority: "Bill", secondChoice: "Spending" };
+
+const addCategoryModal = document.getElementById("add-category-modal");
+const addCategoryTitle = document.getElementById("add-category-title");
+const addCategoryNameInput = document.getElementById("add-category-name");
+const addCategoryError = document.getElementById("add-category-error");
+const confirmAddCategoryBtn = document.getElementById("confirm-add-category");
+const cancelAddCategoryBtn = document.getElementById("cancel-add-category");
+
+const deleteCategoryModal = document.getElementById("delete-category-modal");
+const deleteCategoryText = document.getElementById("delete-category-text");
+const confirmDeleteCategoryBtn = document.getElementById("confirm-delete-category");
+const cancelDeleteCategoryBtn = document.getElementById("cancel-delete-category");
+
+let categoryPendingDelete = null;   // { list, name }
+let addCategoryTarget = "priority"; // which list the add modal is serving
+
+/* Why a name cannot be used: empty, already in this list, or taken by a
+   wallet. The wallet check mirrors walletNameConflict from the other
+   direction - whichever is created second is the one refused. */
+function categoryNameConflict(list, name) {
+  const norm = name.trim().toLowerCase();
+  if (!norm) return "empty";
+  if ((settings.categories[list] || []).some(c => c.trim().toLowerCase() === norm)) return "duplicate";
+  if (activeWallets().some(w => w.name.trim().toLowerCase() === norm)) return "wallet";
+  return null;
+}
+
+// How many entries in the live month still reference a category.
+function categoryUsageCount(list, name) {
+  if (list === "priority") {
+    return (data.priority || []).filter(b => b.category === name).length;
+  }
+  return (data.secondChoice || []).filter(i => i.category === name).length;
+}
+
+function renderCategorySettings(list) {
+  const listEl = document.getElementById(`cat-${list}-list`);
+  const countEl = document.getElementById(`cat-${list}-count`);
+  if (!listEl) return;
+
+  const names = settings.categories[list] || [];
+  if (countEl) countEl.textContent = String(names.length);
+
+  listEl.innerHTML = "";
+  names.forEach(name => {
+    const row = document.createElement("div");
+    row.className = "wallet-setting-row";
+    const isFallback = name.toLowerCase() === FALLBACK_CATEGORY.toLowerCase();
+
+    /* The colour chip is the same colour the chart will use, so the settings
+       list doubles as the chart's legend key. */
+    row.innerHTML = `
+      <span class="category-chip" style="background:${esc(categoryColor(name))}"></span>
+      <span class="category-name">${esc(name)}</span>
+      ${isFallback
+        ? '<span class="category-locked" title="Entries with no category are filed here">default</span>'
+        : `<button class="wallet-delete-btn" aria-label="Remove ${esc(name)}">✕</button>`}
+    `;
+
+    const del = row.querySelector(".wallet-delete-btn");
+    if (del) {
+      del.addEventListener("click", () => {
+        categoryPendingDelete = { list, name };
+        const used = categoryUsageCount(list, name);
+        const parts = [`Remove "${name}" from the ${CATEGORY_LIST_LABELS[list].toLowerCase()} categories?`];
+        if (used > 0) {
+          parts.push(`${used} ${used === 1 ? "entry" : "entries"} this month stay filed under it and keep counting - only the dropdown loses it.`);
+        }
+        parts.push("You can add it back at any time.");
+        deleteCategoryText.textContent = parts.join(" ");
+        deleteCategoryModal.classList.remove("hidden");
+      });
+    }
+
+    listEl.appendChild(row);
+  });
+}
+
+function renderAllCategorySettings() {
+  renderCategorySettings("priority");
+  renderCategorySettings("secondChoice");
+}
+
+["priority", "secondChoice"].forEach(list => {
+  const btn = document.getElementById(`add-cat-${list}-btn`);
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    addCategoryTarget = list;
+    addCategoryTitle.textContent = `Add ${CATEGORY_LIST_LABELS[list]} Category`;
+    addCategoryNameInput.value = "";
+    addCategoryNameInput.classList.remove("input-error");
+    addCategoryError.classList.add("hidden");
+    addCategoryModal.classList.remove("hidden");
+    addCategoryNameInput.focus();
+  });
+});
+
+function confirmAddCategory() {
+  const list = addCategoryTarget;
+  const name = addCategoryNameInput.value.trim();
+  const conflict = categoryNameConflict(list, name);
+
+  if (conflict === "empty") {
+    addCategoryNameInput.classList.add("input-error");
+    return;
+  }
+  if (conflict === "duplicate") {
+    addCategoryError.textContent = `"${name}" is already in this list.`;
+    addCategoryError.classList.remove("hidden");
+    addCategoryNameInput.classList.add("input-error");
+    return;
+  }
+  if (conflict === "wallet") {
+    addCategoryError.textContent = `"${name}" is a wallet name. Its spending already has its own slice.`;
+    addCategoryError.classList.remove("hidden");
+    addCategoryNameInput.classList.add("input-error");
+    return;
+  }
+
+  /* Inserted before the fallback so "Others" stays last, where a catch-all
+     reads correctly, no matter how many are added. */
+  const arr = settings.categories[list];
+  const fallbackAt = arr.findIndex(c => c.toLowerCase() === FALLBACK_CATEGORY.toLowerCase());
+  if (fallbackAt === -1) arr.push(name);
+  else arr.splice(fallbackAt, 0, name);
+
+  saveSettings();
+  addCategoryModal.classList.add("hidden");
+  renderAllCategoryOptions();
+  renderCategorySettings(list);
+}
+
+confirmAddCategoryBtn.addEventListener("click", confirmAddCategory);
+addCategoryNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmAddCategory(); });
+addCategoryNameInput.addEventListener("input", () => {
+  addCategoryNameInput.classList.remove("input-error");
+  addCategoryError.classList.add("hidden");
+});
+cancelAddCategoryBtn.addEventListener("click", () => addCategoryModal.classList.add("hidden"));
+
+cancelDeleteCategoryBtn.addEventListener("click", () => {
+  deleteCategoryModal.classList.add("hidden");
+  categoryPendingDelete = null;
+});
+
+confirmDeleteCategoryBtn.addEventListener("click", () => {
+  if (!categoryPendingDelete) return;
+  const { list, name } = categoryPendingDelete;
+
+  settings.categories[list] = (settings.categories[list] || [])
+    .filter(c => c !== name);
+  saveSettings();
+
+  deleteCategoryModal.classList.add("hidden");
+  categoryPendingDelete = null;
+  renderAllCategoryOptions();
+  renderCategorySettings(list);
+  /* The chart is unchanged - removing a category from a dropdown moves no
+     money - but the settings list it mirrors has, so redraw for consistency. */
+  renderChart();
+});
+
 cancelDeleteWalletBtn.addEventListener("click", () => {
   deleteWalletModal.classList.add("hidden");
   walletPendingDelete = null;
@@ -2750,6 +3355,9 @@ confirmDeleteWalletBtn.addEventListener("click", () => {
 });
 
 renderWalletsSettings();
+// The two entry dropdowns hold no options in the markup - build them now.
+renderAllCategoryOptions();
+renderAllCategorySettings();
 
 /* =========================
    IMPORT DATA
@@ -3041,8 +3649,11 @@ function summarizeEntry(rawEntry) {
    finished month yet. */
 function drawTrendChart(entries) {
   if (!trendCtx) return;
-  const W = trendCanvas.width;
-  const H = trendCanvas.height;
+  // Density-corrected logical size; null when the history view is not on screen.
+  const box = fitCanvas(trendCanvas, trendCtx);
+  if (!box) return;
+  const W = box.w;
+  const H = box.h;
   /* padTop leaves room for the value labels that sit above the tallest bar;
      padBottom for the month names under the axis. */
   const padTop = 22;
@@ -3178,7 +3789,7 @@ function buildHistoryRow(key) {
   const detailRows = Object.entries(s.totals)
     .sort((a, b) => b[1] - a[1])
     .map(([label, amount]) => {
-      const color = CATEGORY_COLORS[label] || walletColorMap[label] || "#6a6a6a";
+      const color = walletColorMap[label] || categoryColor(label);
       return `
         <div class="legend-item">
           <div class="legend-left">
@@ -3487,3 +4098,101 @@ confirmResetBtn.addEventListener("click", () => {
     indicator.style.opacity = "0";
   }, { passive: true });
 })();
+
+/* =========================
+   LIVE CYCLE ROLLOVER
+
+   The rollover at the top of this file runs once, at load. That was enough
+   when the app was a page you opened; it is not enough for an installed PWA,
+   which stays resident in memory for days. Left open across the start of a
+   new cycle, `data` still pointed at the finished month, so every entry added
+   after midnight was written into a month the user considered closed - with
+   no error and nothing on screen to suggest it.
+
+   This re-checks the date whenever the app comes back to the foreground, and
+   performs the identical rollover without a reload.
+========================= */
+
+// A one-line toast with no action attached. Reuses the undo toast's markup,
+// hiding the button and the draining bar - neither means anything here,
+// because a rollover is not something the user can undo.
+function showNotice(message) {
+  if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
+  /* Anything still undoable belongs to the month that just closed, and the
+     toast is about to be taken over by this notice - so commit it now rather
+     than leave entries pending with nothing on screen offering them. */
+  flushUndoStack();
+
+  undoText.textContent = message;
+  undoBtn.classList.add("hidden");
+  undoBar.style.transition = "none";
+  undoBar.style.width = "0%";
+  undoToast.classList.remove("hidden", "fading");
+
+  setTimeout(() => {
+    undoToast.classList.add("fading");
+    setTimeout(() => {
+      undoToast.classList.add("hidden");
+      undoToast.classList.remove("fading");
+      undoBtn.classList.remove("hidden");
+    }, 300);
+  }, 4000);
+}
+
+/* Rolls the app forward if the cycle has ended since it was last checked.
+   Returns true when a rollover actually happened. */
+function checkCycleRollover() {
+  if (!data || !data.cycleNext) return false;
+  const today = todayString();
+  if (today < data.cycleNext) return false;
+
+  /* Abandon any half-finished edit first. Its target belongs to the month
+     being archived, and saving afterwards would write into an object that is
+     no longer part of the live month. */
+  cancelEdit();
+
+  const closedLabel = monthLabel(data.month);
+  performRollover(today);
+  currentMonthKey = data.month;
+
+  // Everything on screen belongs to the month that just closed.
+  renderMonthLabel();
+  renderIncome();
+  renderPriority();
+  updatePriorityLockUI();
+  updateCopyLastBtn();
+  renderWallets();
+  renderSecondChoice();
+  calculateRemaining();
+
+  // The history view, if it happens to be open, has gained a month.
+  if (!historyView.classList.contains("hidden")) renderHistory();
+
+  showNotice(`${closedLabel} closed - new month started`);
+  return true;
+}
+
+/* Foreground transitions only. There is deliberately no timer: a phone
+   suspends timers in a backgrounded app anyway, so the moment that actually
+   matters is the user coming back to it. `pageshow` covers a restore from
+   the back-forward cache, which fires no visibilitychange. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkCycleRollover();
+});
+window.addEventListener("pageshow", () => { checkCycleRollover(); });
+window.addEventListener("focus", () => { checkCycleRollover(); });
+
+/* Both charts size their backing store to the box they are drawn into, so a
+   rotation or window resize leaves them scaled from the old dimensions. The
+   canvases are the only thing here that cannot reflow on their own - every
+   other element is CSS-driven - so a redraw is all this needs to do.
+   Debounced, because resize fires continuously during an orientation change. */
+let chartResizeTimer = null;
+window.addEventListener("resize", () => {
+  if (chartResizeTimer) clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => {
+    chartResizeTimer = null;
+    if (settings.showChart) renderChart();
+    if (!historyView.classList.contains("hidden")) renderHistory();
+  }, 150);
+});

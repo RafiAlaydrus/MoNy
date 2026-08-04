@@ -8,3 +8,8 @@ node_modules/
 # Local-only project reference. Never published to the public repo.
 PROGRESS.md
 CLAUDE.md
+
+# Local dev only. The shipped app is static files served straight from the
+# repo root - nothing here is part of it, and GitHub Pages must not serve it.
+server.mjs
+.claude/

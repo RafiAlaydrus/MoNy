@@ -809,6 +809,17 @@ td {
   color: #666;
 }
 
+/* An entry dated outside the current cycle. It still counts toward this
+   month - see entryDateLabel() - so this is a note, not a warning: the year
+   is already spelled out beside it, and the dotted underline is what invites
+   the tooltip explaining why the two disagree. */
+.date-stamp.is-outside {
+  color: #8a8a8a;
+  font-style: italic;
+  text-decoration: underline dotted #4a4a4a;
+  text-underline-offset: 2px;
+}
+
 .returned-mark {
   color: #777;
   font-size: 11px;
@@ -821,6 +832,9 @@ td {
   margin: 8px 0 0;
 }
 
+/* A <button> since v1.22.0 - tapping it unlocks the list. The reset of
+   border/font is what keeps it looking like the badge it replaced, rather
+   than a browser-styled button. */
 .lock-badge {
   font-size: 11px;
   background: #2a2a2a;
@@ -828,6 +842,22 @@ td {
   padding: 3px 8px;
   border-radius: 6px;
   letter-spacing: 0.3px;
+  border: 1px solid #383838;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.lock-badge::after {
+  /* Says the badge does something, without spelling out "tap to unlock" in a
+     space this small. */
+  content: " ✕";
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+.lock-badge:active {
+  background: #333;
+  color: #aaa;
 }
 
 /* =====================
@@ -1029,6 +1059,36 @@ td {
   gap: 8px;
 }
 
+/* Category rows reuse .wallet-setting-row for layout. The chip carries the
+   exact colour the chart gives that category, so this list doubles as the
+   chart's key - the one place colour is allowed outside the chart itself. */
+.category-chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.category-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #d8d8d8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shown instead of a delete button on the fallback category, which cannot be
+   removed because uncategorised entries are filed under it. */
+.category-locked {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a6a;
+  flex: 0 0 auto;
+}
+
 .setting-input-wide {
   flex: 1;
   min-width: 0;
@@ -1128,9 +1188,15 @@ td {
   gap: 16px;
 }
 
+/* Display size is set HERE, in CSS, and never by the width/height attributes.
+   fitCanvas() rewrites those attributes to match the device pixel ratio, so
+   any layout that depended on them would jump to 2x or 3x the intended size
+   on a retina phone. An explicit width/height pair makes the attributes
+   purely a backing-store concern. */
 #summary-chart {
-  max-width: 220px;
-  max-height: 220px;
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
 }
 
 #chart-legend {
@@ -1182,9 +1248,12 @@ td {
   letter-spacing: 0.3px;
 }
 
+/* Explicit height for the same reason as #summary-chart above: without it the
+   element would inherit the DPI-scaled height attribute and grow 2-3x tall. */
 #trend-chart {
   width: 100%;
   max-width: 440px;
+  height: 190px;
 }
 
 .stat-grid {

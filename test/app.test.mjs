@@ -308,6 +308,133 @@ test("a long gap lands on the current cycle and carries once", () => {
 });
 
 /* ---------------------------------------------------------------------------
+   LIVE ROLLOVER - the app outliving the cycle it was opened in
+
+   An installed PWA is not a page load. It stays resident for days, so the
+   startup rollover alone left `data` pointing at a month the user considered
+   closed, and every entry added after midnight was written into it silently.
+--------------------------------------------------------------------------- */
+
+/* REGRESSION: the reported shape of the bug. Boot inside a cycle, move the
+   clock past its end WITHOUT reloading, and the app must close the month by
+   itself. Reverting checkCycleRollover fails this on the first assertion -
+   data.month stays "2026-7". */
+test("REGRESSION: the cycle rolls over while the app stays open", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01",
+        income: 3000,
+        priority: [{ name: "Rent", category: "Bills", amount: 900, paid: true, date: "2026-07-02T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-07-20"
+  });
+
+  assert.equal(w.__app.data.month, "2026-7", "still July while the app is open");
+  assert.equal(Object.keys(w.__app.archive).length, 0, "nothing archived yet");
+
+  // Midnight passes with the app still in memory, then the user returns to it.
+  w.__setToday("2026-08-01");
+  assert.equal(w.__app.run("checkCycleRollover()"), true, "the rollover must fire");
+
+  assert.equal(w.__app.data.month, "2026-8", "August is now the live month");
+  assert.ok(w.__app.archive["2026-7"], "July was archived");
+  assert.equal(w.__app.archive["2026-7"].data.income, 3000, "with its figures intact");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+/* The archived copy must survive `data` being emptied in place. performRollover
+   mutates rather than reassigns, so archiving the live object by reference
+   would leave history holding a month that gets blanked a few lines later. */
+test("a live rollover archives a real copy, not a reference to the live month", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01", income: 2500
+      })
+    },
+    today: "2026-07-15"
+  });
+
+  w.__setToday("2026-08-02");
+  w.__app.run("checkCycleRollover()");
+
+  assert.equal(w.__app.archive["2026-7"].data.income, 2500, "the archived month keeps its income");
+  assert.equal(w.__app.archive["2026-7"].data.month, "2026-7", "and its own key");
+  assert.equal(w.__app.data.income, null, "while the live month is genuinely fresh");
+});
+
+/* An entry added after the rollover belongs to the new month. This is the
+   user-visible consequence of the bug: money logged on the 1st used to land
+   in a month already sitting in History. */
+test("an entry added after a live rollover lands in the new month", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01", income: 3000
+      })
+    },
+    today: "2026-07-28"
+  });
+
+  w.__setToday("2026-08-01");
+  w.__app.run("checkCycleRollover()");
+  w.__app.run(`
+    data.secondChoice.push({ name: "coffee", category: "Food / Drink", amount: 12, type: "take", date: new Date().toISOString() });
+    saveData();
+  `);
+
+  assert.equal(w.__app.data.secondChoice.length, 1, "the entry is in the live month");
+  assert.equal((w.__app.archive["2026-7"].data.secondChoice || []).length, 0,
+    "and not in the archived one");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+/* Nothing to do mid-cycle. A check that rolled over early would archive a
+   month the user is still using. */
+test("checking mid-cycle does nothing", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        month: "2026-8", cycleStart: "2026-08-01", cycleNext: "2026-09-01", income: 3000
+      })
+    },
+    today: "2026-08-10"
+  });
+
+  w.__setToday("2026-08-31");
+  assert.equal(w.__app.run("checkCycleRollover()"), false, "the last day is still inside the cycle");
+  assert.equal(w.__app.data.month, "2026-8");
+  assert.equal(Object.keys(w.__app.archive).length, 0, "nothing archived");
+});
+
+/* Skipping several cycles while backgrounded must land on today's cycle and
+   carry the balance exactly once - the same guarantee the startup path has. */
+test("a live rollover across several cycles lands on today's, carrying once", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        month: "2026-1", cycleStart: "2026-01-01", cycleNext: "2026-02-01", income: 1000
+      })
+    },
+    today: "2026-01-15"
+  });
+
+  w.__setToday("2026-05-09");
+  w.__app.run("checkCycleRollover()");
+
+  assert.equal(w.__app.data.cycleStart, "2026-05-01", "lands on May, not February");
+  assert.equal(w.__app.data.carryOver, 1000, "carried once, not four times");
+  assert.equal(Object.keys(w.__app.archive).length, 1, "only the month that existed is archived");
+});
+
+/* ---------------------------------------------------------------------------
    MIGRATIONS - old shapes must keep working
 --------------------------------------------------------------------------- */
 
@@ -814,4 +941,407 @@ test("total income shows the carried balance, matching the chart", () => {
   });
   assert.equal(w.document.getElementById("total-income-display").textContent, "RM 1,095.97");
   assert.equal(w.document.getElementById("remaining-money").textContent, "RM 882.01");
+});
+
+/* ---------------------------------------------------------------------------
+   CUSTOM CATEGORIES
+
+   The two entry dropdowns were hardcoded markup until v1.22.0 - three labels
+   for all everyday spending. They come from settings.categories now, which
+   means the migration seeding them, and the guarantee that removing one never
+   rewrites an entry already filed under it, both need covering.
+--------------------------------------------------------------------------- */
+
+const catValues = (w, id) =>
+  [...w.document.getElementById(id).querySelectorAll("option")]
+    .map(o => o.value)
+    .filter(Boolean);
+
+test("an install with no categories is seeded with the old hardcoded list", () => {
+  // SETTINGS deliberately has no `categories` key - the pre-v1.22.0 shape.
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  assert.deepEqual([...w.__app.settings.categories.priority],
+    ["Bills", "Subscription", "Others"], "exactly what the markup used to hold");
+  assert.deepEqual([...w.__app.settings.categories.secondChoice],
+    ["Food / Drink", "Transport", "Others"]);
+  // And the dropdowns are actually built from them.
+  assert.deepEqual(catValues(w, "pb-category"), ["Bills", "Subscription", "Others"]);
+  assert.deepEqual(catValues(w, "sc-category"), ["Food / Drink", "Transport", "Others"]);
+});
+
+test("a stored category list drives the dropdowns", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: {
+        ...SETTINGS,
+        categories: { priority: ["Rent", "Others"], secondChoice: ["Coffee", "Petrol", "Others"] }
+      },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-15"
+  });
+  assert.deepEqual(catValues(w, "pb-category"), ["Rent", "Others"]);
+  assert.deepEqual(catValues(w, "sc-category"), ["Coffee", "Petrol", "Others"]);
+});
+
+/* "Others" is where monthTotalsOf files anything with no category, so a list
+   missing it would send that spending to a label the user cannot see. */
+test("the fallback category is restored if it is missing", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, categories: { priority: ["Rent"], secondChoice: ["Coffee"] } },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-15"
+  });
+  assert.ok(w.__app.settings.categories.priority.includes("Others"));
+  assert.ok(w.__app.settings.categories.secondChoice.includes("Others"));
+});
+
+test("a junk category list falls back rather than throwing", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, categories: { priority: "nonsense", secondChoice: [1, null, "", "Ok", "Ok"] } },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-15"
+  });
+  assert.equal(w.__jsdomErrors.length, 0, "boot must survive a hand-edited shape");
+  assert.deepEqual([...w.__app.settings.categories.priority], ["Bills", "Subscription", "Others"],
+    "an unusable list falls back to the defaults");
+  assert.deepEqual([...w.__app.settings.categories.secondChoice], ["Ok", "Others"],
+    "junk entries and the duplicate are dropped, the fallback added");
+});
+
+test("adding a category puts it before the fallback and into the dropdown", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  w.__app.run(`
+    addCategoryTarget = "secondChoice";
+    document.getElementById("add-category-name").value = "Groceries";
+    confirmAddCategory();
+  `);
+
+  assert.deepEqual([...w.__app.settings.categories.secondChoice],
+    ["Food / Drink", "Transport", "Groceries", "Others"], "Others stays last");
+  assert.ok(catValues(w, "sc-category").includes("Groceries"));
+});
+
+test("a category cannot duplicate another, or take a wallet's name", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Transport")`), "duplicate");
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "grocery")`), "wallet",
+    "case-insensitive against the existing Grocery wallet");
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "  ")`), "empty");
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Groceries")`), null);
+});
+
+/* The reverse direction: a wallet must not take a category's name either, or
+   the two would merge into one chart slice. A CUSTOM category has to be
+   reserved just as firmly as a built-in one. */
+test("a wallet cannot take a custom category's name", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, categories: { priority: ["Others"], secondChoice: ["Petrol", "Others"] } },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-15"
+  });
+  assert.equal(w.__app.run(`walletNameConflict("Petrol")`), "reserved");
+  assert.equal(w.__app.run(`walletNameConflict("petrol")`), "reserved", "case-insensitive");
+});
+
+/* The important guarantee: removing a category is a dropdown change, not a
+   data change. Rewriting entries would alter figures the user already
+   checked - including archived months, which are a record of what happened. */
+test("removing a category leaves entries filed under it untouched", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        secondChoice: [
+          { name: "grab", category: "Transport", amount: 13, type: "take", date: "2026-08-02T10:00:00.000Z" }
+        ]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const before = w.__app.run(`monthTotalsOf(data, allWallets()).categories["Transport"]`);
+  assert.equal(before, 13);
+
+  w.__app.run(`
+    categoryPendingDelete = { list: "secondChoice", name: "Transport" };
+    document.getElementById("confirm-delete-category").click();
+  `);
+
+  assert.ok(!catValues(w, "sc-category").includes("Transport"), "gone from the dropdown");
+  assert.equal(w.__app.data.secondChoice[0].category, "Transport", "but the entry is unchanged");
+  assert.equal(w.__app.run(`monthTotalsOf(data, allWallets()).categories["Transport"]`), 13,
+    "and it still counts toward spending");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+/* Editing an entry whose category was removed must not silently recategorise
+   it. The select re-offers the original, marked, so an unchanged save is
+   genuinely unchanged. */
+test("editing an entry keeps a category that has since been removed", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        secondChoice: [
+          { name: "grab", category: "Transport", amount: 13, type: "take", date: "2026-08-02T10:00:00.000Z" }
+        ]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  w.__app.run(`
+    settings.categories.secondChoice = ["Food / Drink", "Others"];
+    renderAllCategoryOptions();
+    editSecondChoice(data.secondChoice[0]);
+  `);
+
+  const sel = w.document.getElementById("sc-category");
+  assert.equal(sel.value, "Transport", "the entry's own category is still selected");
+  assert.ok([...sel.querySelectorAll("option")].some(o => o.textContent.includes("(removed)")),
+    "and marked as no longer offered");
+});
+
+/* The fallback cannot be removed - the settings row shows a locked marker
+   instead of a delete button. */
+test("the fallback category has no delete button", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  const rows = [...w.document.querySelectorAll("#cat-secondChoice-list .wallet-setting-row")];
+  const others = rows.find(r => r.querySelector(".category-name").textContent === "Others");
+  assert.ok(others, "the fallback is listed");
+  assert.equal(others.querySelector(".wallet-delete-btn"), null, "with no way to remove it");
+  assert.ok(others.querySelector(".category-locked"), "and a marker saying why");
+
+  const transport = rows.find(r => r.querySelector(".category-name").textContent === "Transport");
+  assert.ok(transport.querySelector(".wallet-delete-btn"), "an ordinary category can be removed");
+});
+
+/* Colours are hashed from the NAME, not taken from a list position, so a
+   category keeps its colour as others are added and removed around it. */
+test("a custom category's colour is stable and name-derived", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  const first = w.__app.run(`categoryColor("Groceries")`);
+  w.__app.run(`settings.categories.secondChoice = ["A", "B", "Groceries", "Others"];`);
+  assert.equal(w.__app.run(`categoryColor("Groceries")`), first,
+    "position changed, colour did not");
+  assert.match(first, /^#[0-9a-f]{6}$/i);
+  assert.equal(w.__app.run(`categoryColor("Bills")`), "#e74c3c", "built-ins keep their colour");
+});
+
+/* ---------------------------------------------------------------------------
+   TIER 3 - dates, undo depth, the priority lock, wallet shortfalls
+--------------------------------------------------------------------------- */
+
+/* A back-dated entry still counts toward the month it was entered in - that
+   is deliberate - so the row has to say the two disagree rather than render a
+   bare "15 Jun" that looks like it belongs here. */
+test("an entry dated outside the cycle shows its year and is marked", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        secondChoice: [
+          { name: "inside", category: "Others", amount: 5, type: "take", date: "2026-08-10T10:00:00.000Z" },
+          { name: "outside", category: "Others", amount: 7, type: "take", date: "2026-06-15T10:00:00.000Z" }
+        ]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const cells = [...w.document.querySelectorAll("#sc-table tr .date-stamp")];
+  const inside = cells.find(c => !c.classList.contains("is-outside"));
+  const outside = cells.find(c => c.classList.contains("is-outside"));
+
+  assert.ok(inside, "an in-cycle entry is not marked");
+  assert.doesNotMatch(inside.textContent, /2026/, "and needs no year");
+
+  assert.ok(outside, "the June entry is marked");
+  assert.match(outside.textContent, /2026/, "with the year spelled out");
+  assert.match(outside.getAttribute("title"), /counted in it/, "and an explanation");
+
+  // Marking it must not change what it counts toward.
+  assert.equal(w.__app.run(`monthTotalsOf(data, allWallets()).spent`), 12);
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+/* REGRESSION: the undo stack. Deleting twice in quick succession used to
+   strand the first deletion - the toast showed only the second and the first
+   could never be taken back. */
+test("REGRESSION: two quick deletions can both be undone", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        secondChoice: [
+          { name: "one", category: "Others", amount: 10, type: "take", date: "2026-08-02T10:00:00.000Z" },
+          { name: "two", category: "Others", amount: 20, type: "take", date: "2026-08-03T10:00:00.000Z" }
+        ]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  w.__app.run(`
+    deleteSecondChoiceItem(data.secondChoice.find(i => i.name === "one"));
+    deleteSecondChoiceItem(data.secondChoice.find(i => i.name === "two"));
+  `);
+  assert.equal(w.__app.data.secondChoice.length, 0, "both gone");
+
+  const undo = w.document.getElementById("undo-btn");
+  undo.click();
+  assert.deepEqual([...w.__app.data.secondChoice].map(i => i.name), ["two"],
+    "the most recent deletion comes back first");
+
+  // The toast must re-offer the earlier one rather than going quiet.
+  assert.ok(!w.document.getElementById("undo-toast").classList.contains("hidden"),
+    "the toast stays up for the next undo");
+  undo.click();
+  assert.deepEqual([...w.__app.data.secondChoice].map(i => i.name).sort(), ["one", "two"],
+    "and the first deletion is recoverable too");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+test("the undo stack is bounded, committing the oldest beyond the cap", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+  const committed = w.__app.run(`
+    (() => {
+      const done = [];
+      for (let i = 0; i < 13; i++) showUndo("x" + i, () => done.push(i), () => {});
+      return { done: done.length, depth: undoStack.length };
+    })()
+  `);
+  assert.equal(committed.depth, 10, "the stack is capped");
+  assert.equal(committed.done, 3, "the three oldest were committed rather than dropped");
+});
+
+/* The lock existed to stop accidental edits, but had no way out short of the
+   hidden full reset - which wipes the month. */
+test("the priority lock can be undone without resetting the month", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        priority: [{ name: "Rent", category: "Bills", amount: 900, paid: true, date: "2026-08-02T10:00:00.000Z" }],
+        priorityLocked: true
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const form = w.document.getElementById("priority-form");
+  const badge = w.document.getElementById("priority-lock-badge");
+  assert.equal(form.style.display, "none", "locked hides the form");
+  assert.ok(!badge.classList.contains("hidden"), "and shows the badge");
+
+  badge.click();
+  w.document.getElementById("confirm-priority").click();
+
+  assert.equal(w.__app.data.priorityLocked, false);
+  assert.notEqual(form.style.display, "none", "the form comes back");
+  assert.ok(badge.classList.contains("hidden"), "and the badge goes away");
+  assert.equal(w.__app.data.priority.length, 1, "the bills themselves are untouched");
+  assert.equal(w.__app.data.income, 3000, "and so is the rest of the month");
+});
+
+test("locking still works, and the shared modal says which way it is going", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        priority: [{ name: "Rent", category: "Bills", amount: 900, paid: false, date: "2026-08-02T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  w.document.getElementById("save-priority").click();
+  assert.match(w.document.getElementById("priority-modal-title").textContent, /Save/);
+  w.document.getElementById("confirm-priority").click();
+  assert.equal(w.__app.data.priorityLocked, true);
+
+  w.document.getElementById("priority-lock-badge").click();
+  assert.match(w.document.getElementById("priority-modal-title").textContent, /Unlock/);
+});
+
+/* A wallet take beyond its balance used to be a bare red border. It now
+   offers the ways to make the take legal - but never "record it anyway",
+   because a negative wallet balance cannot be represented. */
+test("taking more than a wallet holds offers a top-up instead of failing silently", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 3000, walletData: { w0: { budget: 50, items: [] } } })
+    },
+    today: "2026-08-15"
+  });
+
+  const section = w.document.querySelector('.wallet-section[data-wallet-id="w0"]');
+  section.querySelector("[data-role='item-name']").value = "big shop";
+  section.querySelector("[data-role='item-amount']").value = "120";
+  section.querySelector("[data-role='take-btn']").click();
+
+  const modal = w.document.getElementById("overspend-modal");
+  assert.ok(!modal.classList.contains("hidden"), "the prompt opens");
+  assert.match(w.document.getElementById("overspend-summary").textContent, /70\.00 more/,
+    "and names the shortfall");
+
+  const options = [...w.document.querySelectorAll("#overspend-options .transfer-dest-btn")]
+    .map(b => b.textContent);
+  assert.ok(options.some(t => /from main balance/.test(t)), "main can cover it");
+  assert.ok(!options.some(t => /Record it anyway/.test(t)),
+    "but a negative wallet balance is never offered");
+
+  // Taking the top-up must leave the wallet at zero, not negative.
+  w.document.querySelector("#overspend-options .transfer-dest-btn").click();
+  assert.equal(w.__app.run(`getWalletBalance("w0")`), 0);
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+test("a wallet shortfall nothing can cover explains itself", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({ income: 60, walletData: { w0: { budget: 50, items: [] } } })
+    },
+    today: "2026-08-15"
+  });
+
+  const section = w.document.querySelector('.wallet-section[data-wallet-id="w0"]');
+  section.querySelector("[data-role='item-name']").value = "too much";
+  section.querySelector("[data-role='item-amount']").value = "500";
+  section.querySelector("[data-role='take-btn']").click();
+
+  assert.equal(w.document.querySelectorAll("#overspend-options .transfer-dest-btn").length, 0);
+  assert.match(w.document.getElementById("overspend-options").textContent, /Raise this wallet's budget/);
 });

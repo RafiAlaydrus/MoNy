@@ -66,9 +66,14 @@ export function bootApp({ storage = {}, today = "2026-08-15" } = {}) {
   /* Pin "now". app.js reads new Date() at load to decide the current cycle, so
      this has to be in place before the script runs. Only the zero-argument form
      is redirected - every other use (parsing stored ISO strings, arithmetic on
-     cycle dates) must behave normally or the cycle maths would be meaningless. */
+     cycle dates) must behave normally or the cycle maths would be meaningless.
+
+     The pinned instant is a `let`, not a const, so a test can move the clock
+     forward AFTER boot via window.__setToday. That is what makes the live
+     rollover testable: an installed PWA stays running while the date changes
+     under it, which is precisely the case a single fixed date cannot express. */
   const RealDate = window.Date;
-  const pinned = new RealDate(`${today}T12:00:00`);
+  let pinned = new RealDate(`${today}T12:00:00`);
   class PinnedDate extends RealDate {
     constructor(...args) {
       if (args.length === 0) super(pinned.getTime());
@@ -77,6 +82,7 @@ export function bootApp({ storage = {}, today = "2026-08-15" } = {}) {
     static now() { return pinned.getTime(); }
   }
   window.Date = PinnedDate;
+  window.__setToday = dateStr => { pinned = new RealDate(`${dateStr}T12:00:00`); };
 
   // Seed storage before the app reads it.
   Object.entries(storage).forEach(([k, v]) => {
