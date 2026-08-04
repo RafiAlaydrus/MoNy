@@ -1528,3 +1528,186 @@ test("the category panel opens from settings and closes again", () => {
   assert.match(w.document.getElementById("category-count").textContent, /categories/,
     "the settings row summarises how many there are");
 });
+
+/* ---------------------------------------------------------------------------
+   RESERVED AND COLLIDING CATEGORY NAMES
+
+   isTransferEntry() treats `category === "Transfer"` as a wallet transfer
+   returning to main - a fallback for entries written before the flag shipped.
+   That was safe while categories were hardcoded. Making them editable removed
+   the protection, and a category by that name broke the invariant.
+--------------------------------------------------------------------------- */
+
+/* REGRESSION: the exact shape of the bug, asserted against money.js rather
+   than the UI, because it is the books that broke. Reverting the reserved
+   check lets the category be created and this fails on totalIncome. */
+test("REGRESSION: a category named Transfer would void real income", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month({ income: 1000 }) },
+    today: "2026-08-15"
+  });
+
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Transfer")`), "reserved");
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "transfer")`), "reserved",
+    "case-insensitive");
+
+  // It must not be creatable through the real add path either.
+  w.__app.run(`
+    addCategoryTarget = "secondChoice";
+    document.getElementById("add-category-name").value = "Transfer";
+    confirmAddCategory();
+  `);
+  assert.ok(![...w.__app.settings.categories.secondChoice].includes("Transfer"),
+    "the add is refused");
+  assert.ok(!w.document.getElementById("add-category-error").classList.contains("hidden"),
+    "and the reason is shown");
+
+  /* What it would have caused: income logged under that name reads as money
+     coming back out of a wallet, so totalIncome stops rising while
+     mainRemaining does, and the books stop balancing. */
+  const broken = w.__app.run(`
+    (() => {
+      const d = JSON.parse(JSON.stringify(data));
+      d.secondChoice.push({ name: "side job", category: "Transfer", amount: 500,
+                            type: "add", newMoney: true, date: "2026-08-02T10:00:00.000Z" });
+      return { income: totalIncomeOf(d, []), ok: reconciles(d, []) };
+    })()
+  `);
+  assert.equal(broken.income, 1000, "income would not have risen");
+  assert.equal(broken.ok, false, "and the invariant would have broken");
+});
+
+/* An install that created one during the window when nothing stopped it. */
+test("a stored reserved category is removed on load", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: {
+        ...SETTINGS,
+        categories: { priority: ["Bills", "Others"], secondChoice: ["Transfer", "Food / Drink", "Others"] }
+      },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-15"
+  });
+
+  assert.deepEqual([...w.__app.settings.categories.secondChoice], ["Food / Drink", "Others"],
+    "dropped from the list");
+  assert.ok(!catValues(w, "sc-category").includes("Transfer"), "and from the dropdown");
+  assert.deepEqual([...stored(w, KEYS.settings).categories.secondChoice], ["Food / Drink", "Others"],
+    "the repair is persisted, not just in memory");
+});
+
+/* Entries already filed under it are deliberately left alone: a user's
+   "Transfer" entry and a genuine pre-v1.13.0 untagged transfer are identical
+   on disk, so there is no safe way to tell them apart. */
+test("removing the reserved name does not rewrite entries already using it", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: {
+        ...SETTINGS,
+        categories: { priority: ["Others"], secondChoice: ["Transfer", "Others"] }
+      },
+      [KEYS.data]: month({
+        secondChoice: [{ name: "from wallet", category: "Transfer", amount: 50,
+                         type: "add", date: "2026-08-02T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-08-15"
+  });
+  assert.equal(w.__app.data.secondChoice[0].category, "Transfer",
+    "the entry is untouched - it may be a real legacy transfer");
+});
+
+/* A CLOSED wallet's spending stays on the books under its name, so a category
+   taking that name would merge into its slice. */
+test("a category cannot take a closed wallet's name", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: {
+        ...SETTINGS,
+        wallets: [{ id: "w0", name: "Grocery" }, { id: "w1", name: "Fuel", deleted: true }]
+      },
+      [KEYS.data]: month({
+        walletData: { w1: { budget: 100, items: [{ name: "petrol", amount: 60, type: "take", date: "2026-08-02T10:00:00.000Z" }] } }
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Fuel")`), "wallet",
+    "the closed wallet still owns the name");
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Grocery")`), "wallet",
+    "and so does the open one");
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Petrol")`), null,
+    "an unrelated name is fine");
+});
+
+/* ---------------------------------------------------------------------------
+   PROMPTS OPEN ACROSS A LIVE ROLLOVER
+
+   The overspend, transfer and source modals hold a callback closed over
+   amounts computed against the month being archived. Left open, tapping an
+   option after the rollover commits those figures into the new month.
+--------------------------------------------------------------------------- */
+
+test("REGRESSION: an open prompt is dismissed by a live rollover", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01",
+        income: 100, walletData: { w0: { budget: 50, items: [] } }
+      })
+    },
+    today: "2026-07-20"
+  });
+
+  // Trigger a real overspend prompt against July's figures.
+  const section = w.document.querySelector('.wallet-section[data-wallet-id="w0"]');
+  section.querySelector("[data-role='item-name']").value = "big shop";
+  section.querySelector("[data-role='item-amount']").value = "500";
+  section.querySelector("[data-role='take-btn']").click();
+
+  const overspend = w.document.getElementById("overspend-modal");
+  assert.ok(!overspend.classList.contains("hidden"), "the prompt is open");
+
+  // Midnight passes with it still on screen.
+  w.__setToday("2026-08-01");
+  assert.equal(w.__app.run("checkCycleRollover()"), true);
+
+  assert.ok(overspend.classList.contains("hidden"), "the prompt is dismissed");
+  assert.equal(w.__app.run("overspendCancel"), null, "and its callback dropped");
+  assert.equal(w.__app.data.month, "2026-8");
+  assert.equal((w.__app.data.walletData.w0 || { items: [] }).items.length, 0,
+    "nothing from the abandoned prompt leaked into the new month");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+test("a rollover clears every pending modal handle", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01", income: 500
+      })
+    },
+    today: "2026-07-20"
+  });
+
+  w.__app.run(`
+    walletPendingDelete = { id: "w0", name: "Grocery" };
+    categoryPendingDelete = { list: "secondChoice", name: "Transport" };
+    pendingImport = { data: {} };
+    document.getElementById("import-modal").classList.remove("hidden");
+  `);
+
+  w.__setToday("2026-08-01");
+  w.__app.run("checkCycleRollover()");
+
+  assert.equal(w.__app.run("walletPendingDelete"), null);
+  assert.equal(w.__app.run("categoryPendingDelete"), null);
+  assert.equal(w.__app.run("pendingImport"), null);
+  assert.ok(w.document.getElementById("import-modal").classList.contains("hidden"));
+  assert.equal([...w.document.querySelectorAll(".modal")].filter(m => !m.classList.contains("hidden")).length, 0,
+    "no modal is left showing");
+});

@@ -133,6 +133,18 @@ const DEFAULT_CATEGORIES = {
    so it has to exist in both lists and cannot be removed. */
 const FALLBACK_CATEGORY = "Others";
 
+/* Names the app uses internally and a user therefore cannot take.
+ *
+ * "Transfer" is the dangerous one. isTransferEntry() treats
+ * `category === "Transfer"` as a wallet transfer returning to main - a legacy
+ * fallback for entries written before the `transfer` flag shipped in v1.13.0.
+ * That was safe while categories were hardcoded, because nobody could create
+ * the name. Making them editable in v1.22.0 quietly removed that protection:
+ * a category called "Transfer" made genuine income read as returned money, so
+ * totalIncome stopped rising while mainRemaining did, and the books stopped
+ * balancing. See section 12 of PROGRESS.md. */
+const RESERVED_BY_APP = ["transfer"];
+
 if (!settings.categories || typeof settings.categories !== "object") {
   settings.categories = {
     priority: [...DEFAULT_CATEGORIES.priority],
@@ -143,11 +155,28 @@ if (!settings.categories || typeof settings.categories !== "object") {
 /* Repair a half-written or hand-edited shape rather than throwing later.
    Each list must be an array of non-empty strings and must contain the
    fallback, since an entry saved with no category is filed under it. */
+let reservedCategoryRemoved = false;
 ["priority", "secondChoice"].forEach(list => {
   const seen = new Set();
   const cleaned = (Array.isArray(settings.categories[list]) ? settings.categories[list] : [])
     .filter(c => typeof c === "string" && c.trim())
     .map(c => c.trim())
+    /* MIGRATION: drop a name the app reserves. Only reachable on an install
+       that created one during the window between v1.22.0 and v1.23.2, when
+       nothing stopped it.
+
+       The LIST is repaired; entries already filed under it are deliberately
+       left alone. A user's "Transfer" entry and a genuine pre-v1.13.0
+       untagged transfer are byte-for-byte identical - both carry only
+       `category: "Transfer"`, with no txId and no flag - so there is no way
+       to tell them apart, and guessing would either strand a real transfer
+       in income or hand back money that never left. Removing the name stops
+       any MORE being created, which is the part that can be fixed safely. */
+    .filter(c => {
+      if (!RESERVED_BY_APP.includes(c.toLowerCase())) return true;
+      reservedCategoryRemoved = true;
+      return false;
+    })
     .filter(c => {
       const key = c.toLowerCase();
       if (seen.has(key)) return false;
@@ -167,6 +196,7 @@ if (!settings.categories || typeof settings.categories !== "object") {
   }
   settings.categories[list] = cleaned;
 });
+if (reservedCategoryRemoved) saveSettings();
 // Backdating made date order meaningful, so switch existing installs to
 // oldest-first once. The Sort transactions setting still overrides it.
 if (!settings.dateOrderMigrated) {
@@ -3190,10 +3220,15 @@ let addCategoryTarget = "priority"; // which list the add modal is serving
 function categoryNameConflict(list, name, exclude) {
   const norm = name.trim().toLowerCase();
   if (!norm) return "empty";
+  if (RESERVED_BY_APP.includes(norm)) return "reserved";
   const skip = exclude ? exclude.trim().toLowerCase() : null;
   if ((settings.categories[list] || [])
       .some(c => c.trim().toLowerCase() === norm && c.trim().toLowerCase() !== skip)) return "duplicate";
-  if (activeWallets().some(w => w.name.trim().toLowerCase() === norm)) return "wallet";
+  /* allWallets(), not activeWallets(): a CLOSED wallet's spending stays on the
+     books filed under its name, so a category taking that name would merge
+     into its slice. The closed wallet is purged at the next rollover, which
+     frees the name again. */
+  if (allWallets().some(w => w.name.trim().toLowerCase() === norm)) return "wallet";
   return null;
 }
 
@@ -3392,6 +3427,12 @@ function confirmAddCategory() {
   }
   if (conflict === "duplicate") {
     addCategoryError.textContent = `"${name}" is already in this list.`;
+    addCategoryError.classList.remove("hidden");
+    addCategoryNameInput.classList.add("input-error");
+    return;
+  }
+  if (conflict === "reserved") {
+    addCategoryError.textContent = `"${name}" is used internally to tag wallet transfers. Pick another name.`;
     addCategoryError.classList.remove("hidden");
     addCategoryNameInput.classList.add("input-error");
     return;
@@ -4261,6 +4302,26 @@ function showNotice(message) {
   }, 4000);
 }
 
+/* Closes every open modal and drops the state behind it.
+ *
+ * Used by the rollover. The cancel callbacks are deliberately NOT run: they
+ * exist to put the old screen back the way it was - re-tick a checkbox, mark
+ * a field - and that screen is about to be rebuilt from a different month, so
+ * running them would only touch nodes that are about to be discarded.
+ *
+ * Nothing here has been written yet. Every one of these prompts sits between
+ * the user asking for something and the app doing it, so dismissing loses no
+ * data; the user re-enters it against the new month, which is the only one it
+ * could correctly belong to.
+ */
+function dismissOpenPrompts() {
+  document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden"));
+  overspendCancel = null;
+  walletPendingDelete = null;
+  categoryPendingDelete = null;
+  pendingImport = null;
+}
+
 /* Rolls the app forward if the cycle has ended since it was last checked.
    Returns true when a rollover actually happened. */
 function checkCycleRollover() {
@@ -4272,6 +4333,13 @@ function checkCycleRollover() {
      being archived, and saving afterwards would write into an object that is
      no longer part of the live month. */
   cancelEdit();
+  /* And any open prompt, for the same reason but worse: the overspend,
+     transfer and "Where's this from?" modals hold a callback closed over
+     amounts worked out against the month that is about to be archived.
+     Tapping an option after the rollover would commit those figures into the
+     NEW month, where they mean nothing. Dismissing is the only safe move -
+     nothing has been written yet, so the user simply re-enters it. */
+  dismissOpenPrompts();
 
   const closedLabel = monthLabel(data.month);
   performRollover(today);
