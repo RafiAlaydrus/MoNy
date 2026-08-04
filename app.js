@@ -3161,7 +3161,11 @@ cancelAddWalletBtn.addEventListener("click", () => addWalletModal.classList.add(
    are supposed to be a record of what happened.
 ========================= */
 
-const CATEGORY_LIST_LABELS = { priority: "Bill", secondChoice: "Spending" };
+/* The two lists, named exactly as the sections they feed. "Bills"/"Spending"
+   read as invented jargon next to a screen labelled Priority and Second
+   choice - and "Bills" was worse than vague, since it is also the name of a
+   category INSIDE that list. */
+const CATEGORY_LIST_LABELS = { priority: "Priority", secondChoice: "Second choice" };
 
 const addCategoryModal = document.getElementById("add-category-modal");
 const addCategoryTitle = document.getElementById("add-category-title");
@@ -3298,7 +3302,14 @@ function renderCategorySettings(list) {
         const used = categoryUsageCount(list, name);
         const parts = [`Remove "${name}" from the ${CATEGORY_LIST_LABELS[list].toLowerCase()} categories?`];
         if (used > 0) {
-          parts.push(`${used} ${used === 1 ? "entry" : "entries"} this month stay filed under it and keep counting - only the dropdown loses it. Rename it instead if you want those moved.`);
+          // Verb agreement matters here - the count is often 1, and "1 entry
+          // stay filed" is the sort of thing that reads as a broken app.
+          const one = used === 1;
+          parts.push(
+            `${used} ${one ? "entry" : "entries"} this month ${one ? "stays" : "stay"} filed under it and ` +
+            `${one ? "keeps" : "keep"} counting - only the dropdown loses it. ` +
+            `Rename it instead if you want ${one ? "it" : "them"} moved.`
+          );
         }
         parts.push("You can add it back at any time.");
         deleteCategoryText.textContent = parts.join(" ");
@@ -3361,7 +3372,7 @@ if (categoryPanel) {
   if (!btn) return;
   btn.addEventListener("click", () => {
     addCategoryTarget = list;
-    addCategoryTitle.textContent = `Add ${CATEGORY_LIST_LABELS[list]} Category`;
+    addCategoryTitle.textContent = `Add to ${CATEGORY_LIST_LABELS[list]}`;
     addCategoryNameInput.value = "";
     addCategoryNameInput.classList.remove("input-error");
     addCategoryError.classList.add("hidden");

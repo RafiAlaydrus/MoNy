@@ -166,6 +166,16 @@ input[type="checkbox"] {
   margin-top: 10px;
 }
 
+/* A full-width action button that FOLLOWS a row rather than sitting inside
+   one - "+ Add Wallet", "Edit Categories". Without this it butts straight up
+   against the label above it and reads as part of it. Same ~ combinator and
+   same reasoning as the rule above: a list or a note often sits between the
+   label and its button. Export/Import are unaffected, since their buttons are
+   children of a .setting-row rather than siblings of one. */
+.setting-row ~ .setting-btn-action {
+  margin-top: 10px;
+}
+
 .setting-select {
   background: #111;
   color: #fff;

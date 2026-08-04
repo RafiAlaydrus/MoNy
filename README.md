@@ -361,8 +361,8 @@ to handle it — see [Overspending](#overspending).
 Every bill and every Second choice entry gets a **category** — that's what
 the donut chart divides your spending by. MoNy starts you off with:
 
-- **Bills** — Bills, Subscription, Others
-- **Spending** — Food / Drink, Transport, Others
+- **Priority** (your bills) — Bills, Subscription, Others
+- **Second choice** (everyday spending) — Food / Drink, Transport, Others
 
 You are not stuck with those. You can add your own, rename them, and remove
 the ones you don't use.
@@ -373,11 +373,13 @@ the ones you don't use.
 2. Scroll to **"Category settings"** — it shows how many you have.
 3. Tap **"Edit Categories"**.
 
-A panel opens with both lists. Tap **Done** (or outside the panel) to close.
+A panel opens with both lists, headed **Priority** and **Second choice** to
+match the sections they feed on the main screen. Tap **Done** (or outside the
+panel) to close.
 
 ### Add a category
 
-1. In the panel, tap **"+ Add Bill Category"** or **"+ Add Spending
+1. In the panel, tap **"+ Add Priority Category"** or **"+ Add Second Choice
    Category"**, depending on which list you want it in.
 2. Type a name and tap **Add**.
 
