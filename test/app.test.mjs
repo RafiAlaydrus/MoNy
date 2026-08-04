@@ -11,6 +11,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { bootApp, KEYS, stored } from "./harness.mjs";
 
 const SETTINGS = {
@@ -1710,4 +1711,86 @@ test("a rollover clears every pending modal handle", () => {
   assert.ok(w.document.getElementById("import-modal").classList.contains("hidden"));
   assert.equal([...w.document.querySelectorAll(".modal")].filter(m => !m.classList.contains("hidden")).length, 0,
     "no modal is left showing");
+});
+
+/* ---------------------------------------------------------------------------
+   THE CHART COMING UP BLANK
+
+   fitCanvas() declines to draw into a zero-sized box, which is right. What
+   was wrong is that nothing retried, so one bad measurement was permanent -
+   and v1.22.0's `max-width: 100%` guaranteed a bad measurement by making the
+   canvas's width depend on a container whose width depended on the canvas.
+--------------------------------------------------------------------------- */
+
+/* REGRESSION: the CSS circularity. Asserted against the stylesheet, because
+   jsdom has no layout engine to reproduce the collapse itself - but the rule
+   that caused it is exactly what must not come back. */
+test("REGRESSION: the donut canvas is not sized against its own container", () => {
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  const block = css.slice(css.indexOf("#summary-chart"), css.indexOf("#summary-chart") + 200);
+  assert.match(block, /width:\s*220px/, "it has a definite width");
+  assert.doesNotMatch(block, /max-width:\s*100%/,
+    "and NOT a percentage max-width - .chart-container is a shrink-to-fit " +
+    "flex column, so that makes the two depend on each other and both settle at zero");
+});
+
+/* A zero measurement must schedule a retry rather than give up silently. */
+test("REGRESSION: a chart that cannot be measured retries instead of staying blank", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, showChart: true },
+      [KEYS.data]: month({ income: 3000 })
+    },
+    today: "2026-08-15"
+  });
+
+  /* Driven directly: jsdom has no canvas context, so renderChart returns
+     before it ever measures. The retry itself only needs the element, and it
+     is the piece that was missing - fitCanvas already declined correctly. */
+  w.__app.run("retryChartWhenMeasurable()");
+  assert.equal(w.__app.run("chartRetryPending"), true, "a retry is armed");
+
+  // Armed once, not once per call, so repeated failed draws cannot pile up.
+  w.__app.run("retryChartWhenMeasurable(); retryChartWhenMeasurable();");
+  assert.equal(w.__app.run("chartRetryPending"), true, "still exactly one in flight");
+
+  // Switching the chart off must let the retry stand down rather than poll on.
+  w.__app.run(`settings.showChart = false;`);
+  return new Promise(resolve => {
+    setTimeout(() => {
+      assert.equal(w.__app.run("chartRetryPending"), false,
+        "the retry gives up once there is nothing to draw");
+      resolve();
+    }, 250);
+  });
+});
+
+/* Both toasts share one element. An untracked notice timer used to hide an
+   undo that had since taken the toast over, pulling Undo out from under the
+   user mid-countdown. */
+test("REGRESSION: a notice does not cut short an undo that follows it", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        secondChoice: [{ name: "grab", category: "Transport", amount: 13, type: "take",
+                         date: "2026-08-02T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  w.__app.run(`showNotice("renamed something")`);
+  assert.notEqual(w.__app.run("noticeTimeout"), null, "the notice owns the toast");
+
+  // A deletion claims the toast while the notice is still counting down.
+  w.__app.run(`deleteSecondChoiceItem(data.secondChoice[0])`);
+
+  assert.equal(w.__app.run("noticeTimeout"), null,
+    "the notice's timer is cancelled, not left running");
+  assert.notEqual(w.__app.run("undoTimeout"), null, "the undo owns it now");
+  assert.ok(!w.document.getElementById("undo-toast").classList.contains("hidden"),
+    "and the toast is showing");
+  assert.ok(!w.document.getElementById("undo-btn").classList.contains("hidden"),
+    "with its Undo button back");
 });

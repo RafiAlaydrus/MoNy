@@ -798,6 +798,10 @@ const undoText = document.getElementById("undo-text");
 const undoBtn = document.getElementById("undo-btn");
 const undoBar = document.getElementById("undo-bar");
 let undoTimeout = null;
+/* The notice toast's own timer. Tracked so showTopUndo can cancel it - both
+   share one toast element, and an untracked notice timer used to hide an undo
+   that had since taken it over. */
+let noticeTimeout = null;
 
 /* Pending undoable actions, oldest first.
  *
@@ -837,6 +841,9 @@ function showTopUndo() {
   if (!top) return;
 
   if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
+  // A notice may still be counting down on the same element - stop it, or it
+  // would hide this toast partway through the undo window.
+  if (noticeTimeout) { clearTimeout(noticeTimeout); noticeTimeout = null; }
 
   undoText.textContent = top.message;
   undoBtn.classList.remove("hidden");
@@ -2685,6 +2692,73 @@ function calculateRemaining(skipChart = false) {
 ========================= */
 
 // Renders the donut chart with category breakdown
+/* Waits for the donut's canvas to actually have a size, then draws it once.
+ *
+ * fitCanvas() declines to draw into a zero-sized box, which is correct - but
+ * on its own it made a transient zero permanent, because nothing re-ran
+ * renderChart afterwards. A cold start is exactly when that happens: the
+ * first draw can land before layout has settled, and the app then sits there
+ * showing an empty card.
+ *
+ * A ResizeObserver is the reliable signal, since the canvas going from zero
+ * to a real box IS a resize. The rAF is for the common case where layout is
+ * one frame away and an observer would be overkill. Both are one-shot -
+ * whichever wins disconnects the other. */
+let chartRetryPending = false;
+function retryChartWhenMeasurable() {
+  if (chartRetryPending || !chartCanvas) return;
+  chartRetryPending = true;
+
+  /* ~3 seconds at 100ms. Bounded so a chart that genuinely has no box - the
+     section switched off mid-retry, say - stops asking rather than polling
+     for the life of the page. */
+  let triesLeft = 30;
+  let observer = null;
+  let timer = null;
+
+  const done = () => {
+    chartRetryPending = false;
+    if (observer) { observer.disconnect(); observer = null; }
+    if (timer) { clearTimeout(timer); timer = null; }
+  };
+
+  const measurable = () => {
+    const r = chartCanvas.getBoundingClientRect();
+    return Math.round(r.width) > 0 && Math.round(r.height) > 0;
+  };
+
+  const attempt = () => {
+    if (!chartRetryPending) return false;
+    if (!settings.showChart) { done(); return true; }
+    if (!measurable()) return false;
+    done();
+    renderChart();
+    return true;
+  };
+
+  /* setTimeout rather than requestAnimationFrame, deliberately. rAF does not
+     fire while the document is hidden - and an installed PWA cold-starting
+     from the home screen can run its first render behind the splash screen,
+     which is exactly the case this exists to rescue. A paint-driven retry
+     would sit there un-fired for the whole launch. Re-armed rather than tried
+     once, because the box can arrive several ticks late. */
+  const tick = () => {
+    timer = null;
+    if (attempt()) return;
+    if (--triesLeft <= 0) { done(); return; }
+    timer = setTimeout(tick, 100);
+  };
+  timer = setTimeout(tick, 0);
+
+  /* A ResizeObserver in parallel, for the case where the box arrives after
+     the frame budget: the canvas going from zero to a real size IS a resize.
+     Whichever gets there first disconnects the other. */
+  if (typeof ResizeObserver === "function") {
+    observer = new ResizeObserver(() => { attempt(); });
+    observer.observe(chartCanvas);
+  }
+}
+
 function renderChart() {
   if (!settings.showChart || !chartCtx) return;
 
@@ -2692,9 +2766,12 @@ function renderChart() {
   const ctx = chartCtx;
   const legend = chartLegend;
 
-  // Logical drawing size, density-corrected. Null means nothing is on screen.
+  /* Logical drawing size, density-corrected. Null means the canvas has no
+     layout box yet, so retry rather than give up: a chart that measured zero
+     once used to stay blank until something else happened to redraw it, and
+     on a cold start nothing ever did. */
   const box = fitCanvas(canvas, ctx);
-  if (!box) return;
+  if (!box) { retryChartWhenMeasurable(); return; }
   // The donut is square; the shorter side keeps it circular in any box.
   const size = Math.min(box.w, box.h);
 
@@ -4292,9 +4369,16 @@ function showNotice(message) {
   undoBar.style.width = "0%";
   undoToast.classList.remove("hidden", "fading");
 
-  setTimeout(() => {
+  /* Tracked, not fire-and-forget. This shares one toast element with the undo
+     stack, so an untracked timer kept running after a later showUndo had
+     taken the toast over - and then hid it mid-countdown, pulling the Undo
+     button away from under the user. Storing it lets showTopUndo cancel it. */
+  noticeTimeout = setTimeout(() => {
+    noticeTimeout = null;
     undoToast.classList.add("fading");
     setTimeout(() => {
+      // Only finish hiding if nothing else has claimed the toast since.
+      if (noticeTimeout || undoTimeout) return;
       undoToast.classList.add("hidden");
       undoToast.classList.remove("fading");
       undoBtn.classList.remove("hidden");

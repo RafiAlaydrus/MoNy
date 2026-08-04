@@ -1241,10 +1241,22 @@ td {
    any layout that depended on them would jump to 2x or 3x the intended size
    on a retina phone. An explicit width/height pair makes the attributes
    purely a backing-store concern. */
+/* NO max-width here, deliberately.
+   `max-width: 100%` resolves against .chart-container, which is a shrink-to-
+   fit flex column with align-items:center - so the container's width depends
+   on this canvas and this canvas's width depends on the container. Browsers
+   settle that circle at ZERO, fitCanvas() then correctly refuses to draw into
+   a zero-sized box, and the chart came up blank. 220px always fits anyway:
+   the narrowest phone is 320px, and the app and card padding take 82px of it. */
 #summary-chart {
   width: 220px;
   height: 220px;
-  max-width: 100%;
+}
+
+/* Full width, so the canvas above is never sized against a shrink-to-fit
+   parent even if a future change makes the section itself narrow. */
+.chart-container {
+  align-self: stretch;
 }
 
 #chart-legend {
