@@ -1129,14 +1129,22 @@ test("the fallback category has no delete button", () => {
     today: "2026-08-15"
   });
 
+  // Ordinary rows carry a rename input; the fallback carries a plain label.
+  const rowName = r => {
+    const input = r.querySelector(".category-name-input");
+    return input ? input.value : r.querySelector(".category-name").textContent;
+  };
   const rows = [...w.document.querySelectorAll("#cat-secondChoice-list .wallet-setting-row")];
-  const others = rows.find(r => r.querySelector(".category-name").textContent === "Others");
+
+  const others = rows.find(r => rowName(r) === "Others");
   assert.ok(others, "the fallback is listed");
   assert.equal(others.querySelector(".wallet-delete-btn"), null, "with no way to remove it");
+  assert.equal(others.querySelector(".category-name-input"), null, "and no way to rename it");
   assert.ok(others.querySelector(".category-locked"), "and a marker saying why");
 
-  const transport = rows.find(r => r.querySelector(".category-name").textContent === "Transport");
+  const transport = rows.find(r => rowName(r) === "Transport");
   assert.ok(transport.querySelector(".wallet-delete-btn"), "an ordinary category can be removed");
+  assert.ok(transport.querySelector(".category-name-input"), "and renamed in place");
 });
 
 /* Colours are hashed from the NAME, not taken from a list position, so a
@@ -1344,4 +1352,179 @@ test("a wallet shortfall nothing can cover explains itself", () => {
 
   assert.equal(w.document.querySelectorAll("#overspend-options .transfer-dest-btn").length, 0);
   assert.match(w.document.getElementById("overspend-options").textContent, /Raise this wallet's budget/);
+});
+
+/* ---------------------------------------------------------------------------
+   CATEGORY RENAME
+
+   Categories are raw strings, not ids - the chart keys slices by name and
+   every entry stores the name it was given. A rename that only touched the
+   settings list would orphan every entry filed under the old one: still
+   counting, under a label no dropdown offers.
+--------------------------------------------------------------------------- */
+
+const catRow = (w, list, name) =>
+  [...w.document.querySelectorAll(`#cat-${list}-list .wallet-setting-row`)]
+    .find(r => {
+      const i = r.querySelector(".category-name-input");
+      return (i ? i.value : r.querySelector(".category-name").textContent) === name;
+    });
+
+test("renaming a category re-files this month's entries under the new name", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        secondChoice: [
+          { name: "grab", category: "Transport", amount: 13, type: "take", date: "2026-08-02T10:00:00.000Z" },
+          { name: "mamak", category: "Food / Drink", amount: 30, type: "take", date: "2026-08-03T10:00:00.000Z" }
+        ]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const before = w.__app.run(`monthTotalsOf(data, allWallets()).spent`);
+
+  const input = catRow(w, "secondChoice", "Transport").querySelector(".category-name-input");
+  input.value = "Travel";
+  input.dispatchEvent(new w.Event("blur"));
+
+  assert.ok([...w.__app.settings.categories.secondChoice].includes("Travel"));
+  assert.ok(![...w.__app.settings.categories.secondChoice].includes("Transport"));
+  assert.equal(w.__app.data.secondChoice[0].category, "Travel", "the entry followed the rename");
+  assert.equal(w.__app.data.secondChoice[1].category, "Food / Drink", "others are untouched");
+
+  const totals = w.__app.run(`monthTotalsOf(data, allWallets()).categories`);
+  assert.equal(totals["Travel"], 13, "spending is filed under the new name");
+  assert.equal(totals["Transport"], undefined, "and nothing is stranded under the old one");
+  assert.equal(w.__app.run(`monthTotalsOf(data, allWallets()).spent`), before,
+    "a rename changes a label, never an amount");
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+test("renaming keeps its position in the list, and the dropdown follows", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  const input = catRow(w, "secondChoice", "Food / Drink").querySelector(".category-name-input");
+  input.value = "Eating out";
+  input.dispatchEvent(new w.Event("blur"));
+
+  assert.deepEqual([...w.__app.settings.categories.secondChoice],
+    ["Eating out", "Transport", "Others"], "renamed in place, Others still last");
+  assert.deepEqual(catValues(w, "sc-category"), ["Eating out", "Transport", "Others"]);
+});
+
+test("bill categories rename their bills too", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        priority: [{ name: "Rent", category: "Bills", amount: 900, paid: true, date: "2026-08-02T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const input = catRow(w, "priority", "Bills").querySelector(".category-name-input");
+  input.value = "Housing";
+  input.dispatchEvent(new w.Event("blur"));
+
+  assert.equal(w.__app.data.priority[0].category, "Housing");
+  assert.equal(w.__app.run(`monthTotalsOf(data, allWallets()).categories["Housing"]`), 900);
+  assert.ok(w.__app.run("reconciles(data, allWallets())"));
+});
+
+/* Archived months keep the name they were recorded with - they already
+   snapshot wallet names and currency, and a past month is a record of what
+   happened. No figure moves either way. */
+test("a rename does not rewrite archived months", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.archive]: {
+        "2026-7": {
+          data: {
+            month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01",
+            income: 2000, priority: [], priorityLocked: false, walletData: {},
+            secondChoice: [{ name: "bus", category: "Transport", amount: 8, type: "take", date: "2026-07-05T10:00:00.000Z" }]
+          },
+          wallets: [], currency: "RM", closedAt: "2026-08-01T00:00:00.000Z"
+        }
+      },
+      [KEYS.data]: month({
+        secondChoice: [{ name: "grab", category: "Transport", amount: 13, type: "take", date: "2026-08-02T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const input = catRow(w, "secondChoice", "Transport").querySelector(".category-name-input");
+  input.value = "Travel";
+  input.dispatchEvent(new w.Event("blur"));
+
+  assert.equal(w.__app.data.secondChoice[0].category, "Travel", "this month follows");
+  assert.equal(w.__app.archive["2026-7"].data.secondChoice[0].category, "Transport",
+    "July keeps what it was recorded with");
+});
+
+test("a rename is refused if it collides, and the field reverts", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  const input = catRow(w, "secondChoice", "Transport").querySelector(".category-name-input");
+
+  input.value = "Food / Drink";               // already in this list
+  input.dispatchEvent(new w.Event("blur"));
+  assert.equal(input.value, "Transport", "reverted");
+  assert.ok(input.classList.contains("input-error"));
+
+  input.value = "Grocery";                     // taken by a wallet
+  input.dispatchEvent(new w.Event("blur"));
+  assert.equal(input.value, "Transport", "reverted again");
+
+  input.value = "   ";                         // empty
+  input.dispatchEvent(new w.Event("blur"));
+  assert.equal(input.value, "Transport");
+
+  assert.deepEqual([...w.__app.settings.categories.secondChoice],
+    ["Food / Drink", "Transport", "Others"], "nothing changed");
+});
+
+/* Re-saving a row without really changing it must not be read as a duplicate
+   of itself - that is what the `exclude` argument is for. */
+test("saving a category name unchanged is not a conflict", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Transport", "Transport")`), null);
+  assert.equal(w.__app.run(`categoryNameConflict("secondChoice", "Transport")`), "duplicate",
+    "still a duplicate when it is not the one being renamed");
+});
+
+test("the category panel opens from settings and closes again", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  const panel = w.document.getElementById("category-panel");
+  assert.ok(panel.classList.contains("hidden"), "closed to begin with");
+
+  w.document.getElementById("open-category-panel-btn").click();
+  assert.ok(!panel.classList.contains("hidden"), "opens");
+  assert.ok(w.document.querySelectorAll("#cat-priority-list .wallet-setting-row").length > 0,
+    "and is populated");
+
+  w.document.getElementById("close-category-panel").click();
+  assert.ok(panel.classList.contains("hidden"), "closes");
+
+  assert.match(w.document.getElementById("category-count").textContent, /categories/,
+    "the settings row summarises how many there are");
 });

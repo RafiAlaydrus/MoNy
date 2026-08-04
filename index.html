@@ -135,21 +135,14 @@
             <button id="add-wallet-btn" class="setting-btn-action">+ Add Wallet</button>
             <!-- Inline margin removed: the ~ combinator in style.css now
                  spaces this correctly even with the Add Wallet button above. -->
-            <!-- Spending categories. Both lists are built by app.js from
-                 settings.categories; the markup holds no category names, so
-                 there is only one place they are defined. -->
-            <div class="setting-row wallets-header">
-              <span>Bill categories</span>
-              <span id="cat-priority-count" class="wallets-count">0</span>
+            <!-- Categories get their own panel rather than sitting inline:
+                 two editable lists with rename fields is more than a settings
+                 row can hold, and it pushed Export/Import off the screen. -->
+            <div class="setting-row">
+              <span>Category settings</span>
+              <span id="category-count" class="wallets-count">0</span>
             </div>
-            <div id="cat-priority-list" class="wallets-settings-list"></div>
-            <button id="add-cat-priority-btn" class="setting-btn-action" data-list="priority">+ Add Bill Category</button>
-            <div class="setting-row wallets-header">
-              <span>Spending categories</span>
-              <span id="cat-secondChoice-count" class="wallets-count">0</span>
-            </div>
-            <div id="cat-secondChoice-list" class="wallets-settings-list"></div>
-            <button id="add-cat-secondChoice-btn" class="setting-btn-action" data-list="secondChoice">+ Add Spending Category</button>
+            <button id="open-category-panel-btn" class="setting-btn-action">Edit Categories</button>
             <div class="setting-row">
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
             </div>
@@ -157,7 +150,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.22.0</div>
+            <div class="setting-version">v1.23.0</div>
           </div>
         </section>
       </div>
@@ -425,6 +418,43 @@
       <div class="modal-actions">
         <button id="cancel-add-wallet" aria-label="Cancel adding wallet">Cancel</button>
         <button id="confirm-add-wallet" class="danger" aria-label="Confirm add wallet">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CATEGORY PANEL - the whole category editor, opened from Settings.
+       Both lists are built by app.js from settings.categories; the markup
+       holds no category names, so there is exactly one place they are
+       defined. Each row carries an inline rename field, so editing is done
+       in place rather than through yet another modal. -->
+  <div id="category-panel" class="modal hidden">
+    <div class="modal-card modal-card-tall">
+      <h3>Categories</h3>
+      <p class="modal-hint">
+        Tap a name to rename it. Renaming updates this month's entries; past
+        months keep the name they were recorded with.
+      </p>
+
+      <div class="category-group">
+        <div class="category-group-head">
+          <span>Bills</span>
+          <span id="cat-priority-count" class="wallets-count">0</span>
+        </div>
+        <div id="cat-priority-list" class="wallets-settings-list"></div>
+        <button id="add-cat-priority-btn" class="setting-btn-action" data-list="priority">+ Add Bill Category</button>
+      </div>
+
+      <div class="category-group">
+        <div class="category-group-head">
+          <span>Spending</span>
+          <span id="cat-secondChoice-count" class="wallets-count">0</span>
+        </div>
+        <div id="cat-secondChoice-list" class="wallets-settings-list"></div>
+        <button id="add-cat-secondChoice-btn" class="setting-btn-action" data-list="secondChoice">+ Add Spending Category</button>
+      </div>
+
+      <div class="modal-actions">
+        <button id="close-category-panel" aria-label="Close category settings">Done</button>
       </div>
     </div>
   </div>

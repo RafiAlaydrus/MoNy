@@ -18,17 +18,18 @@ your own phone.
 6. [Priority bills](#priority-bills)
 7. [Wallets](#wallets)
 8. [Second choice (everyday spending)](#second-choice-everyday-spending)
-9. [Editing and deleting entries](#editing-and-deleting-entries)
-10. [Overspending](#overspending)
-11. [The chart](#the-chart)
-12. [Budget cycles](#budget-cycles-not-everyone-gets-paid-on-the-1st)
-13. [Carrying money into a new month](#carrying-money-into-a-new-month)
-14. [Month history](#month-history)
-15. [Settings](#settings)
-16. [Backing up and moving your data](#backing-up-and-moving-your-data)
-17. [Privacy](#privacy)
-18. [Tips and things worth knowing](#tips-and-things-worth-knowing)
-19. [FAQ](#faq)
+9. [Categories](#categories)
+10. [Editing and deleting entries](#editing-and-deleting-entries)
+11. [Overspending](#overspending)
+12. [The chart](#the-chart)
+13. [Budget cycles](#budget-cycles-not-everyone-gets-paid-on-the-1st)
+14. [Carrying money into a new month](#carrying-money-into-a-new-month)
+15. [Month history](#month-history)
+16. [Settings](#settings)
+17. [Backing up and moving your data](#backing-up-and-moving-your-data)
+18. [Privacy](#privacy)
+19. [Tips and things worth knowing](#tips-and-things-worth-knowing)
+20. [FAQ](#faq)
 
 ---
 
@@ -141,8 +142,10 @@ paid, the money you've handed to wallets, and your Second choice spending.
   is paid
 - **Tap any entry to edit it** — bills, wallet transactions, Second choice
   entries
+- **Custom categories** — add, rename and remove the categories both entry
+  forms offer, from a dedicated panel in Settings
 - Add priority bills with a category, tick them off as paid, swipe to
-  delete, and lock the list once it's set for the month
+  delete, and **unlock** the list again if you change your mind
 - **"Copy Last Priority"** — reuse last month's bill list instead of
   retyping it
 - Unlimited named wallets — add, rename, close, set a budget, add money to
@@ -155,7 +158,8 @@ paid, the money you've handed to wallets, and your Second choice spending.
   to you** (a repayment), so your income figure stays accurate
 - Warns you before an action would put you over budget, and offers ways to
   handle it
-- Swipe to delete on every list, with a 3-second undo
+- Swipe to delete on every list, with a 3-second undo — several deep, so a
+  run of mistakes can be walked back one at a time
 - Clean monochrome design with a colourful donut chart and a monthly trend
   chart
 - **Month history** — every past month archived automatically, with a full
@@ -163,6 +167,7 @@ paid, the money you've handed to wallets, and your Second choice spending.
 - **Export and import** your entire dataset as a single JSON file
 - Optional budget-limit warning and an overspent warning
 - Works fully offline once loaded
+- **Rolls into the new month by itself**, even if you leave the app open
 - Pull down to refresh, keyboard-aware pop-ups, respects reduced-motion
   settings
 
@@ -223,8 +228,11 @@ over budget, MoNy stops and asks how to handle it — see
 Once your bills are finalized, tap **"Save Priority"**. A confirmation
 pop-up appears — tap **"Yes, Save"** to lock the list. While locked, a
 **"Locked"** badge shows next to the Priority heading and the form to add
-new bills is hidden. This is one-way for the rest of the month; the only way
-to unlock it early is the hidden reset (see [FAQ](#faq)).
+new bills is hidden.
+
+**To unlock it again, tap the "Locked" badge** and confirm. Your bills and
+everything else in the month are untouched — you just get the form back. You
+can lock it again afterwards.
 
 ### Reuse last month's bills
 
@@ -345,6 +353,75 @@ to handle it — see [Overspending](#overspending).
 - **Tap** a row in the Second choice table to edit it — the form switches to
   **"Save changes"**; tap **Cancel** to back out.
 - **Swipe the row left** to delete it, with 3 seconds to undo.
+
+---
+
+## Categories
+
+Every bill and every Second choice entry gets a **category** — that's what
+the donut chart divides your spending by. MoNy starts you off with:
+
+- **Bills** — Bills, Subscription, Others
+- **Spending** — Food / Drink, Transport, Others
+
+You are not stuck with those. You can add your own, rename them, and remove
+the ones you don't use.
+
+### Open the category editor
+
+1. Tap the **Settings** icon (top-right of the header).
+2. Scroll to **"Category settings"** — it shows how many you have.
+3. Tap **"Edit Categories"**.
+
+A panel opens with both lists. Tap **Done** (or outside the panel) to close.
+
+### Add a category
+
+1. In the panel, tap **"+ Add Bill Category"** or **"+ Add Spending
+   Category"**, depending on which list you want it in.
+2. Type a name and tap **Add**.
+
+It appears in the list straight away and in the matching dropdown on the
+main screen. New categories are placed just above "Others", which always
+stays last.
+
+### Rename a category
+
+1. In the panel, **tap the category's name** — it's an editable field.
+2. Type the new name and tap outside it (or press Enter).
+
+Renaming also **moves this month's entries** onto the new name, so nothing
+gets stranded under a label that no longer exists — your chart and totals
+stay correct, and the amounts never change.
+
+**Past months keep the name they were recorded with.** If you rename
+"Transport" to "Travel", last month's history still says "Transport",
+because that's what it was called at the time. Your figures are identical
+either way.
+
+### Remove a category
+
+1. In the panel, tap the **✕** next to the category.
+2. Confirm.
+
+Removing takes it out of the dropdown but **does not change any entry
+already filed under it** — those keep counting toward your totals exactly
+as before. If you actually wanted those entries moved somewhere else,
+**rename** the category instead of removing it. You can add a removed
+category back at any time.
+
+### Two rules
+
+- **"Others" can't be renamed or removed.** It's where anything without a
+  category gets filed, so it has to exist in both lists.
+- **A category can't share a name with a wallet** (and vice versa). They'd
+  merge into a single slice on the chart, since slices are grouped by name.
+  MoNy tells you if you try.
+
+Each category gets its own colour on the chart, shown as a dot next to its
+name in the panel — so the editor doubles as a key for the chart. The colour
+follows the **name**, so it stays the same as you add and remove others
+around it.
 
 ---
 
@@ -474,6 +551,7 @@ immediately — there's no separate "Save" button.
 | **Sort order** (dropdown) | Oldest-first or newest-first in every transaction list |
 | **Budget limit** (number field) | Leave as "Off", or enter a figure to get warned once your Remaining balance drops below it |
 | **Wallets** (list) | Add, rename, or close wallets — see [Wallets](#wallets) |
+| **Category settings** (button) | Opens the category editor: add, rename, remove — see [Categories](#categories) |
 | **Export Data (JSON)** (button) | Downloads your full backup — see below |
 | **Import Data (JSON)** (button) | Restores from a backup file — see below |
 
@@ -531,15 +609,14 @@ AirDrop, cloud storage), then import it on the new one.
   entry to, say, last month, it still counts toward *this* month's totals —
   it displays the day you picked, but the money is booked to the cycle you
   were in when you entered it.
-- **Once Priority is locked, it stays locked for the month.** There's no
-  in-app "unlock" — only the hidden reset (see FAQ) escapes it, and that
-  clears the whole month.
-- **A wallet "Take" can't go over what the wallet holds.** Unlike your main
-  balance, there's no overspend prompt for wallets — the field just shows a
-  red border if you try. Raise the wallet's budget first if you need more
-  room.
-- **Only the very last deletion can be undone.** If you delete a second
-  thing, the undo option for the first one is gone.
+- **A wallet "Take" still can't go over what the wallet holds** — but MoNy
+  now offers to top the wallet up first, either from your main balance or
+  from another wallet that has enough. It never lets a wallet go negative.
+- **Undo goes several deletions deep**, but only while the toast is on
+  screen. Once it fades, everything pending is final.
+- **Entries dated outside the current month** show their year and are marked
+  in the list. They still count toward the month you entered them in — that's
+  deliberate — and the note explains it.
 - **Only one thing on this month is inert:** the "Brought forward" row that
   opens History for a wallet or Second choice — it's just a label for money
   already counted elsewhere, not a real entry, so it can't be tapped or
@@ -588,12 +665,21 @@ in the icon. Re-adding it to your home screen from the same browser will
 show your data again. Still, export a backup before removing it if you're
 not sure.
 
-**I locked my Priority list by mistake / want to start the month over.**
+**I locked my Priority list by mistake.**
+Tap the **"Locked"** badge next to the Priority heading and confirm. Nothing
+else changes — you just get the add/edit form back.
+
+**I want to start the month over.**
 Double-tap the app's title at the top of the screen. This opens a hidden
 **"Reset Everything?"** confirmation. Confirming clears the *current
 month's* data only (after backing up your bill list so you can reuse it
 with "Copy Last Priority"). Past months already in History are
 unaffected.
+
+**If I rename a category, do my old months change?**
+No. This month's entries move to the new name so your current chart stays
+correct, but past months in History keep the name they were recorded with.
+No amount changes either way.
 
 **Is there a way to undo a delete?**
 Yes — every swipe-to-delete shows a 3-second **Undo** toast at the bottom of

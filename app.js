@@ -3181,10 +3181,14 @@ let addCategoryTarget = "priority"; // which list the add modal is serving
 /* Why a name cannot be used: empty, already in this list, or taken by a
    wallet. The wallet check mirrors walletNameConflict from the other
    direction - whichever is created second is the one refused. */
-function categoryNameConflict(list, name) {
+/* `exclude` is the name being renamed away from, so re-saving a row without
+   really changing it is not reported as a duplicate of itself. */
+function categoryNameConflict(list, name, exclude) {
   const norm = name.trim().toLowerCase();
   if (!norm) return "empty";
-  if ((settings.categories[list] || []).some(c => c.trim().toLowerCase() === norm)) return "duplicate";
+  const skip = exclude ? exclude.trim().toLowerCase() : null;
+  if ((settings.categories[list] || [])
+      .some(c => c.trim().toLowerCase() === norm && c.trim().toLowerCase() !== skip)) return "duplicate";
   if (activeWallets().some(w => w.name.trim().toLowerCase() === norm)) return "wallet";
   return null;
 }
@@ -3195,6 +3199,40 @@ function categoryUsageCount(list, name) {
     return (data.priority || []).filter(b => b.category === name).length;
   }
   return (data.secondChoice || []).filter(i => i.category === name).length;
+}
+
+/* Renames a category and re-files this month's entries under the new name.
+ *
+ * Categories are raw strings, not ids - the chart keys its slices by name and
+ * every entry stores the name it was given. So a rename that only touched the
+ * settings list would orphan every entry already filed under the old one:
+ * they would keep counting, under a label no dropdown offers any more.
+ *
+ * The LIVE month is rewritten; the archive deliberately is not. Archived
+ * months already snapshot wallet names and the currency as they were at
+ * close, and a past month is a record of what happened - it was called that
+ * at the time. No figure moves either way: a rename changes a label, never an
+ * amount, so the invariant is untouched in both.
+ *
+ * Returns the number of entries re-filed, for the confirmation message.
+ */
+function renameCategory(list, from, to) {
+  if (from === to) return 0;
+  let moved = 0;
+
+  const arr = settings.categories[list] || [];
+  const at = arr.indexOf(from);
+  if (at === -1) return 0;
+  arr[at] = to;
+
+  const entries = list === "priority" ? (data.priority || []) : (data.secondChoice || []);
+  entries.forEach(e => {
+    if (e.category === from) { e.category = to; moved++; }
+  });
+
+  saveSettings();
+  if (moved) saveData();
+  return moved;
 }
 
 function renderCategorySettings(list) {
@@ -3211,15 +3249,47 @@ function renderCategorySettings(list) {
     row.className = "wallet-setting-row";
     const isFallback = name.toLowerCase() === FALLBACK_CATEGORY.toLowerCase();
 
-    /* The colour chip is the same colour the chart will use, so the settings
-       list doubles as the chart's legend key. */
+    /* The colour chip shows exactly the colour the chart will use, so this
+       list doubles as the chart's key. The name is an input rather than a
+       label: renaming in place is the same gesture the wallet list uses, and
+       it keeps the editor to one screen. The fallback is not renameable -
+       monthTotalsOf files uncategorised entries under its literal name. */
     row.innerHTML = `
       <span class="category-chip" style="background:${esc(categoryColor(name))}"></span>
-      <span class="category-name">${esc(name)}</span>
       ${isFallback
-        ? '<span class="category-locked" title="Entries with no category are filed here">default</span>'
-        : `<button class="wallet-delete-btn" aria-label="Remove ${esc(name)}">✕</button>`}
+        ? `<span class="category-name">${esc(name)}</span>
+           <span class="category-locked" title="Entries with no category are filed here">default</span>`
+        : `<input type="text" class="setting-input-wide category-name-input" value="${esc(name)}" aria-label="Rename ${esc(name)}" />
+           <button class="wallet-delete-btn" aria-label="Remove ${esc(name)}">✕</button>`}
     `;
+
+    const input = row.querySelector(".category-name-input");
+    if (input) {
+      input.addEventListener("input", () => input.classList.remove("input-error"));
+      input.addEventListener("blur", () => {
+        const next = input.value.trim();
+        if (!next || next === name) { input.value = name; return; }
+
+        /* Checked against everything except itself, so re-saving an unchanged
+           name is not reported as a duplicate of itself. */
+        if (categoryNameConflict(list, next, name)) {
+          input.classList.add("input-error");
+          input.value = name;
+          return;
+        }
+
+        const moved = renameCategory(list, name, next);
+        renderAllCategoryOptions();
+        renderCategorySettings(list);
+        renderPriority();
+        renderSecondChoice();
+        calculateRemaining();
+        if (moved) {
+          showNotice(`Renamed to "${next}" - ${moved} ${moved === 1 ? "entry" : "entries"} updated`);
+        }
+      });
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
+    }
 
     const del = row.querySelector(".wallet-delete-btn");
     if (del) {
@@ -3228,7 +3298,7 @@ function renderCategorySettings(list) {
         const used = categoryUsageCount(list, name);
         const parts = [`Remove "${name}" from the ${CATEGORY_LIST_LABELS[list].toLowerCase()} categories?`];
         if (used > 0) {
-          parts.push(`${used} ${used === 1 ? "entry" : "entries"} this month stay filed under it and keep counting - only the dropdown loses it.`);
+          parts.push(`${used} ${used === 1 ? "entry" : "entries"} this month stay filed under it and keep counting - only the dropdown loses it. Rename it instead if you want those moved.`);
         }
         parts.push("You can add it back at any time.");
         deleteCategoryText.textContent = parts.join(" ");
@@ -3243,6 +3313,47 @@ function renderCategorySettings(list) {
 function renderAllCategorySettings() {
   renderCategorySettings("priority");
   renderCategorySettings("secondChoice");
+
+  // The summary on the Settings row, so the count is visible without opening
+  // the panel. Counts both lists together.
+  const totalEl = document.getElementById("category-count");
+  if (totalEl) {
+    const n = allCategoryNames().length;
+    totalEl.textContent = n === 1 ? "1 category" : `${n} categories`;
+  }
+}
+
+/* The panel itself. Opened from Settings rather than living inline: two
+   editable lists with rename fields is more than a settings row can hold. */
+const categoryPanel = document.getElementById("category-panel");
+const openCategoryPanelBtn = document.getElementById("open-category-panel-btn");
+const closeCategoryPanelBtn = document.getElementById("close-category-panel");
+
+if (openCategoryPanelBtn) {
+  openCategoryPanelBtn.addEventListener("click", () => {
+    renderAllCategorySettings();
+    categoryPanel.classList.remove("hidden");
+  });
+}
+
+function closeCategoryPanel() {
+  /* Commit whichever rename field still has focus. Without this, typing a new
+     name and tapping Done straight away would discard it - blur would fire
+     after the panel had already gone. */
+  if (document.activeElement && document.activeElement.classList.contains("category-name-input")) {
+    document.activeElement.blur();
+  }
+  categoryPanel.classList.add("hidden");
+}
+
+if (closeCategoryPanelBtn) {
+  closeCategoryPanelBtn.addEventListener("click", closeCategoryPanel);
+}
+// Tapping the backdrop closes it too, like the other panels.
+if (categoryPanel) {
+  categoryPanel.addEventListener("click", (e) => {
+    if (e.target === categoryPanel) closeCategoryPanel();
+  });
 }
 
 ["priority", "secondChoice"].forEach(list => {
