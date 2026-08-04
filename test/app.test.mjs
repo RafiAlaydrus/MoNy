@@ -1748,17 +1748,17 @@ test("REGRESSION: a chart that cannot be measured retries instead of staying bla
      before it ever measures. The retry itself only needs the element, and it
      is the piece that was missing - fitCanvas already declined correctly. */
   w.__app.run("retryChartWhenMeasurable()");
-  assert.equal(w.__app.run("chartRetryPending"), true, "a retry is armed");
+  assert.equal(w.__app.run(`canvasRetries.has("donut")`), true, "a retry is armed");
 
   // Armed once, not once per call, so repeated failed draws cannot pile up.
   w.__app.run("retryChartWhenMeasurable(); retryChartWhenMeasurable();");
-  assert.equal(w.__app.run("chartRetryPending"), true, "still exactly one in flight");
+  assert.equal(w.__app.run("canvasRetries.size"), 1, "still exactly one in flight");
 
   // Switching the chart off must let the retry stand down rather than poll on.
   w.__app.run(`settings.showChart = false;`);
   return new Promise(resolve => {
     setTimeout(() => {
-      assert.equal(w.__app.run("chartRetryPending"), false,
+      assert.equal(w.__app.run(`canvasRetries.has("donut")`), false,
         "the retry gives up once there is nothing to draw");
       resolve();
     }, 250);
@@ -1793,4 +1793,48 @@ test("REGRESSION: a notice does not cut short an undo that follows it", () => {
     "and the toast is showing");
   assert.ok(!w.document.getElementById("undo-btn").classList.contains("hidden"),
     "with its Undo button back");
+});
+
+/* REGRESSION: the same blank-canvas fault as the donut, in History. The
+   trend chart was drawn while #history-view was still hidden, so its canvas
+   measured zero, fitCanvas declined, and nothing retried - History opened
+   permanently chartless. */
+test("REGRESSION: History is visible before its trend chart is drawn", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.archive]: {
+        "2026-7": {
+          data: { month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01",
+                  income: 2000, priority: [], priorityLocked: false, walletData: {},
+                  secondChoice: [{ name: "bus", category: "Others", amount: 8, type: "take",
+                                   date: "2026-07-05T10:00:00.000Z" }] },
+          wallets: [], currency: "RM", closedAt: "2026-08-01T00:00:00.000Z"
+        }
+      },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-15"
+  });
+
+  const view = w.document.getElementById("history-view");
+  assert.ok(view.classList.contains("hidden"), "History starts closed");
+
+  /* Assert the ORDER, by checking what the view's state was at the moment
+     the chart was asked to draw. Reverting the handler makes this fail. */
+  let hiddenWhenDrawn = null;
+  w.__app.run(`
+    window.__origDraw = drawTrendChart;
+    drawTrendChart = function (entries) {
+      window.__hiddenWhenDrawn = document.getElementById("history-view").classList.contains("hidden");
+      return window.__origDraw(entries);
+    };
+  `);
+  w.document.getElementById("history-toggle").click();
+  hiddenWhenDrawn = w.__hiddenWhenDrawn;
+
+  assert.equal(hiddenWhenDrawn, false,
+    "the view must already be on screen when the trend chart is drawn");
+  assert.ok(!view.classList.contains("hidden"), "and History is open");
+  assert.ok(w.document.getElementById("history-list").children.length > 0, "with its rows built");
 });

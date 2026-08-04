@@ -2704,44 +2704,53 @@ function calculateRemaining(skipChart = false) {
  * to a real box IS a resize. The rAF is for the common case where layout is
  * one frame away and an observer would be overkill. Both are one-shot -
  * whichever wins disconnects the other. */
-let chartRetryPending = false;
-function retryChartWhenMeasurable() {
-  if (chartRetryPending || !chartCanvas) return;
-  chartRetryPending = true;
+/* Canvases with a retry currently armed, keyed by name. A canvas that failed
+   to measure arms exactly one retry, not one per failed draw. */
+const canvasRetries = new Set();
 
-  /* ~3 seconds at 100ms. Bounded so a chart that genuinely has no box - the
-     section switched off mid-retry, say - stops asking rather than polling
-     for the life of the page. */
+/* Draws `draw()` as soon as `canvas` actually has a layout box.
+ *
+ * fitCanvas() declines to draw into a zero-sized box, which is correct. What
+ * was missing is that nothing tried again, so a single bad measurement left a
+ * chart blank for the life of the page. Both charts hit this: the donut when
+ * the section is un-hidden in the same tick it is drawn, and the trend chart
+ * when History is opened.
+ *
+ * `wanted()` is re-checked each tick so a retry stands down when whatever it
+ * was drawing for has gone away - the chart switched off, History closed -
+ * rather than polling on and eventually drawing into a hidden view.
+ */
+function retryDrawWhenMeasurable(key, canvas, draw, wanted) {
+  if (!canvas || canvasRetries.has(key)) return;
+  canvasRetries.add(key);
+
+  /* ~3 seconds at 100ms. Bounded, so a canvas that genuinely never gets a box
+     stops asking instead of polling for the life of the page. */
   let triesLeft = 30;
   let observer = null;
   let timer = null;
 
   const done = () => {
-    chartRetryPending = false;
+    canvasRetries.delete(key);
     if (observer) { observer.disconnect(); observer = null; }
     if (timer) { clearTimeout(timer); timer = null; }
   };
 
-  const measurable = () => {
-    const r = chartCanvas.getBoundingClientRect();
-    return Math.round(r.width) > 0 && Math.round(r.height) > 0;
-  };
-
   const attempt = () => {
-    if (!chartRetryPending) return false;
-    if (!settings.showChart) { done(); return true; }
-    if (!measurable()) return false;
+    if (!canvasRetries.has(key)) return true;
+    if (!wanted()) { done(); return true; }
+    const r = canvas.getBoundingClientRect();
+    if (!Math.round(r.width) || !Math.round(r.height)) return false;
     done();
-    renderChart();
+    draw();
     return true;
   };
 
   /* setTimeout rather than requestAnimationFrame, deliberately. rAF does not
      fire while the document is hidden - and an installed PWA cold-starting
-     from the home screen can run its first render behind the splash screen,
-     which is exactly the case this exists to rescue. A paint-driven retry
-     would sit there un-fired for the whole launch. Re-armed rather than tried
-     once, because the box can arrive several ticks late. */
+     behind its splash screen is exactly the case this exists to rescue, so a
+     paint-driven retry would sit there un-fired for the whole launch.
+     Re-armed rather than tried once, because the box can arrive ticks late. */
   const tick = () => {
     timer = null;
     if (attempt()) return;
@@ -2750,13 +2759,30 @@ function retryChartWhenMeasurable() {
   };
   timer = setTimeout(tick, 0);
 
-  /* A ResizeObserver in parallel, for the case where the box arrives after
-     the frame budget: the canvas going from zero to a real size IS a resize.
-     Whichever gets there first disconnects the other. */
+  /* A ResizeObserver alongside, for a box that arrives after the budget: a
+     canvas going from zero to a real size IS a resize. Whichever gets there
+     first disconnects the other. */
   if (typeof ResizeObserver === "function") {
     observer = new ResizeObserver(() => { attempt(); });
-    observer.observe(chartCanvas);
+    observer.observe(canvas);
   }
+}
+
+/* Kept as a named wrapper so the donut's call site reads plainly.
+   `wanted` also requires the tracker view to be on screen: opening History
+   hides the donut entirely, and without this the retry would poll out its
+   whole budget waiting for a canvas that is deliberately not there. */
+function retryChartWhenMeasurable() {
+  retryDrawWhenMeasurable(
+    "donut", chartCanvas, renderChart,
+    () => {
+      /* Looked up here rather than closing over `appView`, which is declared
+         further down the file: the first failed draw happens during startup,
+         before that binding exists. */
+      const view = document.getElementById("app-view");
+      return !!settings.showChart && !!view && !view.classList.contains("hidden");
+    }
+  );
 }
 
 function renderChart() {
@@ -3889,9 +3915,19 @@ function summarizeEntry(rawEntry) {
    finished month yet. */
 function drawTrendChart(entries) {
   if (!trendCtx) return;
-  // Density-corrected logical size; null when the history view is not on screen.
+  /* Density-corrected logical size. Null means the canvas has no layout box
+     yet - History opening, or a cold start - so retry rather than give up,
+     for the same reason the donut does. `entries` is captured, so the retry
+     redraws exactly what this call was asked to draw. */
   const box = fitCanvas(trendCanvas, trendCtx);
-  if (!box) return;
+  if (!box) {
+    retryDrawWhenMeasurable(
+      "trend", trendCanvas,
+      () => drawTrendChart(entries),
+      () => !historyView.classList.contains("hidden")
+    );
+    return;
+  }
   const W = box.w;
   const H = box.h;
   /* padTop leaves room for the value labels that sit above the tallest bar;
@@ -4158,9 +4194,14 @@ function renderHistory() {
 }
 
 historyToggle.addEventListener("click", () => {
-  renderHistory();
+  /* Swap the views BEFORE rendering. Rendering first meant the trend chart
+     was drawn while this view was still hidden, so its canvas measured zero
+     and fitCanvas correctly declined - leaving History permanently chartless.
+     The retry inside drawTrendChart covers it either way now, but drawing
+     into a laid-out view is one less thing to recover from. */
   appView.classList.add("hidden");
   historyView.classList.remove("hidden");
+  renderHistory();
   window.scrollTo(0, 0);
 });
 
