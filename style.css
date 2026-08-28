@@ -1336,34 +1336,75 @@ td {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  /* Stretch, not centre: everything in here is now full-width rather than a
+     centred square. */
+  align-items: stretch;
+  gap: 14px;
 }
 
-/* Display size is set HERE, in CSS, and never by the width/height attributes.
-   fitCanvas() rewrites those attributes to match the device pixel ratio, so
-   any layout that depended on them would jump to 2x or 3x the intended size
-   on a retina phone. An explicit width/height pair makes the attributes
-   purely a backing-store concern. */
-/* NO max-width here, deliberately.
-   `max-width: 100%` resolves against .chart-container, which is a shrink-to-
-   fit flex column with align-items:center - so the container's width depends
-   on this canvas and this canvas's width depends on the container. Browsers
-   settle that circle at ZERO, fitCanvas() then correctly refuses to draw into
-   a zero-sized box, and the chart came up blank. 220px always fits anyway:
-   the narrowest phone is 320px, and the app and card padding take 82px of it. */
-#summary-chart {
-  /* An explicit pixel size, still - see the note above about a percentage
-     width collapsing to zero against a shrink-to-fit parent. The variable is
-     set by fitHomeChart() so the donut gives up room when a long legend would
-     otherwise push Home into a scroll; 220px is the ceiling and the value
-     used whenever JS has not measured. */
-  width: var(--chart-size, 220px);
-  height: var(--chart-size, 220px);
+/* THE BAR
+   A thin horizontal stack: one segment per row in the list below it.
+
+   Fixed height and full width, so unlike the donut it replaced this never has
+   to be resized to make the tab fit - it takes the same 16px however many
+   categories the month has, and the rows grow instead. */
+.chart-bar {
+  width: 100%;
+  height: 16px;
+  display: flex;
+  /* The 2px gaps ARE the separation between segments - two adjacent fills with
+     no gap read as one shape, and no palette can fix that. */
+  gap: 2px;
+  border-radius: 8px;
+  /* Rounds the outer ends of the stack without rounding every segment: the
+     children are square and this clips them. */
+  overflow: hidden;
 }
 
-/* Full width, so the canvas above is never sized against a shrink-to-fit
-   parent even if a future change makes the section itself narrow. */
+.chart-bar-seg {
+  /* flex-basis 0 with a grow set from the data - see renderChart. min-width is
+     what keeps a 1% category visible instead of vanishing sub-pixel, which is
+     the failure the donut could not avoid. */
+  flex-basis: 0;
+  min-width: 4px;
+}
+
+/* Empty state: the track at rest, no segments. */
+.chart-bar-empty {
+  flex: 1;
+  background: #1a1a1a;
+}
+
+.chart-empty {
+  margin: 0;
+  color: #555;
+  font-size: 13px;
+}
+
+/* The headline figure, above the bar. It used to be printed inside the donut's
+   hole, which meant it shrank whenever the ring did. */
+.chart-head {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart-head-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a8a8a;
+}
+
+.chart-head-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Full width, so the bar above always has a definite box to divide up even if
+   a future change makes the section itself narrow. */
 .chart-container {
   align-self: stretch;
 }
@@ -1401,6 +1442,15 @@ td {
   color: #fff;
 }
 
+/* Marks where spending ends and the money that has NOT been spent begins - the
+   greyscale rows. A hairline rather than a heading, since it separates two
+   kinds of row rather than starting a new section. */
+.legend-divide {
+  border-top: 1px solid #232323;
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
 /* =====================
    History View
 ===================== */
@@ -1417,8 +1467,10 @@ td {
   letter-spacing: 0.3px;
 }
 
-/* Explicit height for the same reason as #summary-chart above: without it the
-   element would inherit the DPI-scaled height attribute and grow 2-3x tall. */
+/* Explicit height because fitCanvas() rewrites this canvas's height ATTRIBUTE
+   to match the device pixel ratio; without a CSS height the element would take
+   that backing-store value as its layout height and grow 2-3x tall. (The
+   summary chart no longer has this problem - it is not a canvas any more.) */
 #trend-chart {
   width: 100%;
   max-width: 440px;

@@ -47,7 +47,7 @@ When a new month starts, the finished month is automatically filed away in
 **History** and a fresh, empty month begins — you don't have to do anything
 to "close" a month.
 
-There's a live donut chart showing where your money went, a **Remaining**
+There's a live spending breakdown showing where your money went, a **Remaining**
 figure that updates instantly as you spend, and a history view with trends
 across every month you've tracked.
 
@@ -175,8 +175,8 @@ still reached from the icons in the header, on any tab.
   handle it
 - Swipe to delete on every list, with a 3-second undo — several deep, so a
   run of mistakes can be walked back one at a time
-- Clean monochrome design with a colourful donut chart and a monthly trend
-  chart
+- Clean monochrome design with a colour-coded spending breakdown and a
+  monthly trend chart
 - **Month history** — every past month archived automatically, with a full
   breakdown, trends, and storage usage
 - **Export and import** your entire dataset as a single JSON file
@@ -202,7 +202,7 @@ still reached from the icons in the header, on any tab.
 6. Log day-to-day spending under **Second choice** as it happens (see
    [Second choice](#second-choice-everyday-spending) below).
 
-Your **Remaining** figure and the donut chart update instantly with every
+Your **Remaining** figure and the spending breakdown update instantly with every
 change you make.
 
 ---
@@ -375,7 +375,7 @@ to handle it — see [Overspending](#overspending).
 ## Categories
 
 Every bill and every Second choice entry gets a **category** — that's what
-the donut chart divides your spending by. MoNy starts you off with:
+the breakdown divides your spending by. MoNy starts you off with:
 
 - **Priority** (your bills) — Bills, Subscription, Others
 - **Second choice** (everyday spending) — Food / Drink, Transport, Others
@@ -433,7 +433,7 @@ category back at any time.
 - **"Others" can't be renamed or removed.** It's where anything without a
   category gets filed, so it has to exist in both lists.
 - **A category can't share a name with a wallet** (and vice versa). They'd
-  merge into a single slice on the chart, since slices are grouped by name.
+  merge into a single segment on the chart, since segments are grouped by name.
   MoNy tells you if you try.
 
 Each category gets its own colour on the chart, shown as a dot next to its
@@ -479,13 +479,20 @@ enough left"** pop-up appears with your options:
 
 ## The chart
 
-A hand-drawn donut chart (no images, no library) shows:
+A horizontal stacked bar with a row per segment underneath (no images, no
+library) shows:
 
-- One slice per spending category, biggest first
-- An "In wallets" slice for money set aside but not yet spent
-- A "Remaining" slice for what's left
-- An "Overspent" line instead of a slice if you've gone over, since going
-  over your income isn't a share of it
+- Your total spent as the headline figure
+- One coloured segment per spending category, biggest first
+- A grey "In wallets" segment for money set aside but not yet spent
+- A grey "Remaining" segment for what's left — the greys are deliberate, so
+  the coloured part of the bar is exactly what you've spent
+- An "Overspent" row with no segment if you've gone over, since going over
+  your income isn't a share of it
+
+Every segment has its exact figure in the row beneath, which is what makes a
+small category readable — a RM 30 fuel line is a sliver in the bar but a
+full row in the list.
 
 To show or hide it: open **Settings** → toggle **"Show chart"**.
 
@@ -562,7 +569,7 @@ immediately — there's no separate "Save" button.
 
 | Setting | What it does |
 |---|---|
-| **Show chart** (toggle) | Shows or hides the donut chart |
+| **Show chart** (toggle) | Shows or hides the spending breakdown |
 | **Month starts** (dropdown) | Pick day 1–31 for when your budgeting cycle begins — see [Budget cycles](#budget-cycles-not-everyone-gets-paid-on-the-1st) |
 | **Carry balance forward** (toggle) | On by default — carries last month's leftover into the new one. Turn off to start every month at zero |
 | **Currency** (dropdown) | RM, $, S$, €, £, ¥, ₩, Rp |

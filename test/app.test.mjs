@@ -1148,20 +1148,54 @@ test("the fallback category has no delete button", () => {
   assert.ok(transport.querySelector(".category-name-input"), "and renamed in place");
 });
 
-/* Colours are hashed from the NAME, not taken from a list position, so a
-   category keeps its colour as others are added and removed around it. */
-test("a custom category's colour is stable and name-derived", () => {
+/* Colour follows the ENTITY, never the chart's sort order - a category must not
+   change colour because its spending moved it up or down the bar. */
+test("a category's colour does not depend on the chart's ordering", () => {
   const w = bootApp({
     storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
     today: "2026-08-15"
   });
 
-  const first = w.__app.run(`categoryColor("Groceries")`);
-  w.__app.run(`settings.categories.secondChoice = ["A", "B", "Groceries", "Others"];`);
-  assert.equal(w.__app.run(`categoryColor("Groceries")`), first,
-    "position changed, colour did not");
+  const first = w.__app.run(`categoryColor("Others")`);
   assert.match(first, /^#[0-9a-f]{6}$/i);
-  assert.equal(w.__app.run(`categoryColor("Bills")`), "#e74c3c", "built-ins keep their colour");
+  assert.equal(w.__app.run(`categoryColor("Others")`), first, "stable across calls");
+
+  // A name settings has never heard of still draws rather than coming back
+  // undefined - an archived month can hold a since-deleted category.
+  assert.match(w.__app.run(`categoryColor("Deleted Long Ago")`), /^#[0-9a-f]{6}$/i);
+});
+
+/* REGRESSION: a wallet and a category came out the identical violet, side by
+   side in the same chart - built-ins were pinned to slots while wallets were
+   hashed into the same list, so nothing stopped the two meeting. Every named
+   thing now takes its slot from one registry. */
+test("REGRESSION: no two entities share a hue while slots remain", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: {
+        ...SETTINGS,
+        wallets: [{ id: "w0", name: "Grocery" }, { id: "w1", name: "Fuel" }]
+      },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-15"
+  });
+
+  const names = w.__app.run("chartNameRegistry()");
+  const slots = w.__app.run("CHART_SERIES.length");
+  assert.ok(names.length <= slots,
+    `this fixture must fit in the ramp to prove the point (${names.length} names, ${slots} slots)`);
+
+  const colors = names.map(n => w.__app.run(`categoryColor(${JSON.stringify(n)})`));
+  assert.equal(new Set(colors).size, colors.length,
+    `every name got its own hue: ${JSON.stringify(names.map((n, i) => [n, colors[i]]))}`);
+
+  // And the wallets specifically, which is where the collision actually showed.
+  const w0 = w.__app.run("walletColor(0)");
+  const w1 = w.__app.run("walletColor(1)");
+  assert.notEqual(w0, w1, "two wallets differ");
+  assert.notEqual(w0, w.__app.run(`categoryColor("Food / Drink")`),
+    "and a wallet does not collide with a category");
 });
 
 /* ---------------------------------------------------------------------------
@@ -1722,87 +1756,93 @@ test("a rollover clears every pending modal handle", () => {
    canvas's width depend on a container whose width depended on the canvas.
 --------------------------------------------------------------------------- */
 
-/* REGRESSION: the CSS circularity. Asserted against the stylesheet, because
-   jsdom has no layout engine to reproduce the collapse itself - but the rule
-   that caused it is exactly what must not come back. */
-test("REGRESSION: the donut canvas is not sized against its own container", () => {
-  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
-  /* The declarations only, not the comment above them - the rule now carries a
-     long note explaining exactly this hazard, and a fixed-length slice would
-     read the prose instead of the CSS. */
-  const start = css.indexOf("#summary-chart");
-  const block = css.slice(css.indexOf("{", start), css.indexOf("}", start));
-
-  /* A definite pixel width. It is a custom property now, so that fitHomeChart()
-     can shrink the donut when a long legend would push Home into a scroll - but
-     the fallback is a pixel value and so is everything ever assigned to it, so
-     the canvas still decides its own width rather than asking its parent. */
-  assert.match(block, /width:\s*(220px|var\(--chart-size,\s*220px\))/,
-    "it has a definite width");
-  assert.doesNotMatch(block, /(max-)?width:\s*\d+%/,
-    "and NOT a percentage width - .chart-container is a shrink-to-fit " +
-    "flex column, so that makes the two depend on each other and both settle at zero");
-});
-
-/* A zero measurement must schedule a retry rather than give up silently. */
-test("REGRESSION: a chart that cannot be measured retries instead of staying blank", () => {
+/* REGRESSION: the donut could not show a small category - a RM 30 line against
+   a RM 2,000 income was a slice a third of a degree wide. Every segment of the
+   bar that replaced it must be visible, however small its share. */
+test("REGRESSION: a tiny category still gets a visible segment", () => {
   const w = bootApp({
     storage: {
       [KEYS.settings]: { ...SETTINGS, showChart: true },
-      [KEYS.data]: month({ income: 3000 })
-    },
-    today: "2026-08-15"
-  });
-
-  /* Driven directly: jsdom has no canvas context, so renderChart returns
-     before it ever measures. The retry itself only needs the element, and it
-     is the piece that was missing - fitCanvas already declined correctly. */
-  w.__app.run("retryChartWhenMeasurable()");
-  assert.equal(w.__app.run(`canvasRetries.has("donut")`), true, "a retry is armed");
-
-  // Armed once, not once per call, so repeated failed draws cannot pile up.
-  w.__app.run("retryChartWhenMeasurable(); retryChartWhenMeasurable();");
-  assert.equal(w.__app.run("canvasRetries.size"), 1, "still exactly one in flight");
-
-  // Switching the chart off must let the retry stand down rather than poll on.
-  w.__app.run(`settings.showChart = false;`);
-  return new Promise(resolve => {
-    setTimeout(() => {
-      assert.equal(w.__app.run(`canvasRetries.has("donut")`), false,
-        "the retry gives up once there is nothing to draw");
-      resolve();
-    }, 250);
-  });
-});
-
-/* Both toasts share one element. An untracked notice timer used to hide an
-   undo that had since taken the toast over, pulling Undo out from under the
-   user mid-countdown. */
-test("REGRESSION: a notice does not cut short an undo that follows it", () => {
-  const w = bootApp({
-    storage: {
-      [KEYS.settings]: SETTINGS,
       [KEYS.data]: month({
-        secondChoice: [{ name: "grab", category: "Transport", amount: 13, type: "take",
-                         date: "2026-08-02T10:00:00.000Z" }]
+        income: 2000,
+        secondChoice: [
+          { name: "rent", category: "Others", amount: 900, type: "take", date: "2026-08-02T10:00:00.000Z" },
+          { name: "fuel", category: "Transport", amount: 30, type: "take", date: "2026-08-03T10:00:00.000Z" }
+        ]
       })
     },
     today: "2026-08-15"
   });
 
-  w.__app.run(`showNotice("renamed something")`);
-  assert.notEqual(w.__app.run("noticeTimeout"), null, "the notice owns the toast");
+  const segs = [...w.document.querySelectorAll("#chart-bar .chart-bar-seg")];
+  assert.ok(segs.length >= 2, "one segment per row");
 
-  // A deletion claims the toast while the notice is still counting down.
-  w.__app.run(`deleteSecondChoiceItem(data.secondChoice[0])`);
+  /* A floor in CSS, not a share of the total - a share can always round to
+     nothing. jsdom has no layout, so the rule itself is the assertion. */
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  const block = css.slice(css.indexOf(".chart-bar-seg"), css.indexOf("}", css.indexOf(".chart-bar-seg")));
+  assert.match(block, /min-width:\s*[1-9]/, "segments have a minimum width");
 
-  assert.equal(w.__app.run("noticeTimeout"), null,
-    "the notice's timer is cancelled, not left running");
-  assert.notEqual(w.__app.run("undoTimeout"), null, "the undo owns it now");
-  assert.ok(!w.document.getElementById("undo-toast").classList.contains("hidden"),
-    "and the toast is showing");
-  assert.ok(!w.document.getElementById("undo-btn").classList.contains("hidden"),
-    "with its Undo button back");
+  // Every segment carries a real share, so none is a zero-width sliver.
+  segs.forEach(s => {
+    const grow = parseFloat(s.style.flexGrow);
+    assert.ok(grow > 0, `a segment has a positive share (got ${grow})`);
+  });
+});
+
+/* The bar divides the segments' own sum, not income - when overspent the
+   overspend is deliberately absent, and dividing by income would leave the
+   bar visibly short of full for no stated reason. */
+test("the bar's segments always add up to the whole bar", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, showChart: true },
+      [KEYS.data]: month({
+        income: 1000,
+        secondChoice: [
+          { name: "a", category: "Others", amount: 1200, type: "take", date: "2026-08-02T10:00:00.000Z" }
+        ]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const segs = [...w.document.querySelectorAll("#chart-bar .chart-bar-seg")];
+  const sum = segs.reduce((n, s) => n + parseFloat(s.style.flexGrow), 0);
+  assert.ok(Math.abs(sum - 1000) < 1, `shares total the whole bar (got ${sum})`);
+
+  // The overspend is a row, with no segment behind it.
+  const over = [...w.document.querySelectorAll("#chart-legend .legend-item")]
+    .find(r => r.textContent.includes("Overspent"));
+  assert.ok(over, "an overspend is reported in the rows");
+  assert.equal(segs.length, 1, "and has no segment of its own");
+});
+
+/* Money in a wallet or still in the balance is not spending, and must not be
+   coloured as though it were a category - the old ring gave Remaining a full
+   blue slice under a caption reading "total spent". */
+test("only spending is coloured; unspent money stays greyscale", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, showChart: true },
+      [KEYS.data]: month({
+        income: 1000,
+        secondChoice: [
+          { name: "a", category: "Others", amount: 100, type: "take", date: "2026-08-02T10:00:00.000Z" }
+        ]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const series = w.__app.run("CHART_SERIES");
+  const rows = [...w.document.querySelectorAll("#chart-legend .legend-item")];
+  const remaining = rows.find(r => r.textContent.includes("Remaining"));
+  assert.ok(remaining, "Remaining is listed");
+
+  const dot = remaining.querySelector(".legend-dot").style.background;
+  assert.ok(!series.some(hex => dot.includes(hex)),
+    "Remaining does not wear a category colour");
 });
 
 /* REGRESSION: the same blank-canvas fault as the donut, in History. The

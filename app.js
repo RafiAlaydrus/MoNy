@@ -120,7 +120,7 @@ if (settings.monthStartDay === undefined) settings.monthStartDay = 1;
 /* The categories offered by the two entry forms.
  *
  * These were hardcoded as <option> markup until v1.22.0, which capped
- * everyday spending at three labels and made the donut chart far less
+ * everyday spending at three labels and made the spending chart far less
  * informative than it could be. They live in settings now so they can be
  * edited, and the markup holds none of them.
  *
@@ -537,8 +537,8 @@ const addMoneyBtn = document.getElementById("add-money");
 const takeMoneyBtn = document.getElementById("take-money");
 const scTable = document.getElementById("sc-table");
 
-const chartCanvas = document.getElementById("summary-chart");
-const chartCtx = chartCanvas ? chartCanvas.getContext("2d") : null;
+const chartBar = document.getElementById("chart-bar");
+const chartTotal = document.getElementById("chart-total");
 const chartLegend = document.getElementById("chart-legend");
 
 /* Matches a canvas's backing store to the device's pixel density.
@@ -587,36 +587,74 @@ function fitCanvas(canvas, ctx) {
 }
 
 // Only the chart and its legend use color - the rest of the app stays monochrome
-const CATEGORY_COLORS = {
-  "Bills": "#e74c3c",
-  "Subscription": "#e67e22",
-  "Food / Drink": "#9b59b6",
-  "Transport": "#16a085",
-  "Others": "#8a8a8a",
-};
+/* CHART PALETTE
+   Six hues, in a fixed order, validated against the #111 chart surface rather
+   than picked by eye: every adjacent pair clears the colour-blind separation
+   target (worst pair 8.4, target 8) and the normal-vision floor (worst 19.3,
+   floor 15), all six sit in one lightness band, and all six clear 3:1 contrast
+   against the card behind them. The old set failed that last part in places
+   and put green next to grey, which protanopes cannot separate.
 
-/* Colours for user-defined categories, which by definition are not in the map
-   above. Chosen to sit apart from both the built-in category colours and the
-   wallet ramp, so a custom category is never confusable with either. */
-const CUSTOM_CATEGORY_RAMP = [
-  "#4a90d9", "#d95f9a", "#57b894", "#c9a227", "#8e7cc3", "#d9734a", "#4aa3a3"
+   Colour still carries CATEGORY identity only. Money that has not been spent -
+   sitting in a wallet, or still in the balance - is deliberately greyscale
+   below, so the coloured part of the bar is exactly the spending. */
+const CHART_SERIES = [
+  "#3987e5", // blue
+  "#d95926", // orange
+  "#199e70", // aqua
+  "#c98500", // yellow
+  "#d55181", // magenta
+  "#008300", // green
+  "#9085e9", // violet
 ];
 
-/* Picks a colour for a category name deterministically.
+/* WHICH ENTITY GETS WHICH HUE
+
+   Every named thing the chart can draw - each wallet and each category - takes
+   a slot from CHART_SERIES by its position in one stable registry. Two of them
+   therefore cannot land on the same hue until all seven are spent, which is
+   the failure the previous scheme had: built-in categories were pinned to
+   slots while wallets and custom names were hashed into the same list, so a
+   wallet could and did come out the identical violet as "Food / Drink" right
+   beside it.
+
+   Registry order is wallets (creation order) then categories (settings order),
+   and it moves only when the user adds, removes or reorders one of those
+   lists. That is what "colour follows the entity" needs: the colour must not
+   depend on the chart's own sort order, which changes every time a figure
+   does. It is not immune to a settings edit - adding a category can shift the
+   ones after it - which is the price of never showing two identical hues in
+   one chart, and the cheaper mistake of the two.
+
+   Past seven names the list cycles and a repeat is unavoidable; the labelled
+   row under every segment is what carries identity when that happens. */
+function chartNameRegistry() {
+  const seen = new Set();
+  const names = [];
+  const add = (n) => {
+    const key = String(n == null ? "" : n);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    names.push(key);
+  };
+  allWallets().forEach(w => add(w.name));
+  allCategoryNames().forEach(add);
+  return names;
+}
+
+function chartSlotColor(index) {
+  return CHART_SERIES[index % CHART_SERIES.length];
+}
+
+/* Picks a colour for a category name.
  *
- * Deliberately a hash of the NAME rather than a position in the list: the
- * chart sorts its slices by amount and the settings list can be reordered by
- * adding or removing entries, so an index-based colour would make a category
- * change colour without the user changing anything. Hashing means "Groceries"
- * is the same colour today, tomorrow, and in an archived month. */
+ * Falls back to the end of the ramp for a name the registry has never seen -
+ * an archived month can hold a category since deleted from settings, and it
+ * still has to draw. */
 function categoryColor(name) {
-  if (CATEGORY_COLORS[name]) return CATEGORY_COLORS[name];
-  const key = String(name || "");
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) {
-    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
-  }
-  return CUSTOM_CATEGORY_RAMP[hash % CUSTOM_CATEGORY_RAMP.length];
+  const i = chartNameRegistry().indexOf(String(name == null ? "" : name));
+  if (i === -1) return CHART_SERIES[CHART_SERIES.length - 1];
+  return chartSlotColor(i);
 }
 
 /* Every category currently offered, both lists together, lowercased. Wallet
@@ -664,16 +702,27 @@ function renderAllCategoryOptions() {
   renderCategoryOptions(document.getElementById("sc-category"), "secondChoice");
 }
 
-const CHART_IN_WALLETS_COLOR = "#f1c40f";
-const CHART_REMAINING_COLOR = "#3498db";
-const CHART_OVERSPENT_COLOR = "#c0392b";
+/* Neither of these is a category, and neither is spending: one is money moved
+   into a wallet, the other is money still in the balance. They are greys so
+   that the bar reads as "the coloured part is what you spent" - the old chart
+   gave Remaining a full blue slice inside a ring captioned "total spent",
+   which is two different questions answered in one mark. */
+const CHART_IN_WALLETS_COLOR = "#b4b4b4";
+const CHART_REMAINING_COLOR = "#5c5c5c";
 
-/* Wallet slice colours. The UI is otherwise greyscale; the chart is the one
-   place colour is allowed, because same-shade slices are indistinguishable.
-   The ramp cycles, so a sixth wallet reuses the first colour - acceptable
-   since the legend is labelled and nobody runs six wallets. */
-const WALLET_COLOR_RAMP = ["#2ecc71", "#e84393", "#00b8d9", "#a29bfe", "#fdcb6e"];
-function walletColor(index) { return WALLET_COLOR_RAMP[index % WALLET_COLOR_RAMP.length]; }
+// A status, not a series - it gets a colour of its own that no category uses.
+const CHART_OVERSPENT_COLOR = "#e66767";
+
+/* Wallet segment colours come from the same registry, so a wallet and a
+   category can never collide while there are slots left. The UI is otherwise
+   greyscale; the chart is the one place colour is allowed, because same-shade
+   segments are indistinguishable. */
+function walletColor(index) {
+  const wallets = allWallets();
+  const name = wallets[index] ? wallets[index].name : null;
+  const i = name === null ? index : chartNameRegistry().indexOf(name);
+  return chartSlotColor(i === -1 ? index : i);
+}
 
 // Returns the current currency symbol
 function cur() { return settings.currency; }
@@ -992,7 +1041,7 @@ if (corruptKeys.length > 0) {
 /* Renders the income display: everything available to spend this month,
    carried balance included.
 
-   This shows totalIncomeOf unmodified, which is the same figure the donut
+   This shows totalIncomeOf unmodified, which is the same figure the chart
    divides up and the spend bar measures against. An earlier version
    subtracted the carried amount back out so the card meant "earned this
    month", but that made the top of the screen contradict itself - the chart
@@ -2114,7 +2163,7 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
  * The main balance has askOverspend, which can always fall back to "record it
  * anyway" because a negative Remaining is a real, representable state. A
  * wallet has no equivalent: a negative wallet balance cannot be drawn in the
- * donut, and would make `inWallets` meaningless. So this offers the ways to
+ * chart, and would make `inWallets` meaningless. So this offers the ways to
  * make the take legal rather than the way to force it through - top the
  * wallet up first, then spend.
  *
@@ -2699,19 +2748,6 @@ function calculateRemaining(skipChart = false) {
    CHART
 ========================= */
 
-// Renders the donut chart with category breakdown
-/* Waits for the donut's canvas to actually have a size, then draws it once.
- *
- * fitCanvas() declines to draw into a zero-sized box, which is correct - but
- * on its own it made a transient zero permanent, because nothing re-ran
- * renderChart afterwards. A cold start is exactly when that happens: the
- * first draw can land before layout has settled, and the app then sits there
- * showing an empty card.
- *
- * A ResizeObserver is the reliable signal, since the canvas going from zero
- * to a real box IS a resize. The rAF is for the common case where layout is
- * one frame away and an observer would be overkill. Both are one-shot -
- * whichever wins disconnects the other. */
 /* Canvases with a retry currently armed, keyed by name. A canvas that failed
    to measure arms exactly one retry, not one per failed draw. */
 const canvasRetries = new Set();
@@ -2720,9 +2756,9 @@ const canvasRetries = new Set();
  *
  * fitCanvas() declines to draw into a zero-sized box, which is correct. What
  * was missing is that nothing tried again, so a single bad measurement left a
- * chart blank for the life of the page. Both charts hit this: the donut when
- * the section is un-hidden in the same tick it is drawn, and the trend chart
- * when History is opened.
+ * chart blank for the life of the page. The trend chart in History is what
+ * hits this now - it is opened and drawn in the same tick. (The summary chart
+ * used to as well, until it stopped being a canvas.)
  *
  * `wanted()` is re-checked each tick so a retry stands down when whatever it
  * was drawing for has gone away - the chart switched off, History closed -
@@ -2776,98 +2812,50 @@ function retryDrawWhenMeasurable(key, canvas, draw, wanted) {
   }
 }
 
-/* Kept as a named wrapper so the donut's call site reads plainly.
-   `wanted` also requires the tracker view to be on screen: opening History
-   hides the donut entirely, and without this the retry would poll out its
-   whole budget waiting for a canvas that is deliberately not there. */
-function retryChartWhenMeasurable() {
-  retryDrawWhenMeasurable(
-    "donut", chartCanvas, renderChart,
-    () => {
-      /* Looked up here rather than closing over `appView`, which is declared
-         further down the file: the first failed draw happens during startup,
-         before that binding exists. */
-      const view = document.getElementById("app-view");
-      /* The chart lives on the Home tab, so a hidden Home means a zero-sized
-         canvas just as surely as a hidden app view does. Keep retrying in
-         that case rather than drawing into nothing. */
-      const home = document.getElementById("tab-home");
-      return !!settings.showChart && !!view && !view.classList.contains("hidden")
-        && !!home && !home.classList.contains("hidden");
-    }
-  );
-}
+/* Builds the spending breakdown: one horizontal stacked bar, and a row per
+   segment underneath carrying the exact figure.
 
-// Guards the resize-and-redraw pass at the end of renderChart against
-// re-entering itself. See the comment there.
-let chartFitting = false;
-
+   It is plain DOM, not a canvas. The donut this replaced needed the canvas
+   sized in CSS, its backing store rewritten for the device pixel ratio, a
+   retry for the case where it was measured before it had a layout box, and a
+   redraw whenever any of that changed. A stack of divs has none of those
+   failure modes, reflows on its own, and is sharp at any pixel ratio. */
 function renderChart() {
-  if (!settings.showChart || !chartCtx) return;
-
-  const canvas = chartCanvas;
-  const ctx = chartCtx;
-  const legend = chartLegend;
-
-  /* Logical drawing size, density-corrected. Null means the canvas has no
-     layout box yet, so retry rather than give up: a chart that measured zero
-     once used to stay blank until something else happened to redraw it, and
-     on a cold start nothing ever did. */
-  const box = fitCanvas(canvas, ctx);
-  if (!box) { retryChartWhenMeasurable(); return; }
-  // The donut is square; the shorter side keeps it circular in any box.
-  const size = Math.min(box.w, box.h);
+  if (!settings.showChart || !chartBar || !chartLegend || !chartTotal) return;
 
   const income = totalIncomeOf(data, allWallets()) || 0;
+
   if (income === 0) {
-    ctx.clearRect(0, 0, box.w, box.h);
-    const center = size / 2;
-
-    /* Empty-state ring. Two arcs drawn in opposite directions and closed into
-       one path punches the hole out of the middle - the reverse winding is
-       what makes it a donut rather than a filled disc. Same trick as the real
-       slices below. */
-    ctx.beginPath();
-    ctx.arc(center, center, size / 2 - 10, 0, Math.PI * 2);
-    ctx.arc(center, center, (size / 2 - 10) * 0.55, Math.PI * 2, 0, true);
-    ctx.closePath();
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fill();
-
-    ctx.fillStyle = "#555";
-    ctx.font = "13px -apple-system, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("No data yet", center, center);
-
-    legend.innerHTML = '<span style="color:#555;font-size:13px;">Set your income to get started.</span>';
+    chartTotal.textContent = `${cur()} 0`;
+    chartBar.innerHTML = '<div class="chart-bar-empty"></div>';
+    chartBar.setAttribute("aria-label", "No spending data yet");
+    chartLegend.innerHTML =
+      '<p class="chart-empty">Set your income to get started.</p>';
     return;
   }
 
   /* allWallets() rather than activeWallets(): a closed wallet's spending is
-     still spending, and dropping it here would shrink the donut below the
-     income it is dividing up. */
+     still spending, and dropping it here would shrink the bar below the income
+     it is dividing up. */
   const breakdown = spendingBreakdownOf(data, allWallets());
 
-  /* Wallet slices are keyed by NAME, because that is how monthTotalsOf files
-     them under categories. The consequence is that closing a wallet and
-     making a new one with the same name merges the two in this chart. */
+  /* Wallet segments are keyed by NAME, because that is how monthTotalsOf files
+     them under categories. The consequence is that closing a wallet and making
+     a new one with the same name merges the two here. */
   const walletColorMap = {};
   allWallets().forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
 
   const spent = breakdown.spent;
   const inWallets = Math.max(breakdown.inWallets, 0);
 
-  /* rawRemaining keeps its sign for the overspend check below; `remaining` is
-     the clamped version used for the slice, since a negative slice angle
-     would sweep backwards over the others. */
+  /* rawRemaining keeps its sign for the overspend check; `remaining` is the
+     clamped version used for the segment, since a negative width would make
+     the bar's proportions meaningless. */
   const rawRemaining = getMainRemaining();
   const remaining = Math.max(rawRemaining, 0);
 
-  /* Biggest categories first, so the eye lands on the largest slice at the
-     top of the donut. Colour precedence: the five fixed chart categories win,
-     then wallets by name, then a neutral grey for anything unrecognised -
-     which is also why a wallet may not be named after a fixed category. */
+  // Biggest first, so the bar reads left to right in order of size and the
+  // rows underneath rank the month's spending without the eye having to sort.
   const segments = Object.entries(breakdown.categories)
     .sort((a, b) => b[1] - a[1])
     .map(([label, amount]) => ({
@@ -2876,7 +2864,9 @@ function renderChart() {
       color: walletColorMap[label] || categoryColor(label),
     }));
 
-  // Money budgeted to a wallet has left the main balance but is not spent yet
+  const spentCount = segments.length;
+
+  // Money budgeted to a wallet has left the main balance but is not spent yet.
   if (inWallets > 0) {
     segments.push({ label: "In wallets", amount: inWallets, color: CHART_IN_WALLETS_COLOR });
   }
@@ -2885,56 +2875,45 @@ function renderChart() {
     segments.push({ label: "Remaining", amount: remaining, color: CHART_REMAINING_COLOR });
   }
 
-  // An overspend has no slice - it is not a share of income - but the legend
-  // has to say so, otherwise the donut silently looks like a full division of
-  // money that was never there.
+  /* An overspend gets no segment - it is not a share of income - but the rows
+     have to say so, otherwise the bar silently looks like a full division of
+     money that was never there. */
   const overspentBy = rawRemaining < 0 ? -rawRemaining : 0;
 
-  /* Income set but nothing moved yet: one full Remaining slice, so the canvas
-     shows a complete ring instead of dividing by a total of zero below. */
+  // Income set but nothing moved yet: one full Remaining segment, rather than
+  // dividing by a total of zero below.
   if (segments.length === 0) {
     segments.push({ label: "Remaining", amount: income, color: CHART_REMAINING_COLOR });
   }
 
-  const center = size / 2;
-  const radius = size / 2 - 10;
-  const innerRadius = radius * 0.55;
-
-  /* Slices are sized against the sum of the segments, NOT against income.
-     The two are equal in a balanced month, and when overspent the overspend
-     is deliberately absent from `segments` - so dividing by income would
-     leave a gap in the ring rather than a full circle. */
+  /* Widths are shares of the segments' own sum, NOT of income. The two are
+     equal in a balanced month, and when overspent the overspend is
+     deliberately absent from `segments` - so dividing by income would leave
+     the bar short of full. */
   const total = segments.reduce((sum, s) => sum + s.amount, 0);
 
-  ctx.clearRect(0, 0, size, size);
+  chartTotal.textContent = `${cur()} ${fmt(spent)}`;
 
-  /* Start at the top. Canvas angles begin at 3 o'clock, so -90deg rotates the
-     first slice up to 12 o'clock where a donut is expected to start. */
-  let startAngle = -Math.PI / 2;
-  segments.forEach(seg => {
-    const sliceAngle = (seg.amount / total) * Math.PI * 2;
-    /* Outer arc forwards, inner arc backwards, closed into one path - the
-       same reverse-winding donut trick as the empty state above. */
-    ctx.beginPath();
-    ctx.arc(center, center, radius, startAngle, startAngle + sliceAngle);
-    ctx.arc(center, center, innerRadius, startAngle + sliceAngle, startAngle, true);
-    ctx.closePath();
-    ctx.fillStyle = seg.color;
-    ctx.fill();
-    startAngle += sliceAngle;
-  });
+  /* flex-grow rather than a width percentage, so the 2px gaps between segments
+     come out of the track instead of pushing the last one off the end.
+     min-width keeps a very small category visible as a sliver: it is the whole
+     reason this is a bar and not a donut, where a 1% category was a third of a
+     degree and simply could not be drawn. */
+  chartBar.innerHTML = segments.map(s => `
+    <span class="chart-bar-seg"
+          style="flex-grow:${(s.amount / total) * 1000};background:${s.color}"></span>
+  `).join("");
 
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 18px -apple-system, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(`${cur()} ${fmt(spent)}`, center, center - 8);
-  ctx.font = "12px -apple-system, sans-serif";
-  ctx.fillStyle = "#888";
-  ctx.fillText("total spent", center, center + 12);
+  chartBar.setAttribute("aria-label",
+    `Spending breakdown: ${segments.map(s => `${s.label} ${cur()} ${fmt(s.amount)}`).join(", ")}` +
+    (overspentBy > 0 ? `, overspent by ${cur()} ${fmt(overspentBy)}` : ""));
 
-  legend.innerHTML = segments.map(s => `
-    <div class="legend-item">
+  /* The rows are the readable half of this chart, so every segment gets its
+     exact figure - this is a table, not a label on every point in a plot.
+     `spentCount` marks where the spending ends and the greyscale
+     not-yet-spent rows begin. */
+  chartLegend.innerHTML = segments.map((s, i) => `
+    <div class="legend-item${i === spentCount && spentCount > 0 ? " legend-divide" : ""}">
       <div class="legend-left">
         <span class="legend-dot" style="background:${s.color}"></span>
         <span>${esc(s.label)}</span>
@@ -2950,26 +2929,8 @@ function renderChart() {
       <span class="legend-amount">${esc(cur())} ${fmt(overspentBy)}</span>
     </div>
   ` : "");
-
-  /* The legend is only measurable now that it exists, and the donut's size
-     depends on how tall it turned out. Resize on the next frame and redraw if
-     that changed anything.
-
-     This terminates: fitHomeChart works from Home's height MINUS the canvas,
-     which the resize does not move, so the second pass computes the same size
-     and returns false. The flag is belt and braces against a layout that
-     oscillates by a pixel. */
-  if (!chartFitting) {
-    requestAnimationFrame(() => {
-      chartFitting = true;
-      try {
-        if (fitHomeChart()) renderChart();
-      } finally {
-        chartFitting = false;
-      }
-    });
-  }
 }
+
 
 /* =========================
    INITIAL RENDER
@@ -3011,10 +2972,9 @@ const chartSection = document.getElementById("chart-section");
 chartToggle.checked = settings.showChart;
 if (settings.showChart) {
   chartSection.classList.remove("hidden");
-  /* Draw only now that the section has a layout box. calculateRemaining()
-     above already called renderChart() once, but the section was still
-     hidden at that point, so fitCanvas() had a zero-sized rect to measure
-     and correctly declined to draw into it. */
+  /* calculateRemaining() above already called renderChart(), but the section
+     was hidden then. It costs nothing to build the rows again now that it is
+     not, and it keeps this independent of that call's ordering. */
   renderChart();
 }
 
@@ -3052,31 +3012,7 @@ function ordinal(n) {
   return `${n}${["th", "st", "nd", "rd"][n % 10] || "th"}`;
 }
 
-/* When a chosen start day would first take effect.
 
-   The next start is always in the calendar month AFTER the current cycle
-   began, so it is normally in the future. It can land in the past in one
-   case: a long cycle running into the next calendar month, where picking an
-   earlier day names a date already gone. Rolling over to it would archive
-   the month on screen the moment the setting changed, which is exactly what
-   "applies next month, not this one" rules out - so it is pushed on a
-   further month. */
-function startDayTakesEffect(chosenDay) {
-  let next = nextCycleStartOf(data.cycleStart, chosenDay);
-  if (next <= todayStr) next = nextCycleStartOf(next, chosenDay);
-  return next;
-}
-
-/* Shows the note whenever the chosen day has not taken effect yet.
-
-   The test is against the day the CURRENT CYCLE actually began, not against
-   settings.monthStartDay - the setting is written the moment the dropdown
-   changes, so comparing the two would always find them equal and the note
-   would never appear. It also survives a reload, which comparing to the
-   dropdown would not.
-
-   Clamping is applied before comparing: a cycle that opened on 28 February
-   under a chosen 31st HAS taken effect, and must not be reported as pending. */
 function renderMonthStartNote() {
   if (!monthStartNote || !data.cycleStart) return;
   const { y, m, d } = (() => {
@@ -3872,21 +3808,6 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
-/* Shrinks the donut so the Home tab fits the viewport without scrolling.
-
-   Home is meant to be glanceable: the two figures and the chart, all visible
-   at once. The chart is the only part with slack in it - the cards and the
-   legend are text - so it is what gives way. The legend grows a row per
-   category, and on a month with six of them a fixed 220px donut pushed the
-   Remaining card off the bottom.
-
-   Sizing is done by setting --chart-size rather than by giving the canvas a
-   percentage width: the canvas sits in a shrink-to-fit flex column, so a
-   relative width and the container's width would each depend on the other and
-   the browser resolves that circle at zero. An explicit pixel value keeps the
-   canvas the thing that decides.
-
-   Returns true when it changed the size, so the caller knows to redraw. */
 /* Reserves exactly as much room at the foot of the app view as the fixed tab
    bar occupies. Measured rather than hard-coded: the bar's height depends on
    the safe-area inset, which differs per device and is not known here.
@@ -3900,44 +3821,6 @@ function syncTabBarSpace() {
   const h = bar.getBoundingClientRect().height;
   if (!h) return;
   document.documentElement.style.setProperty("--tab-bar-space", `${Math.round(h + 8)}px`);
-}
-
-function fitHomeChart() {
-  if (!settings.showChart) return false;
-
-  const home = document.getElementById("tab-home");
-  const bar = document.getElementById("tab-bar");
-  if (!home || !bar || !chartCanvas) return false;
-  // Nothing to measure while Home or the whole app view is hidden.
-  if (home.classList.contains("hidden")) return false;
-  if (appView && appView.classList.contains("hidden")) return false;
-
-  const current = parseFloat(getComputedStyle(chartCanvas).width) || 0;
-  if (!current) return false;
-
-  /* The one measurement that matters: the gap between the bottom of Home and
-     the top of the tab bar. Positive is room going spare, negative is content
-     hidden behind the bar. Deriving the size from an estimate of the available
-     height instead meant accounting for every padding and inset by hand, and
-     being 40px out was enough to leave the page scrolling.
-
-     Whatever this gap is, moving the donut by it closes it - the donut is
-     above everything else on the tab, so its height passes straight through to
-     Home's bottom edge. That also makes this converge in one extra pass: the
-     next measurement finds the gap already closed and returns false. */
-  const gap = (bar.getBoundingClientRect().top - 8) - home.getBoundingClientRect().bottom;
-
-  /* Floor of 140: below that the centre total stops fitting inside the ring
-     and the donut is worse than useless. A legend long enough to need less
-     than that is one Home genuinely cannot hold, and it scrolls - the honest
-     outcome. 220 is the ceiling, so a near-empty month does not get a donut
-     that fills the screen. */
-  const size = Math.round(Math.max(140, Math.min(220, current + gap)));
-
-  if (Math.abs(current - size) < 2) return false;
-
-  document.documentElement.style.setProperty("--chart-size", `${size}px`);
-  return true;
 }
 
 /* =========================
@@ -3973,10 +3856,6 @@ function showTab(name, scroll = true) {
 
   settings.activeTab = name;
   saveSettings();
-
-  /* The donut canvas measures zero while Home is hidden, so a chart drawn
-     during that time is silently dropped. Redraw on arrival. */
-  if (name === "home") renderChart();
 
   if (scroll) window.scrollTo(0, 0);
 }
@@ -4076,8 +3955,8 @@ function summarizeEntry(rawEntry) {
 function drawTrendChart(entries) {
   if (!trendCtx) return;
   /* Density-corrected logical size. Null means the canvas has no layout box
-     yet - History opening, or a cold start - so retry rather than give up,
-     for the same reason the donut does. `entries` is captured, so the retry
+     yet - History opening, or a cold start - so retry rather than give up.
+     `entries` is captured, so the retry
      redraws exactly what this call was asked to draw. */
   const box = fitCanvas(trendCanvas, trendCtx);
   if (!box) {
@@ -4370,9 +4249,6 @@ historyBack.addEventListener("click", () => {
   historyView.classList.add("hidden");
   appView.classList.remove("hidden");
   tabBar.classList.remove("hidden");
-  /* Home may have been hidden for the whole History visit, so the chart could
-     be sitting on a canvas that measured zero. Cheap to redraw. */
-  renderChart();
   window.scrollTo(0, 0);
 });
 
