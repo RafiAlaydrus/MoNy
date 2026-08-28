@@ -155,7 +155,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.24.1</div>
+            <div class="setting-version">v1.25.0</div>
           </div>
         </section>
       </div>
@@ -171,18 +171,36 @@
     <!-- HOME - the figures, and the chart when it is switched on. -->
     <div class="tab-panel" id="tab-home" data-tab="home">
 
-    <!-- MONTHLY CHART
-         Off by default and toggled from settings. The width/height attributes
-         are the canvas BACKING size in pixels - CSS scales the element down
-         for display, so changing them here changes the drawing resolution,
-         not the layout. renderChart() reads canvas.width for all its geometry.
-         Fixed at 300 and not devicePixelRatio-aware, so it is slightly soft on
-         high-DPI screens. -->
+    <!-- SPENDING BREAKDOWN
+         Off by default and toggled from settings.
+
+         A horizontal stacked bar, not a donut. The donut it replaced could not
+         show a small category at all - a RM 30 fuel line against a RM 2,000
+         income is a slice a third of a degree wide - and it was the one element
+         on Home that had to shrink to make the tab fit. A full-width bar reads
+         the split at a glance, the rows below carry the exact figures, and
+         neither has to give up room to the other.
+
+         Both are built by renderChart(); nothing here is static but the frame. -->
     <section id="chart-section" class="hidden">
       <div class="chart-container">
-        <canvas id="summary-chart" width="300" height="300" role="img" aria-label="Monthly spending breakdown chart"></canvas>
-        <!-- Filled by renderChart(); one row per slice, plus an "Overspent"
-             row that has no slice behind it. -->
+
+        <!-- The headline figure. It was previously printed inside the donut's
+             hole, which meant it shrank along with the ring. -->
+        <div class="chart-head">
+          <span class="chart-head-label">Total spent</span>
+          <strong id="chart-total" class="chart-head-value">&mdash;</strong>
+        </div>
+
+        <!-- One segment per row below, in the same order. role="img" with a
+             written summary, because the bar itself is a stack of unlabelled
+             divs to a screen reader. -->
+        <div id="chart-bar" class="chart-bar" role="img" aria-label="Spending breakdown"></div>
+
+        <!-- The exact numbers, largest first. This is the part that makes the
+             small categories readable, so it is not optional chrome - it is
+             half the chart. An "Overspent" row can appear here with no segment
+             in the bar above, since an overspend is not a share of income. -->
         <div id="chart-legend"></div>
       </div>
     </section>
