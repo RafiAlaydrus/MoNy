@@ -91,6 +91,103 @@ input[type="checkbox"] {
   padding: 20px;
 }
 
+/* Room for the fixed tab bar, so the last row of a list is never parked
+   underneath it. env(safe-area-inset-bottom) covers the iPhone home
+   indicator, which sits in the same strip. */
+#app-view {
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+/* =====================
+   Tab Bar
+===================== */
+/* One panel is visible at a time; the rest carry `hidden`. They stay in the
+   DOM so every render function finds its elements regardless of which tab is
+   open - nothing needs to know about tabs. */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: rgba(0, 0, 0, 0.92);
+  /* The blur is what stops content scrolling underneath from reading as a
+     smear of grey behind the labels. */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid #1c1c1c;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 0;
+  background: none;
+  border: none;
+  /* Dim by default; the active tab is the only near-white one. Greyscale, so
+     brightness carries the selection the way colour would elsewhere. */
+  color: #6a6a6a;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.tab-btn.is-active {
+  color: #fff;
+}
+
+.tab-btn:active {
+  opacity: 0.6;
+}
+
+/* Empty state for the Wallets tab. Dim and centred - it is a prompt, not
+   content, and should not compete with a real wallet card. */
+.wallets-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6a6a6a;
+}
+
+.wallets-empty p {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: #9a9a9a;
+}
+
+.wallets-empty-note {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 18px !important;
+  color: #6a6a6a !important;
+}
+
+/* Outlined, not filled: adding a wallet is an offer, not the tab's primary
+   action - the shape carries that the way colour would elsewhere. */
+#wallets-empty-add {
+  background: none;
+  color: #ccc;
+  border: 1px solid #2a2a2a;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#wallets-empty-add:active {
+  opacity: 0.6;
+}
+
 /* =====================
    Settings
 ===================== */
@@ -1477,6 +1574,17 @@ td {
 .app > *:nth-child(5) { animation-delay: 0.2s; }
 .app > *:nth-child(6) { animation-delay: 0.25s; }
 
+/* The stagger above now lands on the tab panels, which are one wrapper too
+   high to be visible. Re-run it on the sections INSIDE the open panel, so
+   each tab assembles top to bottom the way the single page used to - and
+   replays on every switch, since a hidden panel's animation resets. */
+.tab-panel > * {
+  animation: section-in 0.35s ease backwards;
+}
+.tab-panel > *:nth-child(2) { animation-delay: 0.05s; }
+.tab-panel > *:nth-child(3) { animation-delay: 0.1s; }
+.tab-panel > *:nth-child(4) { animation-delay: 0.15s; }
+
 /* No `to` block needed - omitting it animates from these values back to
    whatever the element's own styles already are. */
 @keyframes section-in {
@@ -1527,6 +1635,7 @@ td {
    the same media query itself, since CSS cannot reach it. */
 @media (prefers-reduced-motion: reduce) {
   .app > *,
+  .tab-panel > *,
   .settings-panel:not(.hidden),
   .modal:not(.hidden),
   .modal:not(.hidden) .modal-card,

@@ -6,6 +6,11 @@
   and #history-view - and the app toggles `hidden` between them rather than
   navigating, so there is no router and no page load between views.
 
+  #app-view is itself split into four .tab-panel divs - Home, Bills, Spending
+  and Wallets - switched by the fixed #tab-bar using the same `hidden` toggle.
+  Every panel stays in the DOM whichever tab is open, so the render functions
+  need to know nothing about tabs.
+
   Everything below is static markup EXCEPT #wallets-container, which is built
   from scratch by renderWallets() because the number of wallets is unknown
   until settings are read.
@@ -150,12 +155,21 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.23.4</div>
+            <div class="setting-version">v1.24.0</div>
           </div>
         </section>
       </div>
       <p id="current-month"></p>
     </header>
+
+    <!-- TAB PANELS
+         Everything below the header is split into four panels; the bottom tab
+         bar shows exactly one at a time by toggling `hidden`, the same trick
+         #app-view and #history-view already use. Nothing is unmounted, so
+         every render function still finds its elements whatever tab is open. -->
+
+    <!-- HOME - the figures, and the chart when it is switched on. -->
+    <div class="tab-panel" id="tab-home" data-tab="home">
 
     <!-- MONTHLY CHART
          Off by default and toggled from settings. The width/height attributes
@@ -225,6 +239,11 @@
 
     </section>
 
+    </div><!-- /#tab-home -->
+
+    <!-- BILLS -->
+    <div class="tab-panel hidden" id="tab-bills" data-tab="bills">
+
     <!-- PRIORITY - fixed bills for the month, ticked off as they are paid.
          Adding a bill costs nothing; ticking it is what spends the money.
 
@@ -274,6 +293,11 @@
       <ul id="priority-list"></ul>
     </section>
 
+    </div><!-- /#tab-bills -->
+
+    <!-- SPENDING -->
+    <div class="tab-panel hidden" id="tab-spending" data-tab="spending">
+
     <!-- SECOND CHOICE - free-form day-to-day money in and out.
          "+ Add" opens the new-money/coming-back question, because whether a
          credit is income or a repayment changes the whole month's totals and
@@ -321,6 +345,11 @@
       </table>
     </section>
 
+    </div><!-- /#tab-spending -->
+
+    <!-- WALLETS TAB -->
+    <div class="tab-panel hidden" id="tab-wallets" data-tab="wallets">
+
     <!-- WALLETS - named sub-budgets carved out of the main balance.
          Intentionally empty: there is no static markup for a wallet at all.
          renderWallets() builds one <section> per active wallet from scratch
@@ -329,7 +358,55 @@
          counted in every money calculation. -->
     <div id="wallets-container"></div>
 
+    <!-- Shown only while there are no open wallets, so the tab is never a
+         blank screen. The button is a shortcut to the same modal the Settings
+         panel opens - there is one add-wallet flow, not two. -->
+    <div id="wallets-empty" class="wallets-empty hidden">
+      <p>No wallets yet.</p>
+      <p class="wallets-empty-note">Wallets are named sub-budgets carved out of your balance &mdash; Grocery, Fuel, anything you want kept separate.</p>
+      <button id="wallets-empty-add" aria-label="Add a wallet">+ Add Wallet</button>
+    </div>
+
+    </div><!-- /#tab-wallets -->
+
   </main>
+
+  <!-- TAB BAR
+       A sibling of both <main>s rather than a child, so it survives the
+       app/history swap and can be hidden wholesale while History is open.
+       Fixed to the bottom; .app carries matching bottom padding so the last
+       row of a list is never parked underneath it. -->
+  <nav class="tab-bar" id="tab-bar" role="tablist" aria-label="Sections">
+    <button class="tab-btn is-active" data-tab="home" role="tab" aria-selected="true" aria-controls="tab-home">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 11l9-7 9 7"/><path d="M5 10v9h14v-9"/>
+      </svg>
+      <span>Home</span>
+    </button>
+    <button class="tab-btn" data-tab="bills" role="tab" aria-selected="false" aria-controls="tab-bills">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>
+      </svg>
+      <span>Bills</span>
+    </button>
+    <button class="tab-btn" data-tab="spending" role="tab" aria-selected="false" aria-controls="tab-spending">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 18V9M10 18V5M16 18v-6M4 21h17"/>
+      </svg>
+      <span>Spending</span>
+    </button>
+    <button class="tab-btn" data-tab="wallets" role="tab" aria-selected="false" aria-controls="tab-wallets">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <path d="M16 11h4v4h-4a2 2 0 0 1 0-4z"/>
+      </svg>
+      <span>Wallets</span>
+    </button>
+  </nav>
 
   <!-- HISTORY VIEW - the archive of finished months.
        A sibling of #app-view, not a separate page: the two swap `hidden`, so

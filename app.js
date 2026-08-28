@@ -103,6 +103,9 @@ if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "oldest";
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
 if (!settings.collapsed) settings.collapsed = {};
+/* Which bottom tab was open when the app was last closed. Remembered so a
+   reopen lands where the user left off rather than always on Home. */
+if (!settings.activeTab) settings.activeTab = "home";
 /* Carry the closing balance into the next month. Defaults ON, including for
    existing installs, because the alternative is money silently disappearing
    on the 1st - which is what it did before this existed. Set to false for a
@@ -1973,9 +1976,14 @@ function buildWalletSection(wallet) {
 // Rebuilds every wallet section on the main page
 function renderWallets() {
   walletsContainer.innerHTML = "";
-  activeWallets().forEach(wallet => {
+  const open = activeWallets();
+  open.forEach(wallet => {
     walletsContainer.appendChild(buildWalletSection(wallet));
   });
+  // Looked up each time rather than cached: renderWallets runs before the
+  // element bindings further down the file exist.
+  const empty = document.getElementById("wallets-empty");
+  if (empty) empty.classList.toggle("hidden", open.length > 0);
 }
 
 /* =========================
@@ -2780,7 +2788,12 @@ function retryChartWhenMeasurable() {
          further down the file: the first failed draw happens during startup,
          before that binding exists. */
       const view = document.getElementById("app-view");
-      return !!settings.showChart && !!view && !view.classList.contains("hidden");
+      /* The chart lives on the Home tab, so a hidden Home means a zero-sized
+         canvas just as surely as a hidden app view does. Keep retrying in
+         that case rather than drawing into nothing. */
+      const home = document.getElementById("tab-home");
+      return !!settings.showChart && !!view && !view.classList.contains("hidden")
+        && !!home && !home.classList.contains("hidden");
     }
   );
 }
@@ -3237,6 +3250,13 @@ function renderWalletsSettings() {
 
     walletsSettingsList.appendChild(row);
   });
+}
+
+// The Wallets tab's empty state offers the same flow rather than duplicating
+// it, so there is only ever one add-wallet path to keep working.
+const walletsEmptyAdd = document.getElementById("wallets-empty-add");
+if (walletsEmptyAdd) {
+  walletsEmptyAdd.addEventListener("click", () => addWalletBtn.click());
 }
 
 addWalletBtn.addEventListener("click", () => {
@@ -3830,6 +3850,53 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
 });
 
 /* =========================
+   TABS
+=========================
+   The page used to be one long scroll: figures, bills, spending and wallets
+   all stacked. They are now four panels with a fixed bottom bar, switched by
+   toggling `hidden` - the same mechanism as the app/history swap, and for the
+   same reason: nothing is unmounted, so every render function keeps working
+   without knowing a tab exists.
+
+   The tab bar is a sibling of both <main>s, so opening History hides it
+   wholesale and History keeps its own back button. */
+
+const tabBar = document.getElementById("tab-bar");
+const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
+const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
+
+/* `scroll` is false for the restore on startup: the page already loads at the
+   top, and scrolling before first paint is both pointless and, in a bare DOM
+   with no window.scrollTo, a crash. */
+function showTab(name, scroll = true) {
+  if (!tabPanels.some((p) => p.dataset.tab === name)) name = "home";
+
+  tabPanels.forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.tab !== name);
+  });
+  tabButtons.forEach((btn) => {
+    const on = btn.dataset.tab === name;
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-selected", String(on));
+  });
+
+  settings.activeTab = name;
+  saveSettings();
+
+  /* The donut canvas measures zero while Home is hidden, so a chart drawn
+     during that time is silently dropped. Redraw on arrival. */
+  if (name === "home") renderChart();
+
+  if (scroll) window.scrollTo(0, 0);
+}
+
+tabButtons.forEach((btn) => {
+  btn.addEventListener("click", () => showTab(btn.dataset.tab));
+});
+
+showTab(settings.activeTab, false);
+
+/* =========================
    HISTORY (ARCHIVE VIEW)
 ========================= */
 
@@ -4201,6 +4268,7 @@ historyToggle.addEventListener("click", () => {
      into a laid-out view is one less thing to recover from. */
   appView.classList.add("hidden");
   historyView.classList.remove("hidden");
+  tabBar.classList.add("hidden");
   renderHistory();
   window.scrollTo(0, 0);
 });
@@ -4208,6 +4276,10 @@ historyToggle.addEventListener("click", () => {
 historyBack.addEventListener("click", () => {
   historyView.classList.add("hidden");
   appView.classList.remove("hidden");
+  tabBar.classList.remove("hidden");
+  /* Home may have been hidden for the whole History visit, so the chart could
+     be sitting on a canvas that measured zero. Cheap to redraw. */
+  renderChart();
   window.scrollTo(0, 0);
 });
 

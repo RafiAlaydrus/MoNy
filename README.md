@@ -129,6 +129,21 @@ automatically. A few things to know if you go this route:
 **Remaining** is what's left in your main balance after the bills you've
 paid, the money you've handed to wallets, and your Second choice spending.
 
+### Getting around
+
+The bar at the bottom of the screen splits these into four tabs, so only one
+job is on screen at a time:
+
+| Tab | What's on it |
+|---|---|
+| **Home** | Total Income, Remaining, the spend bar, and the chart if you've switched it on |
+| **Bills** | The Priority list and its form |
+| **Spending** | Second choice — the day-to-day in and out |
+| **Wallets** | Every open wallet |
+
+The app reopens on whichever tab you left it on. History and Settings are
+still reached from the icons in the header, on any tab.
+
 ---
 
 ## Full feature list
@@ -180,7 +195,7 @@ paid, the money you've handed to wallets, and your Second choice spending.
 2. Tap directly on that card. It turns into a text field.
 3. Type your income for the month and confirm — the card switches back to
    showing the figure, and the **Remaining** card below it updates to match.
-4. Scroll to **Priority** and add your bills (see
+4. Open the **Bills** tab and add your bills (see
    [Priority bills](#priority-bills) below).
 5. Optionally add a **wallet** for something like groceries (see
    [Wallets](#wallets) below).
@@ -199,7 +214,7 @@ loan payments, whatever recurs.
 
 ### Add a bill
 
-1. Scroll to the **Priority** section.
+1. Open the **Bills** tab.
 2. Fill in the three fields: **Bill name**, the **category** dropdown, and
    **Amount**.
 3. Tap **"Add Priority Bill"**.
@@ -252,7 +267,8 @@ transaction history.
 
 1. Tap the **Settings** icon (the sliders/gear icon in the top-right of the
    header).
-2. Scroll to the **Wallets** area and tap **"+ Add Wallet"**.
+2. Open **Settings** and tap **"+ Add Wallet"** (the **Wallets** tab offers
+   the same button while you have none).
 3. Type a name in the pop-up (e.g. "Grocery", "Fuel") and tap **Add**.
 
 The wallet immediately appears as its own card on the main screen, below
@@ -327,7 +343,7 @@ friend paying you back.
 
 ### Log a take (money spent)
 
-1. Scroll to **Second choice**.
+1. Open the **Spending** tab.
 2. Fill in **Name**, the **category** dropdown, and **Amount**.
 3. Optionally tap the **date field** and pick an earlier day if you're
    logging something from the past — leave it blank for today.
