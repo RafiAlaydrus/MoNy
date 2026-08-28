@@ -11,7 +11,7 @@
    their browser never has a reason to look at the network again.
 ========================= */
 
-const CACHE_NAME = "mmt-v46";
+const CACHE_NAME = "mmt-v47";
 
 /* Everything needed to cold-start the app offline. "./" is listed separately
    from "./index.html" because that is the URL the browser actually requests
@@ -29,19 +29,59 @@ const ASSETS = [
   "./manifest.json",
 ];
 
+/* LAUNCH IMAGES - the icon and the iOS startup images.
+
+   These were missing, and their absence was visible: iOS paints the startup
+   image while the app opens, and when it cannot get the file it paints white
+   instead. Nothing here had cached them, so every cold open went to the
+   network for one - and the app flashed white on the way in.
+
+   The ?v= must match the query the markup and manifest actually request,
+   because a cache lookup keys on the whole URL, query included. Bump both
+   together when the artwork changes.
+
+   Kept separate from ASSETS above because they are fetched TOLERANTLY below:
+   addAll is all-or-nothing, and a single missing icon failing the install
+   would strand every user on the old worker - a far worse outcome than a
+   launch image that has to come from the network. */
+const LAUNCH_IMAGES = [
+  "./icons/icon-72x72.png?v=19",
+  "./icons/icon-96x96.png?v=19",
+  "./icons/icon-128x128.png?v=19",
+  "./icons/icon-144x144.png?v=19",
+  "./icons/icon-152x152.png?v=19",
+  "./icons/icon-192x192.png?v=19",
+  "./icons/icon-384x384.png?v=19",
+  "./icons/icon-512x512.png?v=19",
+  "./icons/splash-1170x2532.png?v=19",
+  "./icons/splash-1125x2436.png?v=19",
+  "./icons/splash-750x1334.png?v=19",
+];
+
 /* INSTALL - fired once per new CACHE_NAME. Pre-fetch every asset so the very
    first offline load already has everything.
 
-   addAll is all-or-nothing: if any single file 404s the whole install fails
-   and the old worker stays active. That is the desired behaviour - a half
-   populated cache would serve a broken app.
+   addAll is all-or-nothing: if any single file in ASSETS 404s the whole
+   install fails and the old worker stays active. That is the desired
+   behaviour for those - a half populated cache would serve a broken app.
+   The launch images that follow are deliberately NOT held to it; see the
+   note on LAUNCH_IMAGES.
 
    skipWaiting stops the new worker queueing behind the old one. Without it a
    fresh version sits idle until every tab is closed, which on an installed
    PWA can be days. */
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.addAll(ASSETS).then(() =>
+        /* Tolerant, one at a time: a launch image that 404s is logged by the
+           browser and skipped, and the install still succeeds. See the note on
+           LAUNCH_IMAGES for why these must not be able to fail the install. */
+        Promise.all(LAUNCH_IMAGES.map((url) =>
+          cache.add(url).catch(() => {})
+        ))
+      )
+    )
   );
   self.skipWaiting();
 });

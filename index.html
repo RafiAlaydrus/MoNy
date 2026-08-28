@@ -45,6 +45,24 @@
   <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" href="icons/splash-1170x2532.png?v=19" />
   <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" href="icons/splash-1125x2436.png?v=19" />
   <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" href="icons/splash-750x1334.png?v=19" />
+  <!-- FIRST-PAINT BACKGROUND
+       Inline, and before the stylesheet link, deliberately. The page's black
+       used to live only in style.css, which is a separate file the browser has
+       to fetch and parse - so between the launch image being torn down and
+       that stylesheet applying there was a window with no background of its
+       own, and the app flashed white on open. A style element in the document
+       needs no round trip and applies at the first paint.
+
+       color-scheme belongs here for the same reason: it is what makes the
+       browser paint its own canvas, scrollbars and form controls dark rather
+       than defaulting to light before any of our CSS is in play. The meta tag
+       above says the same thing; this one also covers engines that read the
+       property but not the meta. -->
+  <style>
+    :root { color-scheme: dark; }
+    html, body { background: #000; color: #fff; }
+  </style>
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -155,7 +173,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.25.0</div>
+            <div class="setting-version">v1.25.1</div>
           </div>
         </section>
       </div>
