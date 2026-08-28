@@ -95,7 +95,11 @@ input[type="checkbox"] {
    underneath it. env(safe-area-inset-bottom) covers the iPhone home
    indicator, which sits in the same strip. */
 #app-view {
-  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  /* Exactly the bar's own height plus a small margin, set by syncTabBarSpace()
+     once it can be measured - the bar's height already includes the safe-area
+     inset, so adding env() here again would double-count it and leave a strip
+     of dead space that scrolls. The literal is the pre-measurement fallback. */
+  padding-bottom: var(--tab-bar-space, 96px);
 }
 
 /* =====================
@@ -113,7 +117,10 @@ input[type="checkbox"] {
   display: flex;
   max-width: 480px;
   margin: 0 auto;
-  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  /* The extra bottom padding lifts the labels clear of the iPhone home
+     indicator, which sits inside the safe-area inset rather than below it -
+     inset alone left the words touching the bar. */
+  padding: 8px 4px calc(18px + env(safe-area-inset-bottom, 0px));
   background: rgba(0, 0, 0, 0.92);
   /* The blur is what stops content scrolling underneath from reading as a
      smear of grey behind the labels. */
@@ -1326,11 +1333,11 @@ td {
   background: #111;
   border: 1px solid #232323;
   border-radius: 14px;
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 /* Display size is set HERE, in CSS, and never by the width/height attributes.
@@ -1346,8 +1353,13 @@ td {
    a zero-sized box, and the chart came up blank. 220px always fits anyway:
    the narrowest phone is 320px, and the app and card padding take 82px of it. */
 #summary-chart {
-  width: 220px;
-  height: 220px;
+  /* An explicit pixel size, still - see the note above about a percentage
+     width collapsing to zero against a shrink-to-fit parent. The variable is
+     set by fitHomeChart() so the donut gives up room when a long legend would
+     otherwise push Home into a scroll; 220px is the ceiling and the value
+     used whenever JS has not measured. */
+  width: var(--chart-size, 220px);
+  height: var(--chart-size, 220px);
 }
 
 /* Full width, so the canvas above is never sized against a shrink-to-fit
@@ -1360,7 +1372,7 @@ td {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .legend-item {

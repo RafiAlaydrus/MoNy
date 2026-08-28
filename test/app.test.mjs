@@ -1727,10 +1727,20 @@ test("a rollover clears every pending modal handle", () => {
    that caused it is exactly what must not come back. */
 test("REGRESSION: the donut canvas is not sized against its own container", () => {
   const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
-  const block = css.slice(css.indexOf("#summary-chart"), css.indexOf("#summary-chart") + 200);
-  assert.match(block, /width:\s*220px/, "it has a definite width");
-  assert.doesNotMatch(block, /max-width:\s*100%/,
-    "and NOT a percentage max-width - .chart-container is a shrink-to-fit " +
+  /* The declarations only, not the comment above them - the rule now carries a
+     long note explaining exactly this hazard, and a fixed-length slice would
+     read the prose instead of the CSS. */
+  const start = css.indexOf("#summary-chart");
+  const block = css.slice(css.indexOf("{", start), css.indexOf("}", start));
+
+  /* A definite pixel width. It is a custom property now, so that fitHomeChart()
+     can shrink the donut when a long legend would push Home into a scroll - but
+     the fallback is a pixel value and so is everything ever assigned to it, so
+     the canvas still decides its own width rather than asking its parent. */
+  assert.match(block, /width:\s*(220px|var\(--chart-size,\s*220px\))/,
+    "it has a definite width");
+  assert.doesNotMatch(block, /(max-)?width:\s*\d+%/,
+    "and NOT a percentage width - .chart-container is a shrink-to-fit " +
     "flex column, so that makes the two depend on each other and both settle at zero");
 });
 

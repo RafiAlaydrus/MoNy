@@ -2798,6 +2798,10 @@ function retryChartWhenMeasurable() {
   );
 }
 
+// Guards the resize-and-redraw pass at the end of renderChart against
+// re-entering itself. See the comment there.
+let chartFitting = false;
+
 function renderChart() {
   if (!settings.showChart || !chartCtx) return;
 
@@ -2946,6 +2950,25 @@ function renderChart() {
       <span class="legend-amount">${esc(cur())} ${fmt(overspentBy)}</span>
     </div>
   ` : "");
+
+  /* The legend is only measurable now that it exists, and the donut's size
+     depends on how tall it turned out. Resize on the next frame and redraw if
+     that changed anything.
+
+     This terminates: fitHomeChart works from Home's height MINUS the canvas,
+     which the resize does not move, so the second pass computes the same size
+     and returns false. The flag is belt and braces against a layout that
+     oscillates by a pixel. */
+  if (!chartFitting) {
+    requestAnimationFrame(() => {
+      chartFitting = true;
+      try {
+        if (fitHomeChart()) renderChart();
+      } finally {
+        chartFitting = false;
+      }
+    });
+  }
 }
 
 /* =========================
@@ -3849,6 +3872,74 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+/* Shrinks the donut so the Home tab fits the viewport without scrolling.
+
+   Home is meant to be glanceable: the two figures and the chart, all visible
+   at once. The chart is the only part with slack in it - the cards and the
+   legend are text - so it is what gives way. The legend grows a row per
+   category, and on a month with six of them a fixed 220px donut pushed the
+   Remaining card off the bottom.
+
+   Sizing is done by setting --chart-size rather than by giving the canvas a
+   percentage width: the canvas sits in a shrink-to-fit flex column, so a
+   relative width and the container's width would each depend on the other and
+   the browser resolves that circle at zero. An explicit pixel value keeps the
+   canvas the thing that decides.
+
+   Returns true when it changed the size, so the caller knows to redraw. */
+/* Reserves exactly as much room at the foot of the app view as the fixed tab
+   bar occupies. Measured rather than hard-coded: the bar's height depends on
+   the safe-area inset, which differs per device and is not known here.
+
+   A padding larger than the bar is not harmless - it is content-free page that
+   still counts towards scroll height, and it was what kept Home scrolling by a
+   few pixels after the chart had already shrunk to fit. */
+function syncTabBarSpace() {
+  const bar = document.getElementById("tab-bar");
+  if (!bar) return;
+  const h = bar.getBoundingClientRect().height;
+  if (!h) return;
+  document.documentElement.style.setProperty("--tab-bar-space", `${Math.round(h + 8)}px`);
+}
+
+function fitHomeChart() {
+  if (!settings.showChart) return false;
+
+  const home = document.getElementById("tab-home");
+  const bar = document.getElementById("tab-bar");
+  if (!home || !bar || !chartCanvas) return false;
+  // Nothing to measure while Home or the whole app view is hidden.
+  if (home.classList.contains("hidden")) return false;
+  if (appView && appView.classList.contains("hidden")) return false;
+
+  const current = parseFloat(getComputedStyle(chartCanvas).width) || 0;
+  if (!current) return false;
+
+  /* The one measurement that matters: the gap between the bottom of Home and
+     the top of the tab bar. Positive is room going spare, negative is content
+     hidden behind the bar. Deriving the size from an estimate of the available
+     height instead meant accounting for every padding and inset by hand, and
+     being 40px out was enough to leave the page scrolling.
+
+     Whatever this gap is, moving the donut by it closes it - the donut is
+     above everything else on the tab, so its height passes straight through to
+     Home's bottom edge. That also makes this converge in one extra pass: the
+     next measurement finds the gap already closed and returns false. */
+  const gap = (bar.getBoundingClientRect().top - 8) - home.getBoundingClientRect().bottom;
+
+  /* Floor of 140: below that the centre total stops fitting inside the ring
+     and the donut is worse than useless. A legend long enough to need less
+     than that is one Home genuinely cannot hold, and it scrolls - the honest
+     outcome. 220 is the ceiling, so a near-empty month does not get a donut
+     that fills the screen. */
+  const size = Math.round(Math.max(140, Math.min(220, current + gap)));
+
+  if (Math.abs(current - size) < 2) return false;
+
+  document.documentElement.style.setProperty("--chart-size", `${size}px`);
+  return true;
+}
+
 /* =========================
    TABS
 =========================
@@ -3893,6 +3984,8 @@ function showTab(name, scroll = true) {
 tabButtons.forEach((btn) => {
   btn.addEventListener("click", () => showTab(btn.dataset.tab));
 });
+
+syncTabBarSpace();
 
 showTab(settings.activeTab, false);
 
@@ -4579,6 +4672,8 @@ window.addEventListener("resize", () => {
   if (chartResizeTimer) clearTimeout(chartResizeTimer);
   chartResizeTimer = setTimeout(() => {
     chartResizeTimer = null;
+    // The safe-area inset changes with orientation, so the bar's height does too.
+    syncTabBarSpace();
     if (settings.showChart) renderChart();
     if (!historyView.classList.contains("hidden")) renderHistory();
   }, 150);
