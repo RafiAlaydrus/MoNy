@@ -1845,6 +1845,49 @@ test("only spending is coloured; unspent money stays greyscale", () => {
     "Remaining does not wear a category colour");
 });
 
+/* REGRESSION: the app flashed white on every open.
+
+   Two causes, one test each. First: the page's black lived only in style.css,
+   a separate file the browser has to fetch and parse, so there was a window
+   before it applied with no background of its own. */
+test("REGRESSION: the background is set before the stylesheet loads", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
+  const inlineAt = html.indexOf("<style>");
+  const linkAt = html.indexOf('rel="stylesheet"');
+  assert.ok(inlineAt !== -1, "there is an inline style block");
+  assert.ok(inlineAt < linkAt,
+    "and it comes BEFORE the stylesheet link, or it cannot paint the first frame");
+
+  const block = html.slice(inlineAt, html.indexOf("</style>", inlineAt));
+  assert.match(block, /background:\s*#000/, "it sets the page background");
+  assert.match(block, /color-scheme:\s*dark/,
+    "and the colour scheme, so the browser's own canvas is dark too");
+});
+
+/* Second: iOS paints its startup image while the app opens and paints WHITE
+   when it cannot get the file. Nothing precached them, so every cold open went
+   to the network for one. */
+test("REGRESSION: the launch images are precached for offline start", () => {
+  const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
+  // Every startup image the markup can ask for must be in the worker's list.
+  const referenced = [...html.matchAll(/href="(icons\/splash-[^"]+)"/g)].map(m => m[1]);
+  assert.ok(referenced.length > 0, "the markup declares startup images");
+
+  referenced.forEach(src => {
+    assert.ok(sw.includes(src),
+      `${src} is precached - a cache lookup keys on the whole URL, query included`);
+  });
+
+  /* The images must not be able to fail the install: addAll is all-or-nothing,
+     and one missing icon stranding every user on the old worker is far worse
+     than a launch image fetched from the network. */
+  assert.match(sw, /LAUNCH_IMAGES\.map\([\s\S]*?\.catch\(/,
+    "and they are added tolerantly, outside the all-or-nothing addAll");
+});
+
 /* REGRESSION: the same blank-canvas fault as the donut, in History. The
    trend chart was drawn while #history-view was still hidden, so its canvas
    measured zero, fitCanvas declined, and nothing retried - History opened
