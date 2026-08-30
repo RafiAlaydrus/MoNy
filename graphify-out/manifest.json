@@ -1,0 +1,122 @@
+{
+  "app.js": {
+    "mtime": 1788098647.0963066,
+    "ast_hash": "7edd14582fab24ecd3a8719ae02839b1",
+    "semantic_hash": "7edd14582fab24ecd3a8719ae02839b1"
+  },
+  "manifest.json": {
+    "mtime": 1788100385.2825208,
+    "ast_hash": "dfba18cc02db78b0f36f24e1c5f667ce",
+    "semantic_hash": "dfba18cc02db78b0f36f24e1c5f667ce"
+  },
+  "money.js": {
+    "mtime": 1788097006.1415749,
+    "ast_hash": "71e3d2c3029b10ad5a7a67bab8a3fc27",
+    "semantic_hash": "71e3d2c3029b10ad5a7a67bab8a3fc27"
+  },
+  "package.json": {
+    "mtime": 1788097006.1417532,
+    "ast_hash": "68759fd4941136529e40f3a1a889725f",
+    "semantic_hash": "68759fd4941136529e40f3a1a889725f"
+  },
+  "service-worker.js": {
+    "mtime": 1788100385.3937247,
+    "ast_hash": "6744475e0700f757b55acfa1cae8dfa2",
+    "semantic_hash": "6744475e0700f757b55acfa1cae8dfa2"
+  },
+  "test/app.test.mjs": {
+    "mtime": 1788100410.2435632,
+    "ast_hash": "e14462db2fbebb0025b9c75cef6f46c6",
+    "semantic_hash": "e14462db2fbebb0025b9c75cef6f46c6"
+  },
+  "test/harness.mjs": {
+    "mtime": 1788097006.1424253,
+    "ast_hash": "6ea732f25025e72e9f31c1d470164b10",
+    "semantic_hash": "6ea732f25025e72e9f31c1d470164b10"
+  },
+  "test/money.test.mjs": {
+    "mtime": 1788097006.142577,
+    "ast_hash": "a951e4051162fa6a9ae13b30b6743698",
+    "semantic_hash": "a951e4051162fa6a9ae13b30b6743698"
+  },
+  "README.md": {
+    "mtime": 1788097006.139209,
+    "ast_hash": "19c636266638b515e28cbb8d45938c42",
+    "semantic_hash": "19c636266638b515e28cbb8d45938c42"
+  },
+  "index.html": {
+    "mtime": 1788100385.3379953,
+    "ast_hash": "5456ec25ec54c307a130dfb7fc708794",
+    "semantic_hash": "5456ec25ec54c307a130dfb7fc708794"
+  },
+  "MoNy logo.png": {
+    "mtime": 1788100221.9740257,
+    "ast_hash": "9bd8fd2ddaac5db337b0f483b0cc04e5",
+    "semantic_hash": "9bd8fd2ddaac5db337b0f483b0cc04e5"
+  },
+  "icons/icon-128x128.png": {
+    "mtime": 1788100346.438824,
+    "ast_hash": "90014886df7f1707c9d4db746e730724",
+    "semantic_hash": "90014886df7f1707c9d4db746e730724"
+  },
+  "icons/icon-144x144.png": {
+    "mtime": 1788100346.4555905,
+    "ast_hash": "cec0022d890078dd02b7d16398027075",
+    "semantic_hash": "cec0022d890078dd02b7d16398027075"
+  },
+  "icons/icon-152x152.png": {
+    "mtime": 1788100346.473498,
+    "ast_hash": "af0caebea547047029f8c9d8562ca457",
+    "semantic_hash": "af0caebea547047029f8c9d8562ca457"
+  },
+  "icons/icon-180x180.png": {
+    "mtime": 1788100346.4961162,
+    "ast_hash": "b4774023e89c28b7937f989044684ef7",
+    "semantic_hash": "b4774023e89c28b7937f989044684ef7"
+  },
+  "icons/icon-192x192.png": {
+    "mtime": 1788100346.5212495,
+    "ast_hash": "ac4ae226fdaaef6c7e09dcc24fd7cd91",
+    "semantic_hash": "ac4ae226fdaaef6c7e09dcc24fd7cd91"
+  },
+  "icons/icon-32x32.png": {
+    "mtime": 1788100346.402584,
+    "ast_hash": "dcc9f95f9ea2c3595604a12999b29231",
+    "semantic_hash": "dcc9f95f9ea2c3595604a12999b29231"
+  },
+  "icons/icon-384x384.png": {
+    "mtime": 1788100346.6156826,
+    "ast_hash": "c5b91d3cfe244f1b54805bd3f573bd3e",
+    "semantic_hash": "c5b91d3cfe244f1b54805bd3f573bd3e"
+  },
+  "icons/icon-512x512.png": {
+    "mtime": 1788100346.782245,
+    "ast_hash": "b6bc349d00e44c5410d09c25924c7dc7",
+    "semantic_hash": "b6bc349d00e44c5410d09c25924c7dc7"
+  },
+  "icons/icon-72x72.png": {
+    "mtime": 1788100346.41309,
+    "ast_hash": "f1b6ba1330c83d65245bcb3972cd5c75",
+    "semantic_hash": "f1b6ba1330c83d65245bcb3972cd5c75"
+  },
+  "icons/icon-96x96.png": {
+    "mtime": 1788100346.4244986,
+    "ast_hash": "cc78da7154a6df5635694baf7baa190e",
+    "semantic_hash": "cc78da7154a6df5635694baf7baa190e"
+  },
+  "icons/splash-1125x2436.png": {
+    "mtime": 1788100347.0487986,
+    "ast_hash": "dc7dd36283506707a7e9dfd47f47bffb",
+    "semantic_hash": "dc7dd36283506707a7e9dfd47f47bffb"
+  },
+  "icons/splash-1170x2532.png": {
+    "mtime": 1788100346.9218452,
+    "ast_hash": "5e4370224067ee6197b63a0473b2f4dc",
+    "semantic_hash": "5e4370224067ee6197b63a0473b2f4dc"
+  },
+  "icons/splash-750x1334.png": {
+    "mtime": 1788100347.1091516,
+    "ast_hash": "3ba662fbfcdb7d097cb1e92fea412b4e",
+    "semantic_hash": "3ba662fbfcdb7d097cb1e92fea412b4e"
+  }
+}

@@ -541,6 +541,58 @@ const chartBar = document.getElementById("chart-bar");
 const chartTotal = document.getElementById("chart-total");
 const chartLegend = document.getElementById("chart-legend");
 
+/* =========================
+   NATIVE FAST MOTION
+========================= */
+
+const MOTION_FAST_MS = 120;
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/* Replaying one short class on the incoming surface keeps navigation motion
+   independent from rendering. Nothing waits for it and a browser without CSS
+   animation support simply shows the already-visible destination. */
+function playMotion(el, className, competing = []) {
+  if (!el || prefersReducedMotion()) return;
+  el.classList.remove(className, ...competing);
+  void el.offsetWidth;
+  el.classList.add(className);
+}
+
+/* Modal/popover close animation with an immediate interaction cutoff. State
+   changes happen when the user taps; only display:none waits for the final
+   120ms frame, so motion can never hold up the action itself. */
+function revealSurface(el) {
+  if (!el) return;
+  clearTimeout(el._motionHideTimer);
+  el._motionHideTimer = null;
+  el.classList.remove("hidden", "is-closing");
+  el.setAttribute("aria-hidden", "false");
+}
+
+function concealSurface(el, immediate = false) {
+  if (!el || el.classList.contains("hidden")) return;
+  clearTimeout(el._motionHideTimer);
+
+  if (immediate || prefersReducedMotion()) {
+    el.classList.add("hidden");
+    el.classList.remove("is-closing");
+    el.setAttribute("aria-hidden", "true");
+    return;
+  }
+
+  el.classList.add("is-closing");
+  el.setAttribute("aria-hidden", "true");
+  el._motionHideTimer = setTimeout(() => {
+    el.classList.add("hidden");
+    el.classList.remove("is-closing");
+    el._motionHideTimer = null;
+  }, MOTION_FAST_MS);
+}
+
 /* Matches a canvas's backing store to the device's pixel density.
  *
  * Both charts are hand-drawn, and both used to draw into a fixed backing
@@ -915,7 +967,7 @@ function showTopUndo() {
       undoToast.classList.remove("fading");
       undoTimeout = null;
       flushUndoStack();
-    }, 300);
+    }, MOTION_FAST_MS);
   }, 3000);
 }
 
@@ -940,7 +992,7 @@ function hideUndo() {
   setTimeout(() => {
     undoToast.classList.add("hidden");
     undoToast.classList.remove("fading");
-  }, 300);
+  }, MOTION_FAST_MS);
 }
 
 undoBtn.addEventListener("click", () => {
@@ -1295,7 +1347,7 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
   el.addEventListener("touchend", () => {
     if (!swiping) return;
     swiping = false;
-    el.style.transition = "transform 0.3s ease";
+    el.style.transition = "transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1)";
 
     /* Past the 80px threshold the swipe counts. The row slides out and its
        wrapper collapses its own height at the same time, so the list closes
@@ -1306,7 +1358,7 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
     if (currentX < -80) {
       el.style.transform = "translateX(-100%)";
       el.style.opacity = "0";
-      wrapper.style.transition = "max-height 0.3s ease, opacity 0.3s ease";
+      wrapper.style.transition = "max-height 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease";
       wrapper.style.maxHeight = "0";
       wrapper.style.overflow = "hidden";
       onDelete();
@@ -1328,9 +1380,7 @@ function renderPriority() {
 
   data.priority.forEach(bill => {
     const wrapper = buildPriorityItem(bill);
-    wrapper.classList.add("item-enter");
     priorityList.appendChild(wrapper);
-    requestAnimationFrame(() => wrapper.classList.add("item-enter-active"));
   });
 }
 
@@ -1373,7 +1423,7 @@ function openPriorityModal(intent) {
       "Are you sure? Once saved, the list is locked so it cannot be changed by accident.";
     confirmPriorityBtn.textContent = "Yes, Save";
   }
-  priorityModal.classList.remove("hidden");
+  revealSurface(priorityModal);
 }
 
 savePriorityBtn.addEventListener("click", () => {
@@ -1386,13 +1436,13 @@ if (priorityLockBadge) {
 }
 
 cancelPriorityBtn.addEventListener("click", () => {
-  priorityModal.classList.add("hidden");
+  concealSurface(priorityModal);
 });
 
 confirmPriorityBtn.addEventListener("click", () => {
   data.priorityLocked = priorityLockIntent !== "unlock";
   saveData();
-  priorityModal.classList.add("hidden");
+  concealSurface(priorityModal);
   renderPriority();
   updatePriorityLockUI();
   // "Copy Last Priority" is only offered on an empty, unlocked list.
@@ -1691,9 +1741,7 @@ function renderWalletItemsTable(wallet, tbody, section) {
   const host = section || tbody.closest(".wallet-section");
   sorted.forEach(item => {
     const row = buildWalletItemRow(item, wallet, tbody, host);
-    row.classList.add("item-enter");
     tbody.appendChild(row);
-    requestAnimationFrame(() => row.classList.add("item-enter-active"));
   });
 }
 
@@ -2105,17 +2153,17 @@ function openTransferModal(wallet, name, amount, date, onDone) {
     btn.innerHTML = `${esc(dest.name)}<span class="transfer-dest-sub">${esc(dest.sub)}</span>`;
     btn.addEventListener("click", () => {
       executeTransfer(wallet, dest.id, name, amount, date);
-      transferModal.classList.add("hidden");
+      concealSurface(transferModal);
       onDone();
     });
     transferDestinations.appendChild(btn);
   });
 
-  transferModal.classList.remove("hidden");
+  revealSurface(transferModal);
 }
 
 cancelTransferBtn.addEventListener("click", () => {
-  transferModal.classList.add("hidden");
+  concealSurface(transferModal);
 });
 
 /* =========================
@@ -2168,7 +2216,7 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
   overspendOptions.appendChild(anyway);
 
   overspendCancel = onCancel || null;
-  overspendModal.classList.remove("hidden");
+  revealSurface(overspendModal);
 }
 
 /* Taking more than a wallet holds.
@@ -2238,11 +2286,11 @@ function askWalletShortfall({ wallet, amount, available, transferName, proceed, 
   }
 
   overspendCancel = onCancel || null;
-  overspendModal.classList.remove("hidden");
+  revealSurface(overspendModal);
 }
 
 function closeOverspend() {
-  overspendModal.classList.add("hidden");
+  concealSurface(overspendModal);
   overspendCancel = null;
 }
 
@@ -2344,9 +2392,7 @@ function renderSecondChoice() {
 
   sorted.forEach(item => {
     const row = buildSecondChoiceRow(item);
-    row.classList.add("item-enter");
     scTable.appendChild(row);
-    requestAnimationFrame(() => row.classList.add("item-enter-active"));
   });
 }
 
@@ -2553,23 +2599,23 @@ addMoneyBtn.addEventListener("click", () => {
   const form = readSecondChoiceForm();
   if (!form) return;
   sourceSummary.textContent = `Adding ${cur()} ${fmt(form.amount)} - is this new money, or money coming back to you?`;
-  sourceModal.classList.remove("hidden");
+  revealSurface(sourceModal);
 });
 
 document.getElementById("cancel-sc-edit").addEventListener("click", cancelEdit);
 document.getElementById("cancel-priority-edit").addEventListener("click", cancelEdit);
 
 sourceNewBtn.addEventListener("click", () => {
-  sourceModal.classList.add("hidden");
+    concealSurface(sourceModal);
   addSecondChoice("add", true);
 });
 
 sourceBackBtn.addEventListener("click", () => {
-  sourceModal.classList.add("hidden");
+  concealSurface(sourceModal);
   addSecondChoice("add", false);
 });
 
-cancelSourceBtn.addEventListener("click", () => sourceModal.classList.add("hidden"));
+cancelSourceBtn.addEventListener("click", () => concealSurface(sourceModal));
 takeMoneyBtn.addEventListener("click", () => {
   const form = readSecondChoiceForm();
   if (!form) return;
@@ -2612,7 +2658,7 @@ function animateMoneyTo(el, to) {
   const from = el._shownValue;
   el._shownValue = to;
 
-  if (from === undefined || from === null || from === to) {
+  if (from === undefined || from === null || from === to || prefersReducedMotion()) {
     el.textContent = `${cur()} ${fmt(to)}`;
     return;
   }
@@ -2628,7 +2674,7 @@ function animateMoneyTo(el, to) {
   el._animToken = token;
 
   const start = performance.now();
-  const duration = 350;
+  const duration = 180;
   function tick(now) {
     if (el._animToken !== token) return;
     const p = Math.min((now - start) / duration, 1);
@@ -2969,13 +3015,17 @@ const settingsToggle = document.getElementById("settings-toggle");
 const settingsPanel = document.getElementById("settings-panel");
 
 settingsToggle.addEventListener("click", () => {
-  settingsPanel.classList.toggle("hidden");
+  if (settingsPanel.classList.contains("hidden") || settingsPanel.classList.contains("is-closing")) {
+    revealSurface(settingsPanel);
+  } else {
+    concealSurface(settingsPanel);
+  }
 });
 
 // Closes settings when clicking outside
 document.addEventListener("click", (e) => {
   if (!settingsPanel.contains(e.target) && !settingsToggle.contains(e.target)) {
-    settingsPanel.classList.add("hidden");
+    concealSurface(settingsPanel);
   }
 });
 
@@ -3234,7 +3284,7 @@ function renderWalletsSettings() {
       parts.push("It disappears from this screen and cannot be reopened.");
 
       deleteWalletText.textContent = parts.join(" ");
-      deleteWalletModal.classList.remove("hidden");
+      revealSurface(deleteWalletModal);
     });
 
     walletsSettingsList.appendChild(row);
@@ -3252,7 +3302,7 @@ addWalletBtn.addEventListener("click", () => {
   addWalletNameInput.value = "";
   addWalletNameInput.classList.remove("input-error");
   addWalletError.classList.add("hidden");
-  addWalletModal.classList.remove("hidden");
+  revealSurface(addWalletModal);
   addWalletNameInput.focus();
 });
 
@@ -3279,7 +3329,7 @@ function confirmAddWallet() {
 
   settings.wallets.push({ id: genWalletId(), name });
   saveSettings();
-  addWalletModal.classList.add("hidden");
+  concealSurface(addWalletModal);
   renderWallets();
   renderWalletsSettings();
   calculateRemaining();
@@ -3291,7 +3341,7 @@ addWalletNameInput.addEventListener("input", () => {
   addWalletNameInput.classList.remove("input-error");
   addWalletError.classList.add("hidden");
 });
-cancelAddWalletBtn.addEventListener("click", () => addWalletModal.classList.add("hidden"));
+cancelAddWalletBtn.addEventListener("click", () => concealSurface(addWalletModal));
 
 /* =========================
    CATEGORY SETTINGS
@@ -3460,7 +3510,7 @@ function renderCategorySettings(list) {
         }
         parts.push("You can add it back at any time.");
         deleteCategoryText.textContent = parts.join(" ");
-        deleteCategoryModal.classList.remove("hidden");
+        revealSurface(deleteCategoryModal);
       });
     }
 
@@ -3490,7 +3540,7 @@ const closeCategoryPanelBtn = document.getElementById("close-category-panel");
 if (openCategoryPanelBtn) {
   openCategoryPanelBtn.addEventListener("click", () => {
     renderAllCategorySettings();
-    categoryPanel.classList.remove("hidden");
+    revealSurface(categoryPanel);
   });
 }
 
@@ -3501,7 +3551,7 @@ function closeCategoryPanel() {
   if (document.activeElement && document.activeElement.classList.contains("category-name-input")) {
     document.activeElement.blur();
   }
-  categoryPanel.classList.add("hidden");
+  concealSurface(categoryPanel);
 }
 
 if (closeCategoryPanelBtn) {
@@ -3523,7 +3573,7 @@ if (categoryPanel) {
     addCategoryNameInput.value = "";
     addCategoryNameInput.classList.remove("input-error");
     addCategoryError.classList.add("hidden");
-    addCategoryModal.classList.remove("hidden");
+    revealSurface(addCategoryModal);
     addCategoryNameInput.focus();
   });
 });
@@ -3564,7 +3614,7 @@ function confirmAddCategory() {
   else arr.splice(fallbackAt, 0, name);
 
   saveSettings();
-  addCategoryModal.classList.add("hidden");
+  concealSurface(addCategoryModal);
   renderAllCategoryOptions();
   renderCategorySettings(list);
 }
@@ -3575,10 +3625,10 @@ addCategoryNameInput.addEventListener("input", () => {
   addCategoryNameInput.classList.remove("input-error");
   addCategoryError.classList.add("hidden");
 });
-cancelAddCategoryBtn.addEventListener("click", () => addCategoryModal.classList.add("hidden"));
+cancelAddCategoryBtn.addEventListener("click", () => concealSurface(addCategoryModal));
 
 cancelDeleteCategoryBtn.addEventListener("click", () => {
-  deleteCategoryModal.classList.add("hidden");
+  concealSurface(deleteCategoryModal);
   categoryPendingDelete = null;
 });
 
@@ -3590,7 +3640,7 @@ confirmDeleteCategoryBtn.addEventListener("click", () => {
     .filter(c => c !== name);
   saveSettings();
 
-  deleteCategoryModal.classList.add("hidden");
+  concealSurface(deleteCategoryModal);
   categoryPendingDelete = null;
   renderAllCategoryOptions();
   renderCategorySettings(list);
@@ -3600,7 +3650,7 @@ confirmDeleteCategoryBtn.addEventListener("click", () => {
 });
 
 cancelDeleteWalletBtn.addEventListener("click", () => {
-  deleteWalletModal.classList.add("hidden");
+  concealSurface(deleteWalletModal);
   walletPendingDelete = null;
 });
 
@@ -3622,7 +3672,7 @@ confirmDeleteWalletBtn.addEventListener("click", () => {
 
   saveSettings();
   saveData();
-  deleteWalletModal.classList.add("hidden");
+  concealSurface(deleteWalletModal);
   walletPendingDelete = null;
   renderWallets();
   renderWalletsSettings();
@@ -3978,7 +4028,7 @@ importFile.addEventListener("change", () => {
       `The app will be replaced with exactly what this file holds: ${contents.join(", ")}.` +
       `${stamp} Anything not in the file is cleared, and your current data cannot be recovered afterwards.`;
 
-    importModal.classList.remove("hidden");
+    revealSurface(importModal);
     importFile.value = "";
   };
   reader.onerror = () => {
@@ -3989,7 +4039,7 @@ importFile.addEventListener("change", () => {
 });
 
 cancelImportBtn.addEventListener("click", () => {
-  importModal.classList.add("hidden");
+  concealSurface(importModal);
   pendingImport = null;
 });
 
@@ -4004,7 +4054,7 @@ confirmImportBtn.addEventListener("click", () => {
     replaceKey(BACKUP_PRIORITY_KEY, p.priorityBackup, Array.isArray(p.priorityBackup) && p.priorityBackup.length > 0);
 
   pendingImport = null;
-  importModal.classList.add("hidden");
+  concealSurface(importModal, true);
   if (ok) location.reload();
 });
 
@@ -4070,6 +4120,11 @@ const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
 function showTab(name, scroll = true) {
   if (!tabPanels.some((p) => p.dataset.tab === name)) name = "home";
 
+  const previousName = settings.activeTab;
+  const previousIndex = tabPanels.findIndex((p) => p.dataset.tab === previousName);
+  const nextIndex = tabPanels.findIndex((p) => p.dataset.tab === name);
+  const nextPanel = tabPanels[nextIndex];
+
   tabPanels.forEach((panel) => {
     panel.classList.toggle("hidden", panel.dataset.tab !== name);
   });
@@ -4081,6 +4136,15 @@ function showTab(name, scroll = true) {
 
   settings.activeTab = name;
   saveSettings();
+
+  if (scroll && previousName !== name) {
+    const forward = previousIndex === -1 || nextIndex > previousIndex;
+    playMotion(
+      nextPanel,
+      forward ? "tab-enter-forward" : "tab-enter-back",
+      [forward ? "tab-enter-back" : "tab-enter-forward"]
+    );
+  }
 
   if (scroll) window.scrollTo(0, 0);
 }
@@ -4466,6 +4530,7 @@ historyToggle.addEventListener("click", () => {
   appView.classList.add("hidden");
   historyView.classList.remove("hidden");
   tabBar.classList.add("hidden");
+  playMotion(historyView, "view-enter-forward", ["view-enter-back"]);
   renderHistory();
   window.scrollTo(0, 0);
 });
@@ -4474,6 +4539,7 @@ historyBack.addEventListener("click", () => {
   historyView.classList.add("hidden");
   appView.classList.remove("hidden");
   tabBar.classList.remove("hidden");
+  playMotion(appView, "view-enter-back", ["view-enter-forward"]);
   window.scrollTo(0, 0);
 });
 
@@ -4491,17 +4557,17 @@ deleteArchiveBtn.addEventListener("click", () => {
   const size = fmtBytes(bytesOfKey(ARCHIVE_KEY));
   archiveModalText.textContent =
     `This will erase ${n === 1 ? "1 archived month" : `${n} archived months`} (${size}). This action cannot be undone.`;
-  archiveModal.classList.remove("hidden");
+  revealSurface(archiveModal);
 });
 
 cancelArchiveDeleteBtn.addEventListener("click", () => {
-  archiveModal.classList.add("hidden");
+  concealSurface(archiveModal);
 });
 
 confirmArchiveDeleteBtn.addEventListener("click", () => {
   archive = {};
   localStorage.removeItem(ARCHIVE_KEY);
-  archiveModal.classList.add("hidden");
+  concealSurface(archiveModal);
   renderHistory();
 });
 
@@ -4539,12 +4605,12 @@ const cancelResetBtn = document.getElementById("cancel-reset");
 
 // Opens the reset modal on header double-click
 secretReset.addEventListener("dblclick", () => {
-  resetModal.classList.remove("hidden");
+  revealSurface(resetModal);
 });
 
 // Cancels the reset
 cancelResetBtn.addEventListener("click", () => {
-  resetModal.classList.add("hidden");
+  concealSurface(resetModal);
 });
 
 // Confirms the reset and wipes the month
@@ -4629,7 +4695,7 @@ confirmResetBtn.addEventListener("click", () => {
     }
     pulling = false;
     dragging = false;
-    app.style.transition = "transform 0.3s ease";
+    app.style.transition = "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)";
     app.style.transform = "";
 
     if (pullDistance >= threshold) {
@@ -4637,7 +4703,7 @@ confirmResetBtn.addEventListener("click", () => {
       pullSpinner.classList.remove("hidden");
       indicator.style.opacity = "1";
       app.style.transform = "translateY(40px)";
-      setTimeout(() => location.reload(), 600);
+      setTimeout(() => location.reload(), 360);
       return;
     }
 
@@ -4689,7 +4755,7 @@ function showNotice(message) {
       undoToast.classList.add("hidden");
       undoToast.classList.remove("fading");
       undoBtn.classList.remove("hidden");
-    }, 300);
+    }, MOTION_FAST_MS);
   }, 4000);
 }
 
@@ -4706,7 +4772,7 @@ function showNotice(message) {
  * could correctly belong to.
  */
 function dismissOpenPrompts() {
-  document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden"));
+  document.querySelectorAll(".modal").forEach(m => concealSurface(m, true));
   overspendCancel = null;
   walletPendingDelete = null;
   categoryPendingDelete = null;

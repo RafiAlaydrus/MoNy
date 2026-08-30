@@ -26,6 +26,18 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+  /* Native Fast: frequent interactions should finish before they feel like
+     something the user has to wait through. These four tokens keep every
+     surface on the same compact rhythm. */
+  --motion-press: 60ms;
+  --motion-fast: 120ms;
+  --motion-standard: 180ms;
+  --motion-emphasis: 220ms;
+  --ease-native: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-native: cubic-bezier(0.4, 0, 1, 1);
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -44,6 +56,21 @@ input[type="checkbox"] {
   /* Near-white tick, since the browser default is a bright blue that would
      be the only colour outside the chart. */
   accent-color: #e8e8e8;
+}
+
+/* Immediate tactile feedback for custom controls. The pressed state arrives
+   in 60ms; release uses the normal fast token. Individual controls can still
+   override colour without losing the shared physical response. */
+button {
+  transition: transform var(--motion-fast) var(--ease-native),
+              opacity var(--motion-fast) ease,
+              background-color var(--motion-fast) ease,
+              color var(--motion-fast) ease;
+}
+
+button:active {
+  transform: scale(0.97);
+  transition-duration: var(--motion-press);
 }
 
 /* =====================
@@ -68,7 +95,7 @@ input[type="checkbox"] {
   z-index: 500;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--motion-fast) ease;
 }
 
 .pull-spinner {
@@ -146,7 +173,9 @@ input[type="checkbox"] {
   text-transform: uppercase;
   font-family: inherit;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color var(--motion-fast) ease,
+              transform var(--motion-fast) var(--ease-native),
+              opacity var(--motion-fast) ease;
 }
 
 .tab-btn.is-active {
@@ -154,7 +183,8 @@ input[type="checkbox"] {
 }
 
 .tab-btn:active {
-  opacity: 0.6;
+  opacity: 0.72;
+  transform: scale(0.96);
 }
 
 /* Empty state for the Wallets tab. Dim and centred - it is a prompt, not
@@ -218,7 +248,9 @@ input[type="checkbox"] {
   border-radius: 10px;
   color: #888;
   -webkit-tap-highlight-color: transparent;
-  transition: color 120ms ease, background 120ms ease;
+  transition: color var(--motion-fast) ease,
+              background var(--motion-fast) ease,
+              transform var(--motion-fast) var(--ease-native);
 }
 
 .settings-btn:hover {
@@ -349,7 +381,8 @@ input[type="checkbox"] {
   height: 100%;
   border-radius: 3px;
   width: 0%;
-  transition: width 0.4s ease, background 0.4s ease;
+  transition: width var(--motion-emphasis) var(--ease-native),
+              background var(--motion-emphasis) ease;
 }
 
 /* Optional budget-limit marker. Its `left` is set in JS as a percentage.
@@ -410,7 +443,7 @@ input[type="checkbox"] {
   background: #333;
   border-radius: 24px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--motion-standard) ease;
 }
 
 .toggle-slider::before {
@@ -422,7 +455,7 @@ input[type="checkbox"] {
   bottom: 3px;
   background: #fff;
   border-radius: 50%;
-  transition: transform 0.2s;
+  transition: transform var(--motion-standard) var(--ease-native);
 }
 
 .toggle input:checked + .toggle-slider {
@@ -622,7 +655,7 @@ h3 {
 
 .second-form .input-error {
   border-color: #e8e8e8;
-  animation: shake 0.3s ease;
+  animation: shake var(--motion-standard) ease;
 }
 
 /* Optional date field. type="date" ignores the placeholder attribute and
@@ -701,7 +734,7 @@ h3 {
 
 .table-toggle .chev {
   flex-shrink: 0;
-  transition: transform 0.2s ease;
+  transition: transform var(--motion-fast) var(--ease-native);
 }
 
 .table-toggle.collapsed .chev {
@@ -749,7 +782,7 @@ h3 {
 }
 
 .actions button:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 /* =====================
@@ -939,13 +972,14 @@ td {
 
 .item-enter {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(-4px) scale(0.99);
 }
 
 .item-enter-active {
   opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform: translateY(0) scale(1);
+  transition: opacity var(--motion-standard) ease,
+              transform var(--motion-standard) var(--ease-native);
 }
 
 .empty-state {
@@ -1031,7 +1065,7 @@ td {
   min-width: 260px;
   max-width: 400px;
   flex-wrap: wrap;
-  animation: toast-in 0.3s ease;
+  animation: toast-in var(--motion-standard) var(--ease-native);
 }
 
 .undo-toast.hidden {
@@ -1091,10 +1125,10 @@ td {
 }
 
 /* `forwards` holds the final frame, so the toast stays invisible during the
-   300ms before hideUndo() actually adds .hidden. Without it the toast would
+   120ms before hideUndo() actually adds .hidden. Without it the toast would
    snap back to full opacity the instant the animation ended. */
 .undo-toast.fading {
-  animation: toast-out 0.3s ease forwards;
+  animation: toast-out var(--motion-fast) var(--ease-in-native) forwards;
 }
 
 /* =====================
@@ -1619,63 +1653,87 @@ td {
 /* =====================
    Motion
 ===================== */
-/* Sections fade-slide in on load, staggered 50ms apart so the page assembles
-   top to bottom instead of appearing all at once.
-
-   `backwards` is what makes the stagger work: it applies the from-state
-   during the delay, so a section waiting its turn is already invisible.
-   Without it every section would render at full opacity, then blink out when
-   its delay elapsed. */
-.app > * {
-  animation: section-in 0.45s ease backwards;
+/* Tabs switch often, so the old per-section stagger made every tap wait up to
+   half a second. Animate only the incoming panel, as one compositor layer.
+   The 6px direction preserves spatial context without turning a tab change
+   into a page transition. */
+.tab-panel.tab-enter-forward {
+  animation: tab-in-forward 140ms var(--ease-native);
 }
 
-/* Hard-coded rather than generated, because there is a fixed set of top-level
-   sections. A seventh would simply appear with no delay. */
-.app > *:nth-child(2) { animation-delay: 0.05s; }
-.app > *:nth-child(3) { animation-delay: 0.1s; }
-.app > *:nth-child(4) { animation-delay: 0.15s; }
-.app > *:nth-child(5) { animation-delay: 0.2s; }
-.app > *:nth-child(6) { animation-delay: 0.25s; }
-
-/* The stagger above now lands on the tab panels, which are one wrapper too
-   high to be visible. Re-run it on the sections INSIDE the open panel, so
-   each tab assembles top to bottom the way the single page used to - and
-   replays on every switch, since a hidden panel's animation resets. */
-.tab-panel > * {
-  animation: section-in 0.35s ease backwards;
+.tab-panel.tab-enter-back {
+  animation: tab-in-back 140ms var(--ease-native);
 }
-.tab-panel > *:nth-child(2) { animation-delay: 0.05s; }
-.tab-panel > *:nth-child(3) { animation-delay: 0.1s; }
-.tab-panel > *:nth-child(4) { animation-delay: 0.15s; }
 
-/* No `to` block needed - omitting it animates from these values back to
-   whatever the element's own styles already are. */
-@keyframes section-in {
-  from { opacity: 0; transform: translateY(10px); }
+@keyframes tab-in-forward {
+  from { opacity: 0.72; transform: translateX(6px); }
+}
+
+@keyframes tab-in-back {
+  from { opacity: 0.72; transform: translateX(-6px); }
+}
+
+/* History is a deeper destination rather than a peer tab, so it gets the
+   slightly stronger push/pop language users expect from native navigation. */
+.app.view-enter-forward {
+  animation: view-in-forward var(--motion-standard) var(--ease-native);
+}
+
+.app.view-enter-back {
+  animation: view-in-back var(--motion-standard) var(--ease-native);
+}
+
+@keyframes view-in-forward {
+  from { opacity: 0.55; transform: translateX(12px); }
+}
+
+@keyframes view-in-back {
+  from { opacity: 0.55; transform: translateX(-12px); }
 }
 
 /* Grows out of the button that opened it, hence the top-right origin - a
    default centre origin makes the panel appear to expand from nowhere. */
 .settings-panel:not(.hidden) {
   transform-origin: top right;
-  animation: pop-in 0.15s ease;
+  animation: pop-in var(--motion-fast) var(--ease-native);
 }
 
-.modal:not(.hidden) {
-  animation: fade-in 0.18s ease;
+.modal:not(.hidden):not(.is-closing) {
+  animation: fade-in var(--motion-standard) ease;
 }
 
-.modal:not(.hidden) .modal-card {
-  animation: pop-in 0.18s ease;
+.modal:not(.hidden):not(.is-closing) .modal-card {
+  animation: pop-in var(--motion-standard) var(--ease-native);
+}
+
+.modal.is-closing {
+  pointer-events: none;
+  animation: fade-out var(--motion-fast) var(--ease-in-native) forwards;
+}
+
+.modal.is-closing .modal-card {
+  animation: pop-out var(--motion-fast) var(--ease-in-native) forwards;
+}
+
+.settings-panel.is-closing {
+  pointer-events: none;
+  animation: pop-out var(--motion-fast) var(--ease-in-native) forwards;
 }
 
 @keyframes pop-in {
-  from { opacity: 0; transform: scale(0.96); }
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+}
+
+@keyframes pop-out {
+  to { opacity: 0; transform: translateY(3px) scale(0.985); }
 }
 
 @keyframes fade-in {
   from { opacity: 0; }
+}
+
+@keyframes fade-out {
+  to { opacity: 0; }
 }
 
 /* Added and removed by animateMoneyTo() whenever a figure changes, so the
@@ -1685,7 +1743,7 @@ td {
    It peaks at 35% and returns, rather than easing to a held colour, so the
    pulse reads as a blink and leaves no state behind to clean up. */
 .card-pulse {
-  animation: card-pulse 0.6s ease;
+  animation: card-pulse var(--motion-emphasis) ease;
 }
 
 @keyframes card-pulse {
@@ -1698,8 +1756,19 @@ td {
    ANIMATIONS - the count-up in animateMoneyTo() is driven by JS and checks
    the same media query itself, since CSS cannot reach it. */
 @media (prefers-reduced-motion: reduce) {
-  .app > *,
-  .tab-panel > *,
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .tab-panel.tab-enter-forward,
+  .tab-panel.tab-enter-back,
+  .app.view-enter-forward,
+  .app.view-enter-back,
   .settings-panel:not(.hidden),
   .modal:not(.hidden),
   .modal:not(.hidden) .modal-card,
@@ -1731,7 +1800,7 @@ td {
   background: #4a4a4a;
   border-radius: 3px;
   z-index: 0;
-  transition: width 0.4s ease;
+  transition: width var(--motion-emphasis) var(--ease-native);
 }
 
 /* Balance now against balance after bills. Wraps rather than truncating on a

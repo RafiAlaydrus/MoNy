@@ -1743,7 +1743,7 @@ test("saving a category name unchanged is not a conflict", () => {
     "still a duplicate when it is not the one being renamed");
 });
 
-test("the category panel opens from settings and closes again", () => {
+test("the category panel opens from settings and closes again", async () => {
   const w = bootApp({
     storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
     today: "2026-08-15"
@@ -1758,7 +1758,10 @@ test("the category panel opens from settings and closes again", () => {
     "and is populated");
 
   w.document.getElementById("close-category-panel").click();
-  assert.ok(panel.classList.contains("hidden"), "closes");
+  assert.ok(panel.classList.contains("is-closing"), "starts its short native close motion");
+  assert.equal(panel.getAttribute("aria-hidden"), "true", "stops being an interactive surface immediately");
+  await new Promise(resolve => w.setTimeout(resolve, 140));
+  assert.ok(panel.classList.contains("hidden"), "is removed after the close frame");
 
   assert.match(w.document.getElementById("category-count").textContent, /categories/,
     "the settings row summarises how many there are");
@@ -2043,6 +2046,98 @@ test("only spending is coloured; unspent money stays greyscale", () => {
   const dot = remaining.querySelector(".legend-dot").style.background;
   assert.ok(!series.some(hex => dot.includes(hex)),
     "Remaining does not wear a category colour");
+});
+
+/* ---------------------------------------------------------------------------
+   NATIVE FAST MOTION
+
+   Frequent navigation must never replay the old half-second section stagger.
+   Motion is applied to one incoming compositor surface, while state and input
+   handling update synchronously underneath it.
+--------------------------------------------------------------------------- */
+
+test("Native Fast uses one short directional transition per tab", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  const home = w.document.getElementById("tab-home");
+  const bills = w.document.getElementById("tab-bills");
+  assert.ok(!home.classList.contains("tab-enter-forward"), "startup does not animate gratuitously");
+
+  w.document.querySelector('.tab-btn[data-tab="bills"]').click();
+  assert.ok(!bills.classList.contains("hidden"), "the destination is available immediately");
+  assert.ok(bills.classList.contains("tab-enter-forward"), "a later tab enters from the forward edge");
+
+  w.document.querySelector('.tab-btn[data-tab="home"]').click();
+  assert.ok(home.classList.contains("tab-enter-back"), "returning uses the opposite direction");
+});
+
+test("History uses push and pop motion without delaying either view", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+  const app = w.document.getElementById("app-view");
+  const history = w.document.getElementById("history-view");
+
+  w.document.getElementById("history-toggle").click();
+  assert.ok(!history.classList.contains("hidden"));
+  assert.ok(history.classList.contains("view-enter-forward"));
+
+  w.document.getElementById("history-back").click();
+  assert.ok(!app.classList.contains("hidden"));
+  assert.ok(app.classList.contains("view-enter-back"));
+});
+
+test("full list renders stay still while a newly added row receives feedback", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        priority: [{ name: "Rent", category: "Bills", amount: 900, paid: false }]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  assert.ok(!w.document.querySelector("#priority-list .swipe-wrapper").classList.contains("item-enter"),
+    "existing rows do not replay an entrance after a render");
+
+  w.document.getElementById("pb-name").value = "Internet";
+  w.document.getElementById("pb-category").value = "Bills";
+  w.document.getElementById("pb-amount").value = "100";
+  w.document.getElementById("add-priority").click();
+
+  const rows = w.document.querySelectorAll("#priority-list .swipe-wrapper");
+  assert.ok(rows[rows.length - 1].classList.contains("item-enter"),
+    "only the row created by this action gets motion feedback");
+});
+
+test("reduced motion makes money updates immediate", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+  w.matchMedia = () => ({ matches: true });
+  const amount = w.document.getElementById("remaining-money");
+  amount._shownValue = 100;
+
+  w.__app.run("animateMoneyTo(remainingMoneyEl, 250)");
+
+  assert.match(amount.textContent, /250\.00$/, "the final value is shown synchronously");
+  assert.ok(!amount.closest(".card").classList.contains("card-pulse"),
+    "no pulse is started when the system asks for reduced motion");
+});
+
+test("the stylesheet has compact shared motion tokens and no section stagger", () => {
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  assert.match(css, /--motion-fast:\s*120ms/);
+  assert.match(css, /--motion-standard:\s*180ms/);
+  assert.match(css, /--motion-emphasis:\s*220ms/);
+  assert.doesNotMatch(css, /\.tab-panel\s*>\s*\*\s*\{[^}]*animation/s,
+    "switching tabs never animates every child one after another");
 });
 
 /* REGRESSION: the app flashed white on every open.
