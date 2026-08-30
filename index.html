@@ -68,6 +68,18 @@
 </head>
 <body>
 
+  <div id="app-loading" class="app-loading" role="status" aria-label="Loading your money overview">
+    <div class="loading-shell" aria-hidden="true">
+      <span class="skeleton skeleton-title"></span>
+      <span class="skeleton skeleton-subtitle"></span>
+      <div class="loading-cards">
+        <span class="skeleton skeleton-card"></span>
+        <span class="skeleton skeleton-card"></span>
+      </div>
+      <span class="skeleton skeleton-block"></span>
+    </div>
+  </div>
+
   <!-- Pull-to-refresh affordance. Sits above the app and is revealed as the
        whole page is dragged down; past the threshold the text swaps and this
        spinner shows while the reload happens. The dasharray is what makes the
@@ -276,6 +288,37 @@
 
     </section>
 
+    <section class="insights-section" aria-labelledby="insights-title">
+      <div class="section-heading-row">
+        <div>
+          <span class="section-eyebrow">At a glance</span>
+          <h3 id="insights-title">This cycle</h3>
+        </div>
+      </div>
+      <div id="insights-grid" class="insights-grid" aria-live="polite">
+        <article class="insight-card">
+          <span>Daily allowance</span>
+          <strong id="insight-daily">&mdash;</strong>
+          <small id="insight-daily-note">Set income to calculate</small>
+        </article>
+        <article class="insight-card">
+          <span>Projected balance</span>
+          <strong id="insight-projected">&mdash;</strong>
+          <small id="insight-projected-note">After unpaid bills</small>
+        </article>
+        <article class="insight-card">
+          <span>Top spending</span>
+          <strong id="insight-category">&mdash;</strong>
+          <small id="insight-category-note">No spending yet</small>
+        </article>
+        <article class="insight-card">
+          <span>Vs last cycle</span>
+          <strong id="insight-comparison">&mdash;</strong>
+          <small id="insight-comparison-note">No completed cycle yet</small>
+        </article>
+      </div>
+    </section>
+
     </div><!-- /#tab-home -->
 
     <!-- BILLS -->
@@ -341,6 +384,40 @@
          cannot be inferred from the amount. -->
     <section>
       <h3>Second choice</h3>
+
+      <div class="activity-search" aria-labelledby="activity-search-title">
+        <div class="activity-search-head">
+          <div>
+            <span class="section-eyebrow">All records</span>
+            <h3 id="activity-search-title">Find activity</h3>
+          </div>
+          <button id="activity-clear" class="text-button hidden" type="button">Clear</button>
+        </div>
+        <div class="activity-search-controls">
+          <label class="search-field">
+            <span class="sr-only">Search activity</span>
+            <input id="activity-query" type="search" placeholder="Search name or category" autocomplete="off" />
+          </label>
+          <select id="activity-type" aria-label="Filter by transaction type">
+            <option value="all">All types</option>
+            <option value="expense">Expenses</option>
+            <option value="income">Income</option>
+            <option value="transfer">Transfers</option>
+            <option value="bill">Paid bills</option>
+          </select>
+          <select id="activity-source" aria-label="Filter by source">
+            <option value="all">All sources</option>
+            <option value="main">Main balance</option>
+          </select>
+          <select id="activity-category" aria-label="Filter by category">
+            <option value="all">All categories</option>
+          </select>
+          <label class="date-filter"><span>From</span><input id="activity-from" type="date" /></label>
+          <label class="date-filter"><span>To</span><input id="activity-to" type="date" /></label>
+        </div>
+        <p id="activity-summary" class="activity-summary">Use search or a filter to find activity across this cycle.</p>
+        <div id="activity-results" class="activity-results" aria-live="polite"></div>
+      </div>
 
       <div class="second-form" id="second-choice-form">
         <input id="sc-name" placeholder="Name" />

@@ -537,6 +537,16 @@ const addMoneyBtn = document.getElementById("add-money");
 const takeMoneyBtn = document.getElementById("take-money");
 const scTable = document.getElementById("sc-table");
 
+const activityQuery = document.getElementById("activity-query");
+const activityType = document.getElementById("activity-type");
+const activitySource = document.getElementById("activity-source");
+const activityCategory = document.getElementById("activity-category");
+const activityFrom = document.getElementById("activity-from");
+const activityTo = document.getElementById("activity-to");
+const activityClear = document.getElementById("activity-clear");
+const activitySummary = document.getElementById("activity-summary");
+const activityResults = document.getElementById("activity-results");
+
 const chartBar = document.getElementById("chart-bar");
 const chartTotal = document.getElementById("chart-total");
 const chartLegend = document.getElementById("chart-legend");
@@ -1374,7 +1384,7 @@ function renderPriority() {
   priorityList.innerHTML = "";
 
   if (data.priority.length === 0) {
-    priorityList.innerHTML = '<li class="empty-state">No priority bills added yet.</li>';
+    priorityList.innerHTML = '<li class="empty-state-rich"><strong>No priority bills yet</strong><p>Add rent, subscriptions, or anything that must be paid this cycle.</p></li>';
     return;
   }
 
@@ -1487,7 +1497,7 @@ addPriorityBtn.addEventListener("click", () => {
   pbAmount.value = "";
   fields.forEach(f => f.el.classList.remove("input-error"));
 
-  const emptyItem = priorityList.querySelector(".empty-state");
+  const emptyItem = priorityList.querySelector(".empty-state, .empty-state-rich");
   if (emptyItem) emptyItem.remove();
   const wrapper = buildPriorityItem(data.priority[data.priority.length - 1]);
   wrapper.classList.add("item-enter");
@@ -2378,7 +2388,7 @@ function renderSecondChoice() {
 
   if (data.secondChoice.length === 0) {
     if (carried <= 0) {
-      scTable.innerHTML = '<tr><td colspan="4" class="empty-state">No transactions yet.</td></tr>';
+      scTable.innerHTML = '<tr><td colspan="4"><div class="empty-state-rich"><strong>No everyday activity yet</strong><p>Add money coming in or record your first expense above.</p></div></td></tr>';
     }
     return;
   }
@@ -2517,7 +2527,7 @@ function addSecondChoice(type, newMoney) {
     // A picked date can belong anywhere in the list, so re-sort the table
     renderSecondChoice();
   } else {
-    const emptyRow = scTable.querySelector("td.empty-state");
+    const emptyRow = scTable.querySelector("td.empty-state, .empty-state-rich");
     if (emptyRow) emptyRow.closest("tr").remove();
     const newSc = data.secondChoice[data.secondChoice.length - 1];
     const scRow = buildSecondChoiceRow(newSc);
@@ -2691,6 +2701,166 @@ function updateRemainingDisplay(to) {
 }
 
 // Recalculates and renders the remaining balance, bars, and warnings
+function daysRemainingInCycle() {
+  const end = new Date(`${data.cycleNext}T00:00:00`);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.max(1, Math.ceil((end - now) / 86400000));
+}
+
+/* Four small answers derived from figures the app already trusts. They are
+   deliberately descriptive rather than predictive models: daily allowance
+   divides today's real balance over the days left, while projected balance
+   uses the same unpaid-bill forecast drawn in the main progress bar. */
+function renderInsights() {
+  const dailyEl = document.getElementById("insight-daily");
+  if (!dailyEl) return;
+
+  const dailyNote = document.getElementById("insight-daily-note");
+  const projectedEl = document.getElementById("insight-projected");
+  const projectedNote = document.getElementById("insight-projected-note");
+  const categoryEl = document.getElementById("insight-category");
+  const categoryNote = document.getElementById("insight-category-note");
+  const comparisonEl = document.getElementById("insight-comparison");
+  const comparisonNote = document.getElementById("insight-comparison-note");
+
+  if (monthIsUnset(data)) {
+    dailyEl.textContent = projectedEl.textContent = categoryEl.textContent = comparisonEl.textContent = "—";
+    dailyNote.textContent = "Set income to calculate";
+    projectedNote.textContent = "After unpaid bills";
+    categoryNote.textContent = "No spending yet";
+    comparisonNote.textContent = "No completed cycle yet";
+    return;
+  }
+
+  const remaining = getMainRemaining();
+  const days = daysRemainingInCycle();
+  const projected = projectedRemainingOf(data, allWallets());
+  dailyEl.textContent = `${cur()} ${fmt(Math.max(remaining, 0) / days)}`;
+  dailyNote.textContent = `${days} ${days === 1 ? "day" : "days"} remaining`;
+  projectedEl.textContent = projected < 0 ? `−${cur()} ${fmt(-projected)}` : `${cur()} ${fmt(projected)}`;
+  projectedNote.textContent = unpaidPriorityOf(data) > 0 ? "After unpaid bills" : "All bills accounted for";
+
+  const breakdown = spendingBreakdownOf(data, allWallets());
+  const top = Object.entries(breakdown.categories).sort((a, b) => b[1] - a[1])[0];
+  categoryEl.textContent = top ? top[0] : "—";
+  categoryNote.textContent = top ? `${cur()} ${fmt(top[1])} spent` : "No spending yet";
+
+  const archiveKeys = sortedArchiveKeys();
+  const previousKey = archiveKeys[archiveKeys.length - 1];
+  if (!previousKey) {
+    comparisonEl.textContent = "—";
+    comparisonNote.textContent = "No completed cycle yet";
+  } else {
+    const previous = summarizeEntry(archive[previousKey]).spent;
+    const current = breakdown.spent;
+    if (previous <= 0) {
+      comparisonEl.textContent = current > 0 ? "New spending" : "No change";
+      comparisonNote.textContent = `Compared with ${monthLabel(previousKey)}`;
+    } else {
+      const change = ((current - previous) / previous) * 100;
+      comparisonEl.textContent = `${change > 0 ? "+" : ""}${Math.round(change)}%`;
+      comparisonNote.textContent = `${change <= 0 ? "Less" : "More"} than ${monthLabel(previousKey)}`;
+    }
+  }
+}
+
+function activityIndex() {
+  const records = [];
+  (data.secondChoice || []).forEach(item => records.push({
+    name: item.name, category: item.category || "Others", amount: Number(item.amount) || 0,
+    date: item.date, source: "main", sourceLabel: "Main balance",
+    type: isTransferEntry(item) ? "transfer" : item.type === "add" ? "income" : "expense",
+    direction: item.type === "add" ? 1 : -1
+  }));
+
+  allWallets().forEach(wallet => {
+    const wd = data.walletData && data.walletData[wallet.id];
+    (wd && wd.items || []).forEach(item => records.push({
+      name: item.name, category: wallet.name, amount: Number(item.amount) || 0,
+      date: item.date, source: wallet.id, sourceLabel: wallet.name,
+      type: isTransferEntry(item) || item.type === "in" || item.type === "out" ? "transfer" :
+        isWalletInflow(item) ? "income" : "expense",
+      direction: isWalletInflow(item) ? 1 : -1
+    }));
+  });
+
+  (data.priority || []).filter(bill => bill.paid).forEach(bill => records.push({
+    name: bill.name, category: bill.category || "Bills", amount: Number(bill.amount) || 0,
+    date: bill.date, source: "main", sourceLabel: "Main balance", type: "bill", direction: -1
+  }));
+  return records.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+}
+
+function activityDateValue(date) {
+  const d = new Date(date);
+  if (isNaN(d)) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function renderActivityFinder() {
+  if (!activityResults) return;
+  const records = activityIndex();
+  const wallets = allWallets();
+  const sourceValue = activitySource.value;
+  activitySource.innerHTML = '<option value="all">All sources</option><option value="main">Main balance</option>' +
+    wallets.map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("");
+  activitySource.value = [...activitySource.options].some(o => o.value === sourceValue) ? sourceValue : "all";
+
+  const categoryValue = activityCategory.value;
+  const categories = [...new Set(records.map(r => r.category).filter(Boolean))].sort();
+  activityCategory.innerHTML = '<option value="all">All categories</option>' +
+    categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  activityCategory.value = categories.includes(categoryValue) ? categoryValue : "all";
+
+  const query = activityQuery.value.trim().toLowerCase();
+  const active = !!query || activityType.value !== "all" || activitySource.value !== "all" ||
+    activityCategory.value !== "all" || !!activityFrom.value || !!activityTo.value;
+  activityClear.classList.toggle("hidden", !active);
+
+  if (!active) {
+    activitySummary.textContent = "Use search or a filter to find activity across this cycle.";
+    activityResults.innerHTML = "";
+    return;
+  }
+
+  const filtered = records.filter(record => {
+    const date = activityDateValue(record.date);
+    return (!query || `${record.name} ${record.category} ${record.sourceLabel}`.toLowerCase().includes(query)) &&
+      (activityType.value === "all" || record.type === activityType.value) &&
+      (activitySource.value === "all" || record.source === activitySource.value) &&
+      (activityCategory.value === "all" || record.category === activityCategory.value) &&
+      (!activityFrom.value || date >= activityFrom.value) && (!activityTo.value || date <= activityTo.value);
+  });
+
+  activitySummary.textContent = `${filtered.length} ${filtered.length === 1 ? "result" : "results"} from ${records.length} records`;
+  if (!filtered.length) {
+    activityResults.innerHTML = '<div class="empty-state-rich"><strong>No matching activity</strong><p>Try a broader search or clear one of the filters.</p></div>';
+    return;
+  }
+  activityResults.innerHTML = filtered.map(record => `
+    <div class="activity-result">
+      <div class="activity-result-main">
+        <div class="activity-result-name">${esc(record.name)}</div>
+        <div class="activity-result-meta">${esc(record.category)} · ${esc(record.sourceLabel)}</div>
+      </div>
+      <div class="activity-result-amount">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</div>
+      <div class="activity-result-meta">${esc(record.type === "bill" ? "Paid bill" : record.type)}</div>
+      <div class="activity-result-date">${esc(entryDateLabel(record.date).text)}</div>
+    </div>`).join("");
+}
+
+if (activityResults) {
+  [activityQuery, activityType, activitySource, activityCategory, activityFrom, activityTo].forEach(control => {
+    control.addEventListener(control === activityQuery ? "input" : "change", renderActivityFinder);
+  });
+  activityClear.addEventListener("click", () => {
+    activityQuery.value = ""; activityType.value = "all"; activitySource.value = "all";
+    activityCategory.value = "all"; activityFrom.value = ""; activityTo.value = "";
+    renderActivityFinder(); activityQuery.focus();
+  });
+}
+
 /* Balance now against balance once every outstanding bill is ticked, plus the
    dim bar segment that shows the same thing.
 
@@ -2743,6 +2913,8 @@ function renderProjection() {
 function calculateRemaining(skipChart = false) {
   renderIncome();
   renderProjection();
+  renderInsights();
+  renderActivityFinder();
 
   /* monthIsUnset rather than a bare income check: on the 1st, income is null
      while carry-over is not, and that month has a real balance to show. A
@@ -3006,6 +3178,14 @@ renderWallets();
 renderSecondChoice();
 updatePriorityLockUI();
 calculateRemaining();
+
+const appLoading = document.getElementById("app-loading");
+if (appLoading) {
+  requestAnimationFrame(() => {
+    appLoading.classList.add("is-ready");
+    setTimeout(() => appLoading.remove(), MOTION_FAST_MS);
+  });
+}
 
 /* =========================
    SETTINGS PANEL
@@ -4510,7 +4690,7 @@ function renderHistory() {
 
   historyList.innerHTML = "";
   if (keys.length === 0) {
-    historyList.innerHTML = '<div class="empty-state">No archived months yet.</div>';
+    historyList.innerHTML = '<div class="empty-state-rich"><strong>No completed cycles yet</strong><p>Your first cycle will appear here automatically when its end date is reached.</p></div>';
   } else {
     [...keys].reverse().forEach(key => {
       historyList.appendChild(buildHistoryRow(key));

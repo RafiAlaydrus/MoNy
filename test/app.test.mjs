@@ -2140,6 +2140,73 @@ test("the stylesheet has compact shared motion tokens and no section stagger", (
     "switching tabs never animates every child one after another");
 });
 
+/* ---------------------------------------------------------------------------
+   INSIGHTS, SEARCH, AND PURPOSEFUL STATES
+--------------------------------------------------------------------------- */
+
+test("dashboard insights reuse live and archived accounting totals", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.archive]: {
+        "2026-7": {
+          data: month({ month: "2026-7", cycleStart: "2026-07-01", cycleNext: "2026-08-01",
+            secondChoice: [{ name: "Old spend", category: "Others", amount: 400, type: "take", date: "2026-07-05T10:00:00.000Z" }] }),
+          wallets: [], currency: "RM", closedAt: "2026-08-01T00:00:00.000Z"
+        }
+      },
+      [KEYS.data]: month({
+        priority: [{ name: "Rent", category: "Bills", amount: 500, paid: true, date: "2026-08-02T10:00:00.000Z" }],
+        secondChoice: [{ name: "Lunch", category: "Food / Drink", amount: 100, type: "take", date: "2026-08-04T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  assert.equal(w.document.getElementById("insight-category").textContent, "Bills");
+  assert.match(w.document.getElementById("insight-category-note").textContent, /500\.00 spent/);
+  assert.equal(w.document.getElementById("insight-comparison").textContent, "+50%");
+  assert.match(w.document.getElementById("insight-daily-note").textContent, /17 days remaining/);
+});
+
+test("activity finder filters across main, wallet, transfer, and bill records", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        priority: [{ name: "Rent", category: "Bills", amount: 500, paid: true, date: "2026-08-02T10:00:00.000Z" }],
+        walletData: { w0: { budget: 200, items: [{ name: "Market", amount: 25, type: "take", date: "2026-08-03T10:00:00.000Z" }] } },
+        secondChoice: [{ name: "Lunch", category: "Food / Drink", amount: 12, type: "take", date: "2026-08-04T10:00:00.000Z" }]
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  const source = w.document.getElementById("activity-source");
+  source.value = "w0";
+  source.dispatchEvent(new w.Event("change", { bubbles: true }));
+  const results = w.document.getElementById("activity-results");
+  assert.match(results.textContent, /Market/);
+  assert.doesNotMatch(results.textContent, /Lunch|Rent/);
+
+  w.document.getElementById("activity-clear").click();
+  const query = w.document.getElementById("activity-query");
+  query.value = "rent";
+  query.dispatchEvent(new w.Event("input", { bubbles: true }));
+  assert.match(results.textContent, /Rent/);
+  assert.match(w.document.getElementById("activity-summary").textContent, /1 result/);
+});
+
+test("empty and loading states explain what happens next", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /id="app-loading"/);
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month({ income: null }) } });
+  assert.match(w.document.getElementById("priority-list").textContent, /Add rent, subscriptions/);
+  assert.match(w.document.getElementById("sc-table").textContent, /record your first expense/);
+  w.__app.run("renderHistory()");
+  assert.match(w.document.getElementById("history-list").textContent, /appear here automatically/);
+});
+
 /* REGRESSION: the app flashed white on every open.
 
    Two causes, one test each. First: the page's black lived only in style.css,
