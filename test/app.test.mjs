@@ -2088,6 +2088,29 @@ test("REGRESSION: the launch images are precached for offline start", () => {
     "and they are added tolerantly, outside the all-or-nothing addAll");
 });
 
+test("every declared app icon exists at its advertised size and cache version", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../manifest.json", import.meta.url), "utf8"));
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
+
+  manifest.icons.forEach(icon => {
+    const [relativePath, query = ""] = icon.src.split("?");
+    const [expectedWidth, expectedHeight] = icon.sizes.split("x").map(Number);
+    const png = readFileSync(new URL(`../${relativePath}`, import.meta.url));
+
+    assert.equal(png.toString("ascii", 1, 4), "PNG", `${relativePath} is a PNG`);
+    assert.equal(png.readUInt32BE(16), expectedWidth, `${relativePath} has the declared width`);
+    assert.equal(png.readUInt32BE(20), expectedHeight, `${relativePath} has the declared height`);
+    assert.ok(query, `${relativePath} has a cache-busting version`);
+    assert.ok(sw.includes(`./${icon.src}`), `${icon.src} is available offline`);
+  });
+
+  const browserIcons = [...html.matchAll(/href="(icons\/icon-[^"]+)"/g)].map(match => match[1]);
+  browserIcons.forEach(src => {
+    assert.ok(sw.includes(`./${src}`), `${src} used by the browser is available offline`);
+  });
+});
+
 /* REGRESSION: the same blank-canvas fault as the donut, in History. The
    trend chart was drawn while #history-view was still hidden, so its canvas
    measured zero, fitCanvas declined, and nothing retried - History opened

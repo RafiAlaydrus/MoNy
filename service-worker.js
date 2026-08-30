@@ -11,7 +11,7 @@
    their browser never has a reason to look at the network again.
 ========================= */
 
-const CACHE_NAME = "mmt-v47";
+const CACHE_NAME = "mmt-v48";
 
 /* Everything needed to cold-start the app offline. "./" is listed separately
    from "./index.html" because that is the URL the browser actually requests
@@ -45,17 +45,19 @@ const ASSETS = [
    would strand every user on the old worker - a far worse outcome than a
    launch image that has to come from the network. */
 const LAUNCH_IMAGES = [
-  "./icons/icon-72x72.png?v=19",
-  "./icons/icon-96x96.png?v=19",
-  "./icons/icon-128x128.png?v=19",
-  "./icons/icon-144x144.png?v=19",
-  "./icons/icon-152x152.png?v=19",
-  "./icons/icon-192x192.png?v=19",
-  "./icons/icon-384x384.png?v=19",
-  "./icons/icon-512x512.png?v=19",
-  "./icons/splash-1170x2532.png?v=19",
-  "./icons/splash-1125x2436.png?v=19",
-  "./icons/splash-750x1334.png?v=19",
+  "./icons/icon-32x32.png?v=20",
+  "./icons/icon-72x72.png?v=20",
+  "./icons/icon-96x96.png?v=20",
+  "./icons/icon-128x128.png?v=20",
+  "./icons/icon-144x144.png?v=20",
+  "./icons/icon-152x152.png?v=20",
+  "./icons/icon-180x180.png?v=20",
+  "./icons/icon-192x192.png?v=20",
+  "./icons/icon-384x384.png?v=20",
+  "./icons/icon-512x512.png?v=20",
+  "./icons/splash-1170x2532.png?v=20",
+  "./icons/splash-1125x2436.png?v=20",
+  "./icons/splash-750x1334.png?v=20",
 ];
 
 /* INSTALL - fired once per new CACHE_NAME. Pre-fetch every asset so the very
