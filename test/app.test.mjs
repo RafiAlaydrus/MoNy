@@ -2197,6 +2197,29 @@ test("activity finder filters across main, wallet, transfer, and bill records", 
   assert.match(w.document.getElementById("activity-summary").textContent, /1 result/);
 });
 
+test("activity search opens from the header before History and closes accessibly", async () => {
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() } });
+  const searchButton = w.document.getElementById("activity-toggle");
+  const historyButton = w.document.getElementById("history-toggle");
+  const modal = w.document.getElementById("activity-modal");
+
+  assert.ok(searchButton.compareDocumentPosition(historyButton) & w.Node.DOCUMENT_POSITION_FOLLOWING,
+    "the magnifying glass is immediately before History in the header");
+  assert.ok(!w.document.getElementById("tab-spending").contains(modal),
+    "the finder is global, not another card in Spending");
+
+  searchButton.click();
+  assert.ok(!modal.classList.contains("hidden"));
+  assert.equal(modal.getAttribute("aria-hidden"), "false");
+  await new Promise(resolve => w.requestAnimationFrame(resolve));
+  assert.equal(w.document.activeElement.id, "activity-query", "opening puts the cursor in search");
+
+  w.document.getElementById("activity-close").click();
+  assert.ok(modal.classList.contains("is-closing"));
+  assert.equal(modal.getAttribute("aria-hidden"), "true");
+  assert.equal(w.document.activeElement, searchButton, "closing returns focus to the trigger");
+});
+
 test("empty and loading states explain what happens next", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="app-loading"/);

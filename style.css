@@ -474,6 +474,7 @@ button:active {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
 header {
@@ -1838,6 +1839,10 @@ td {
 .insight-card small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 .activity-search { margin:0 0 22px; padding:16px; border:1px solid #242424; border-radius:18px; background:#0d0d0d; }
+.activity-modal { align-items:flex-start; padding:calc(env(safe-area-inset-top,0px) + 58px) 0 18px; }
+.activity-modal-card { width:calc(100% - 28px); max-width:440px; max-height:calc(100% - 76px); padding:18px; text-align:left; }
+.activity-head-actions { display:flex; align-items:center; gap:10px; }
+.icon-close { display:flex; align-items:center; justify-content:center; width:32px; height:32px; padding:0; border:0; border-radius:50%; background:#1e1e1e; color:#aaa; font-size:14px; }
 .activity-search-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:14px; }
 .activity-search-controls .search-field { grid-column:1/-1; }
 .activity-search-controls input, .activity-search-controls select { width:100%; }
@@ -1866,6 +1871,7 @@ td {
 .skeleton-block { height:150px; margin-top:18px; border-radius:18px; }
 @keyframes skeleton-shift { to { background-position:-220% 0; } }
 @media (max-width:360px) { .activity-search-controls { grid-template-columns:1fr; } .activity-search-controls .search-field { grid-column:auto; } }
+@media (max-width:380px) { header h1 { font-size:22px; white-space:nowrap; } .settings-btn { width:32px; } }
 
 /* Opening row of a history - money brought in from last month. Italic and
    muted so it reads as a statement about the list rather than an entry in

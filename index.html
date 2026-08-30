@@ -98,6 +98,13 @@
       <div class="header-row">
         <h1 id="secret-reset">MONTHLY SPENT</h1>
         <section class="settings-bar">
+          <button id="activity-toggle" class="settings-btn" aria-label="Find activity">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="m16.5 16.5 4 4"/>
+            </svg>
+          </button>
           <button id="history-toggle" class="settings-btn" aria-label="History">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -385,40 +392,6 @@
     <section>
       <h3>Second choice</h3>
 
-      <div class="activity-search" aria-labelledby="activity-search-title">
-        <div class="activity-search-head">
-          <div>
-            <span class="section-eyebrow">All records</span>
-            <h3 id="activity-search-title">Find activity</h3>
-          </div>
-          <button id="activity-clear" class="text-button hidden" type="button">Clear</button>
-        </div>
-        <div class="activity-search-controls">
-          <label class="search-field">
-            <span class="sr-only">Search activity</span>
-            <input id="activity-query" type="search" placeholder="Search name or category" autocomplete="off" />
-          </label>
-          <select id="activity-type" aria-label="Filter by transaction type">
-            <option value="all">All types</option>
-            <option value="expense">Expenses</option>
-            <option value="income">Income</option>
-            <option value="transfer">Transfers</option>
-            <option value="bill">Paid bills</option>
-          </select>
-          <select id="activity-source" aria-label="Filter by source">
-            <option value="all">All sources</option>
-            <option value="main">Main balance</option>
-          </select>
-          <select id="activity-category" aria-label="Filter by category">
-            <option value="all">All categories</option>
-          </select>
-          <label class="date-filter"><span>From</span><input id="activity-from" type="date" /></label>
-          <label class="date-filter"><span>To</span><input id="activity-to" type="date" /></label>
-        </div>
-        <p id="activity-summary" class="activity-summary">Use search or a filter to find activity across this cycle.</p>
-        <div id="activity-results" class="activity-results" aria-live="polite"></div>
-      </div>
-
       <div class="second-form" id="second-choice-form">
         <input id="sc-name" placeholder="Name" />
         <!-- Built by renderCategoryOptions(), same as the bill categories. -->
@@ -581,6 +554,47 @@
        Destructive confirmations put the dangerous button on the right with
        .danger, and Cancel on the left.
        =================================================================== -->
+
+  <!-- ACTIVITY FINDER - opened from the magnifying glass in the global
+       header, so it is reachable without first navigating to Spending. -->
+  <div id="activity-modal" class="modal activity-modal hidden" aria-hidden="true">
+    <div class="modal-card activity-modal-card" role="dialog" aria-modal="true" aria-labelledby="activity-search-title">
+      <div class="activity-search-head">
+        <div>
+          <span class="section-eyebrow">All records</span>
+          <h3 id="activity-search-title">Find activity</h3>
+        </div>
+        <div class="activity-head-actions">
+          <button id="activity-clear" class="text-button hidden" type="button">Clear</button>
+          <button id="activity-close" class="icon-close" type="button" aria-label="Close activity search">✕</button>
+        </div>
+      </div>
+      <div class="activity-search-controls">
+        <label class="search-field">
+          <span class="sr-only">Search activity</span>
+          <input id="activity-query" type="search" placeholder="Search name or category" autocomplete="off" />
+        </label>
+        <select id="activity-type" aria-label="Filter by transaction type">
+          <option value="all">All types</option>
+          <option value="expense">Expenses</option>
+          <option value="income">Income</option>
+          <option value="transfer">Transfers</option>
+          <option value="bill">Paid bills</option>
+        </select>
+        <select id="activity-source" aria-label="Filter by source">
+          <option value="all">All sources</option>
+          <option value="main">Main balance</option>
+        </select>
+        <select id="activity-category" aria-label="Filter by category">
+          <option value="all">All categories</option>
+        </select>
+        <label class="date-filter"><span>From</span><input id="activity-from" type="date" /></label>
+        <label class="date-filter"><span>To</span><input id="activity-to" type="date" /></label>
+      </div>
+      <p id="activity-summary" class="activity-summary">Use search or a filter to find activity across this cycle.</p>
+      <div id="activity-results" class="activity-results" aria-live="polite"></div>
+    </div>
+  </div>
 
   <!-- DELETE ALL HISTORY - wipes every archived month. Not undoable, unlike
        deleting a single month, which is why the text names the count. -->

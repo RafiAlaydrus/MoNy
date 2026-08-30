@@ -546,6 +546,9 @@ const activityTo = document.getElementById("activity-to");
 const activityClear = document.getElementById("activity-clear");
 const activitySummary = document.getElementById("activity-summary");
 const activityResults = document.getElementById("activity-results");
+const activityModal = document.getElementById("activity-modal");
+const activityToggle = document.getElementById("activity-toggle");
+const activityClose = document.getElementById("activity-close");
 
 const chartBar = document.getElementById("chart-bar");
 const chartTotal = document.getElementById("chart-total");
@@ -2858,6 +2861,28 @@ if (activityResults) {
     activityQuery.value = ""; activityType.value = "all"; activitySource.value = "all";
     activityCategory.value = "all"; activityFrom.value = ""; activityTo.value = "";
     renderActivityFinder(); activityQuery.focus();
+  });
+
+  activityToggle.addEventListener("click", () => {
+    renderActivityFinder();
+    revealSurface(activityModal);
+    requestAnimationFrame(() => activityQuery.focus());
+  });
+  activityClose.addEventListener("click", () => {
+    concealSurface(activityModal);
+    activityToggle.focus();
+  });
+  activityModal.addEventListener("click", event => {
+    if (event.target === activityModal) {
+      concealSurface(activityModal);
+      activityToggle.focus();
+    }
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !activityModal.classList.contains("hidden")) {
+      concealSurface(activityModal);
+      activityToggle.focus();
+    }
   });
 }
 

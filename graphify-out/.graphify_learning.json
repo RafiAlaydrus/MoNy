@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-08-30T19:05:06.147767+00:00",
+  "generated_at": "2026-08-30T20:44:09.642196+00:00",
   "nodes": {
     "app_animatemoneyto": {
-      "code_fingerprint": "295786f7a8ea45becf3c6c35eb544f2be057b0481b8fb0bad3d669365a40a216",
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
       "label": "animateMoneyTo()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -12,13 +12,13 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.996246565,
+      "score": 0.994664392,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_appview": {
-      "code_fingerprint": "295786f7a8ea45becf3c6c35eb544f2be057b0481b8fb0bad3d669365a40a216",
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
       "label": "appView",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -28,13 +28,13 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.996246565,
+      "score": 0.994664392,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_attachswipetodelete": {
-      "code_fingerprint": "295786f7a8ea45becf3c6c35eb544f2be057b0481b8fb0bad3d669365a40a216",
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
       "label": "attachSwipeToDelete()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -44,13 +44,77 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.996246565,
+      "score": 0.994664392,
+      "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_renderchart": {
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "label": "renderChart()",
+      "last": "2026-08-30T19:16:49.782154+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-30T19:16:49.782154+00:00",
+          "outcome": "useful",
+          "q": "lets do 5,6,8"
+        }
+      ],
+      "score": 0.998599749,
+      "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_renderhistory": {
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "label": "renderHistory()",
+      "last": "2026-08-30T19:16:49.782154+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-30T19:16:49.782154+00:00",
+          "outcome": "useful",
+          "q": "lets do 5,6,8"
+        }
+      ],
+      "score": 0.998599749,
+      "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_rendersecondchoice": {
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "label": "renderSecondChoice()",
+      "last": "2026-08-30T19:16:49.782154+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-30T19:16:49.782154+00:00",
+          "outcome": "useful",
+          "q": "lets do 5,6,8"
+        }
+      ],
+      "score": 0.998599749,
+      "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_renderwallets": {
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "label": "renderWallets()",
+      "last": "2026-08-30T19:16:49.782154+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-30T19:16:49.782154+00:00",
+          "outcome": "useful",
+          "q": "lets do 5,6,8"
+        }
+      ],
+      "score": 0.998599749,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_showundo": {
-      "code_fingerprint": "295786f7a8ea45becf3c6c35eb544f2be057b0481b8fb0bad3d669365a40a216",
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
       "label": "showUndo()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -60,13 +124,29 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.996246565,
+      "score": 0.994664392,
+      "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_summarizeentry": {
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "label": "summarizeEntry()",
+      "last": "2026-08-30T19:16:49.782154+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-30T19:16:49.782154+00:00",
+          "outcome": "useful",
+          "q": "lets do 5,6,8"
+        }
+      ],
+      "score": 0.998599749,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_tabbar": {
-      "code_fingerprint": "295786f7a8ea45becf3c6c35eb544f2be057b0481b8fb0bad3d669365a40a216",
+      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
       "label": "tabBar",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -76,7 +156,7 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.996246565,
+      "score": 0.994664392,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
