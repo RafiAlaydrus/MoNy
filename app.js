@@ -971,7 +971,11 @@ function cycleLabel(startDate, endDate) {
   const s = new Date(startDate + "T00:00:00");
   const e = new Date(endDate + "T00:00:00");
 
-  if (settings.monthStartDay === 1) {
+  const isCalendarMonth = s.getDate() === 1 &&
+    s.getFullYear() === e.getFullYear() &&
+    s.getMonth() === e.getMonth() &&
+    e.getDate() === daysInMonth(e.getFullYear(), e.getMonth() + 1);
+  if (isCalendarMonth) {
     return s.toLocaleString("default", { month: "long", year: "numeric" });
   }
 
@@ -1002,9 +1006,18 @@ function dayRangeLabel(cycleStart, cycleNext) {
 }
 
 function renderMonthLabel() {
+  /* Use the boundary stored on the month itself. Usually this is the next
+     occurrence of settings.monthStartDay, but when the user chooses a day
+     whose occurrence has already passed, startDayTakesEffect deliberately
+     pushes it out one more month so the cycle on screen is not cut short.
+     Recomputing the end from the setting would show the already-passed date
+     instead of the boundary the rollover will actually use. */
+  const end = new Date(data.cycleNext + "T00:00:00");
+  end.setDate(end.getDate() - 1);
+  const endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
   monthText.textContent = cycleLabel(
     data.cycleStart,
-    cycleEndOf(data.cycleStart, settings.monthStartDay)
+    endDate
   );
 }
 
@@ -3012,6 +3025,23 @@ function ordinal(n) {
   return `${n}${["th", "st", "nd", "rd"][n % 10] || "th"}`;
 }
 
+/* The first boundary for a newly chosen start day that is still in the
+   future. The obvious candidate is that day in the calendar month after the
+   cycle began. If it has already arrived, using it would end the active cycle
+   retroactively and the next foreground check would archive the month at
+   once. Walk forward instead, preserving the promise that this month is
+   unchanged.
+
+   todayString() is intentionally read at interaction time. An installed PWA
+   can stay alive across midnight; the startup snapshot `todayStr` may be days
+   old by the time the user changes this setting. */
+function startDayTakesEffect(chosenDay) {
+  const today = todayString();
+  let next = nextCycleStartOf(data.cycleStart, chosenDay);
+  while (next <= today) next = nextCycleStartOf(next, chosenDay);
+  return next;
+}
+
 
 function renderMonthStartNote() {
   if (!monthStartNote || !data.cycleStart) return;
@@ -3635,50 +3665,232 @@ let pendingImport = null;
 const MONTH_KEY_RE = /^\d{4}-([1-9]|1[0-2])$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function validateImport(obj) {
-  if (!obj || typeof obj !== "object") return "That file isn't valid JSON data.";
+function isRecord(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
 
-  const d = obj.data;
-  if (!d || typeof d !== "object" || Array.isArray(d)) return "That file has no month data in it.";
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
 
-  // The key the whole archive and every migration is addressed by.
-  if (!("month" in d)) return "That file's month is missing.";
+function isFiniteAmount(value, allowZero = false) {
+  if (value === null || value === "") return false;
+  const n = Number(value);
+  return Number.isFinite(n) && (allowZero ? n >= 0 : n > 0);
+}
+
+/* The regexp alone accepts impossible dates such as 2026-99-99. Rebuild the
+   date in UTC and compare every part so an import cannot install a boundary
+   the rollover will never reach. */
+function isValidYmd(value) {
+  if (typeof value !== "string" || !ISO_DATE_RE.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  return parsed.getUTCFullYear() === y &&
+    parsed.getUTCMonth() + 1 === m &&
+    parsed.getUTCDate() === d;
+}
+
+// Transaction dates were optional in early versions. If present, they must
+// stay strings because the sort path calls localeCompare on them.
+function isValidStoredDate(value) {
+  return value === undefined || value === null || value === "" ||
+    (typeof value === "string" && Number.isFinite(Date.parse(value)));
+}
+
+function validateBillList(list, scope) {
+  if (!Array.isArray(list)) return `${scope} is missing the priority bills list.`;
+  const bad = list.find(b =>
+    !isRecord(b) || !isNonEmptyString(b.name) ||
+    !isNonEmptyString(b.category) || !isFiniteAmount(b.amount) ||
+    (b.paid !== undefined && typeof b.paid !== "boolean") ||
+    !isValidStoredDate(b.date)
+  );
+  return bad === undefined ? null : `${scope}'s priority bills contain a malformed entry.`;
+}
+
+function validateSecondChoiceList(list, scope) {
+  if (!Array.isArray(list)) return `${scope} is missing the Second choice list.`;
+  const bad = list.find(item =>
+    !isRecord(item) || !isNonEmptyString(item.name) ||
+    !isNonEmptyString(item.category) || !isFiniteAmount(item.amount) ||
+    !["add", "take"].includes(item.type) ||
+    (item.newMoney !== undefined && typeof item.newMoney !== "boolean") ||
+    (item.transfer !== undefined && typeof item.transfer !== "boolean") ||
+    (item.txId !== undefined && !isNonEmptyString(item.txId)) ||
+    !isValidStoredDate(item.date)
+  );
+  return bad === undefined ? null : `${scope}'s Second choice list contains a malformed entry.`;
+}
+
+function validateWalletItems(items, scope) {
+  if (!Array.isArray(items)) return `${scope} has a malformed items list.`;
+  const bad = items.find(item =>
+    !isRecord(item) || !isNonEmptyString(item.name) ||
+    !isFiniteAmount(item.amount) ||
+    !["add", "take", "in", "out"].includes(item.type) ||
+    (item.txId !== undefined && !isNonEmptyString(item.txId)) ||
+    (item.toId !== undefined && !isNonEmptyString(item.toId)) ||
+    (item.fromId !== undefined && !isNonEmptyString(item.fromId)) ||
+    !isValidStoredDate(item.date)
+  );
+  return bad === undefined ? null : `${scope} contains a malformed item.`;
+}
+
+function validateWalletData(walletData, scope) {
+  // Absent/null is the pre-multi-wallet shape and is migrated after import.
+  if (walletData === undefined || walletData === null) return null;
+  if (!isRecord(walletData)) return `${scope}'s wallet data is malformed.`;
+
+  for (const [id, wd] of Object.entries(walletData)) {
+    if (!id || !isRecord(wd)) return `${scope}'s wallet data is malformed.`;
+    if (wd.budget !== undefined && wd.budget !== null && !isFiniteAmount(wd.budget, true)) {
+      return `${scope}'s wallet data has an invalid budget.`;
+    }
+    const problem = validateWalletItems(wd.items, `${scope}'s wallet "${id}"`);
+    if (problem) return problem;
+  }
+  return null;
+}
+
+function validateWalletDefinitions(wallets, scope) {
+  if (!Array.isArray(wallets)) return `${scope} is malformed.`;
+  const ids = new Set();
+  for (const wallet of wallets) {
+    if (!isRecord(wallet) || !isNonEmptyString(wallet.id) ||
+        !isNonEmptyString(wallet.name) ||
+        (wallet.deleted !== undefined && typeof wallet.deleted !== "boolean") ||
+        ids.has(wallet.id)) {
+      return `${scope} contains a malformed wallet.`;
+    }
+    ids.add(wallet.id);
+  }
+  return null;
+}
+
+function validateCarryIn(carryIn, scope) {
+  if (carryIn === undefined || carryIn === null) return null;
+  if (!isRecord(carryIn)) return `${scope}'s carry-in breakdown is malformed.`;
+  if (carryIn.main !== undefined && !isFiniteAmount(carryIn.main, true)) {
+    return `${scope}'s carry-in main balance is invalid.`;
+  }
+  if (carryIn.wallets !== undefined) {
+    if (!isRecord(carryIn.wallets) ||
+        Object.values(carryIn.wallets).some(v => !isFiniteAmount(v, true))) {
+      return `${scope}'s carry-in wallet balances are malformed.`;
+    }
+  }
+  return null;
+}
+
+function validateMonthData(d, scope) {
+  if (!isRecord(d)) return `${scope} has no month data in it.`;
+
+  if (!("month" in d)) return `${scope}'s month is missing.`;
   if (!MONTH_KEY_RE.test(String(d.month))) {
-    return `That file's month ("${d.month}") isn't a valid month like 2026-8.`;
+    return `${scope}'s month ("${d.month}") isn't a valid month like 2026-8.`;
   }
 
-  if (!("income" in d)) return "That file is missing the income field.";
+  if (!("income" in d)) return `${scope} is missing the income field.`;
   if (d.income !== null && !Number.isFinite(Number(d.income))) {
-    return "That file's income isn't a number.";
+    return `${scope}'s income isn't a number.`;
+  }
+  if (d.income !== null && Number(d.income) < 0) return `${scope}'s income cannot be negative.`;
+
+  let problem = validateBillList(d.priority, scope);
+  if (problem) return problem;
+  problem = validateSecondChoiceList(d.secondChoice, scope);
+  if (problem) return problem;
+  problem = validateWalletData(d.walletData, scope);
+  if (problem) return problem;
+
+  /* Legacy single-wallet exports use groceryBudget/groceryItems instead of
+     walletData. Validate them too before the migration consumes them. */
+  if (d.groceryBudget !== undefined && d.groceryBudget !== null &&
+      !isFiniteAmount(d.groceryBudget, true)) {
+    return `${scope}'s legacy wallet budget is invalid.`;
+  }
+  if (d.groceryItems !== undefined) {
+    problem = validateWalletItems(d.groceryItems, `${scope}'s legacy wallet`);
+    if (problem) return problem;
   }
 
-  if (!Array.isArray(d.priority)) return "That file is missing the priority bills list.";
-  if (!Array.isArray(d.secondChoice)) return "That file is missing the Second choice list.";
-  if (d.walletData && (typeof d.walletData !== "object" || Array.isArray(d.walletData))) {
-    return "That file's wallet data is malformed.";
+  if (d.priorityLocked !== undefined && typeof d.priorityLocked !== "boolean") {
+    return `${scope}'s priority lock is malformed.`;
   }
+  if (d.carryOver !== undefined && d.carryOver !== null && !isFiniteAmount(d.carryOver, true)) {
+    return `${scope}'s carried balance is invalid.`;
+  }
+  problem = validateCarryIn(d.carryIn, scope);
+  if (problem) return problem;
 
   /* Cycle dates are optional - a file from before v1.18.0 has none, and the
-     migration fills them in. But a PRESENT one has to be usable, because the
-     rollover compares against it as a string and a malformed value would
-     either never fire or fire immediately. */
+     migration fills them in. Present dates must be both formatted and real. */
   for (const field of ["cycleStart", "cycleNext"]) {
-    if (d[field] !== undefined && !ISO_DATE_RE.test(String(d[field]))) {
-      return `That file's ${field} isn't a valid date like 2026-08-01.`;
+    if (d[field] !== undefined && !isValidYmd(d[field])) {
+      return `${scope}'s ${field} isn't a valid date like 2026-08-01.`;
     }
   }
   if (d.cycleStart && d.cycleNext && d.cycleNext <= d.cycleStart) {
-    return "That file's month ends before it starts.";
+    return `${scope}'s month ends before it starts.`;
   }
+  return null;
+}
 
-  if (obj.settings && (typeof obj.settings !== "object" || Array.isArray(obj.settings))) {
-    return "That file's settings are malformed.";
-  }
-  if (obj.settings && obj.settings.wallets !== undefined && !Array.isArray(obj.settings.wallets)) {
-    return "That file's wallet list is malformed.";
-  }
+function validateSettings(settings) {
+  if (settings === undefined || settings === null) return null;
+  if (!isRecord(settings)) return "That file's settings are malformed.";
 
-  if (obj.archive && (typeof obj.archive !== "object" || Array.isArray(obj.archive))) {
+  if (settings.wallets !== undefined) {
+    const problem = validateWalletDefinitions(settings.wallets, "That file's wallet list");
+    if (problem) return problem;
+  }
+  if (settings.categories !== undefined) {
+    if (!isRecord(settings.categories)) return "That file's category settings are malformed.";
+    for (const list of ["priority", "secondChoice"]) {
+      const values = settings.categories[list];
+      if (values !== undefined && (!Array.isArray(values) || values.some(v => !isNonEmptyString(v)))) {
+        return `That file's ${list} categories are malformed.`;
+      }
+    }
+  }
+  if (settings.collapsed !== undefined && !isRecord(settings.collapsed)) {
+    return "That file's collapsed-table settings are malformed.";
+  }
+  if (settings.monthStartDay !== undefined) {
+    const day = Number(settings.monthStartDay);
+    if (!Number.isInteger(day) || day < 1 || day > 31) return "That file's month start day is invalid.";
+  }
+  if (settings.sortOrder !== undefined && !["oldest", "newest"].includes(settings.sortOrder)) {
+    return "That file's transaction sort order is invalid.";
+  }
+  if (settings.activeTab !== undefined && !["home", "bills", "spending", "wallets"].includes(settings.activeTab)) {
+    return "That file's active tab is invalid.";
+  }
+  if (settings.currency !== undefined && !isNonEmptyString(settings.currency)) {
+    return "That file's currency is invalid.";
+  }
+  if (settings.budgetLimit !== undefined && settings.budgetLimit !== null &&
+      !isFiniteAmount(settings.budgetLimit)) {
+    return "That file's budget limit is invalid.";
+  }
+  for (const field of ["showChart", "carryOver", "dateOrderMigrated"]) {
+    if (settings[field] !== undefined && typeof settings[field] !== "boolean") {
+      return `That file's ${field} setting is malformed.`;
+    }
+  }
+  return null;
+}
+
+function validateImport(obj) {
+  if (!isRecord(obj)) return "That file isn't valid JSON data.";
+
+  let problem = validateMonthData(obj.data, "That file");
+  if (problem) return problem;
+  problem = validateSettings(obj.settings);
+  if (problem) return problem;
+
+  if (obj.archive !== undefined && obj.archive !== null && !isRecord(obj.archive)) {
     return "That file's history is malformed.";
   }
   /* Every archive key is fed to monthLabel and the chronological sort. One bad
@@ -3686,15 +3898,28 @@ function validateImport(obj) {
   if (obj.archive) {
     const badKey = Object.keys(obj.archive).find(k => !MONTH_KEY_RE.test(k));
     if (badKey !== undefined) return `That file's history has an invalid month ("${badKey}").`;
-    const badEntry = Object.keys(obj.archive).find(k => {
-      const e = obj.archive[k];
-      return !e || typeof e !== "object" || !e.data || typeof e.data !== "object";
-    });
-    if (badEntry !== undefined) return `That file's history entry for ${badEntry} is malformed.`;
+    for (const [key, entry] of Object.entries(obj.archive)) {
+      if (!isRecord(entry) || !isRecord(entry.data)) {
+        return `That file's history entry for ${key} is malformed.`;
+      }
+      problem = validateMonthData(entry.data, `That file's history entry for ${key}`);
+      if (problem) return problem;
+      if (entry.wallets !== undefined) {
+        problem = validateWalletDefinitions(entry.wallets, `That file's history wallet list for ${key}`);
+        if (problem) return problem;
+      }
+      if (entry.currency !== undefined && !isNonEmptyString(entry.currency)) {
+        return `That file's history currency for ${key} is malformed.`;
+      }
+      if (!isValidStoredDate(entry.closedAt)) {
+        return `That file's history close date for ${key} is malformed.`;
+      }
+    }
   }
 
-  if (obj.priorityBackup && !Array.isArray(obj.priorityBackup)) {
-    return "That file's saved priority bills are malformed.";
+  if (obj.priorityBackup !== undefined && obj.priorityBackup !== null) {
+    problem = validateBillList(obj.priorityBackup, "That file's saved priority bills");
+    if (problem) return "That file's saved priority bills are malformed.";
   }
   return null;
 }

@@ -223,6 +223,99 @@ test("every field a new month has is one reset knows about", () => {
 });
 
 /* ---------------------------------------------------------------------------
+   MONTH START SETTING
+
+   The cycle's stored start never moves underneath the user. Changing the day
+   only schedules a future cycleNext, including when the first candidate has
+   already passed or the chosen day does not exist in the next month.
+--------------------------------------------------------------------------- */
+
+function changeMonthStart(w, day) {
+  const select = w.document.getElementById("month-start-select");
+  select.value = String(day);
+  select.dispatchEvent(new w.Event("change"));
+}
+
+test("changing the month start schedules the chosen future boundary", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    today: "2026-08-15"
+  });
+
+  changeMonthStart(w, 20);
+
+  assert.equal(w.__app.settings.monthStartDay, 20);
+  assert.equal(w.__app.data.cycleStart, "2026-08-01", "the active cycle still starts where it did");
+  assert.equal(w.__app.data.cycleNext, "2026-09-20", "only its future boundary moves");
+  assert.equal(stored(w, KEYS.data).cycleNext, "2026-09-20", "the new boundary is persisted");
+  assert.equal(stored(w, KEYS.settings).monthStartDay, 20);
+  assert.equal(w.__jsdomErrors.length, 0, "the real dropdown handler must not throw");
+});
+
+test("an already-passed candidate is deferred instead of cutting this cycle short", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, monthStartDay: 25 },
+      [KEYS.data]: month({
+        month: "2026-7", cycleStart: "2026-07-25", cycleNext: "2026-08-25"
+      })
+    },
+    today: "2026-08-04"
+  });
+
+  changeMonthStart(w, 1); // 1 Aug has passed, so the setting begins 1 Sep.
+
+  assert.equal(w.__app.data.month, "2026-7", "the live month is not archived early");
+  assert.equal(w.__app.data.cycleNext, "2026-09-01");
+  assert.equal(w.__app.run("checkCycleRollover()"), false, "the new boundary is still in the future");
+  assert.match(w.__app.run("dayRangeLabel(data.cycleStart, data.cycleNext)"), /38 days/,
+    "the stored range, including the deferred month, is the one displayed");
+  assert.match(w.document.getElementById("current-month").textContent, /(Aug.*31.*2026|31.*Aug.*2026)/,
+    "the month header ends the cycle on 31 Aug in either locale order");
+  assert.match(w.document.getElementById("month-start-note").textContent, /(Sep.*1.*2026|1.*Sep.*2026)/,
+    "the note names the real deferred boundary in either locale order");
+});
+
+test("a chosen day clamps safely in a shorter next month", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, monthStartDay: 31 },
+      [KEYS.data]: month({
+        month: "2026-1", cycleStart: "2026-01-31", cycleNext: "2026-02-28"
+      })
+    },
+    today: "2026-02-10"
+  });
+
+  changeMonthStart(w, 30);
+
+  assert.equal(w.__app.data.cycleNext, "2026-02-28", "February clamps the 30th to its last day");
+  assert.equal(w.__app.run("checkCycleRollover()"), false);
+  assert.equal(w.__jsdomErrors.length, 0);
+});
+
+test("month-start changes use today's live date in a long-running PWA", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, monthStartDay: 25 },
+      [KEYS.data]: month({
+        month: "2026-7", cycleStart: "2026-07-25", cycleNext: "2026-08-25"
+      })
+    },
+    today: "2026-08-02"
+  });
+
+  // The app stays alive while 3 Aug passes. A startup-date comparison would
+  // still accept that now-past boundary and immediately close the cycle.
+  w.__setToday("2026-08-04");
+  changeMonthStart(w, 3);
+
+  assert.equal(w.__app.data.cycleNext, "2026-09-03");
+  assert.equal(w.__app.run("checkCycleRollover()"), false);
+  assert.equal(w.__jsdomErrors.length, 0);
+});
+
+/* ---------------------------------------------------------------------------
    ROLLOVER
 --------------------------------------------------------------------------- */
 
@@ -881,6 +974,113 @@ test("arrays are not mistaken for objects", () => {
   assert.match(check(f), /wallet data is malformed/);
   const g = validFile(); g.settings = [];
   assert.match(check(g), /settings are malformed/);
+});
+
+/* The reported import defect: the top-level wallet list was checked only for
+   being an array, so `[null]` passed, replaced storage, and crashed on the
+   next boot when activeWallets tried to read `deleted` from null. The same
+   rule applies to every nested collection the render path dereferences. */
+test("REGRESSION: malformed nested imports are rejected before they can blank the app", () => {
+  const badWallet = validFile();
+  badWallet.settings = { ...SETTINGS, wallets: [null] };
+  assert.match(check(badWallet), /wallet list.*malformed wallet/i);
+
+  const badWalletData = validFile();
+  badWalletData.data.walletData = { w0: null };
+  assert.match(check(badWalletData), /wallet data is malformed/i);
+
+  const badWalletItem = validFile();
+  badWalletItem.data.walletData = { w0: { budget: 100, items: [null] } };
+  assert.match(check(badWalletItem), /malformed item/i);
+
+  const badBill = validFile();
+  badBill.data.priority = [null];
+  assert.match(check(badBill), /priority bills.*malformed entry/i);
+
+  const badSecondChoice = validFile();
+  badSecondChoice.data.secondChoice = [null];
+  assert.match(check(badSecondChoice), /Second choice.*malformed entry/i);
+
+  const badCategories = validFile();
+  badCategories.settings = {
+    ...SETTINGS,
+    categories: { priority: ["Bills", "Others"], secondChoice: [null, "Others"] }
+  };
+  assert.match(check(badCategories), /secondChoice categories are malformed/i);
+});
+
+test("malformed data inside an archived month is rejected too", () => {
+  const f = validFile();
+  f.archive = {
+    "2026-7": {
+      data: {
+        month: "2026-7", income: 1000, priority: [], secondChoice: [],
+        walletData: { w0: { budget: 100, items: [null] } }
+      },
+      wallets: [{ id: "w0", name: "Grocery" }], currency: "RM"
+    }
+  };
+  assert.match(check(f), /history entry.*malformed item/i);
+
+  const g = validFile();
+  g.archive = {
+    "2026-7": {
+      data: { month: "2026-7", income: 1000, priority: [], secondChoice: [], walletData: {} },
+      wallets: [null], currency: "RM"
+    }
+  };
+  assert.match(check(g), /history wallet list.*malformed wallet/i);
+});
+
+test("impossible calendar dates are rejected rather than only format-checked", () => {
+  const f = validFile();
+  f.data.cycleNext = "2026-02-31";
+  assert.match(check(f), /cycleNext isn't a valid date/);
+});
+
+test("nested validation is read-only when a file is rejected", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month({ income: 4321 }) },
+    today: "2026-08-15"
+  });
+  const beforeData = w.localStorage.getItem(KEYS.data);
+  const beforeSettings = w.localStorage.getItem(KEYS.settings);
+  const bad = validFile();
+  bad.settings = { ...SETTINGS, wallets: [null] };
+
+  const problem = w.__app.run(`validateImport(${JSON.stringify(bad)})`);
+
+  assert.ok(problem, "the file is refused");
+  assert.equal(w.localStorage.getItem(KEYS.data), beforeData, "the current month is untouched");
+  assert.equal(w.localStorage.getItem(KEYS.settings), beforeSettings, "settings are untouched");
+  assert.equal(w.__app.run("pendingImport"), null, "the file is never armed for confirmation");
+});
+
+test("a valid legacy single-wallet export still passes nested validation", () => {
+  const f = validFile();
+  delete f.data.walletData;
+  f.data.groceryBudget = 300;
+  f.data.groceryItems = [
+    { name: "food", amount: 50, type: "take", date: "2026-08-03T10:00:00.000Z" }
+  ];
+  /* validFile deliberately shares the standard settings fixture. Clone it
+     before removing a legacy-absent field so later tests keep their wallet. */
+  f.settings = { ...SETTINGS };
+  delete f.settings.wallets;
+  f.settings.secondWalletEnabled = true;
+  f.settings.secondWalletName = "Second Wallet";
+  f.archive = {
+    "2026-7": {
+      data: {
+        month: "2026-7", income: 1000, priority: [], secondChoice: [],
+        groceryBudget: 200,
+        groceryItems: [{ name: "old food", amount: 25, type: "take" }]
+      },
+      walletEnabled: true, walletName: "Second Wallet", currency: "RM"
+    }
+  };
+
+  assert.equal(check(f), null, "the existing post-import migrations can safely upgrade it");
 });
 
 /* ---------------------------------------------------------------------------
