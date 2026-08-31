@@ -67,6 +67,42 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  color-scheme: dark;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  box-shadow: 0 0 0 1000px var(--surface-field) inset;
+  transition: background-color 9999s ease-out;
+}
+
 input[type="checkbox"] {
   /* Near-white tick, since the browser default is a bright blue that would
      be the only colour outside the chart. */
@@ -93,6 +129,49 @@ input:focus-visible,
 select:focus-visible {
   outline: 2px solid #8c8c8c;
   outline-offset: 2px;
+}
+
+/* Component focus rules remove the default outline to suppress browser-blue.
+   This final class-independent ring restores a consistent keyboard affordance. */
+:where(button, input, select, textarea):focus-visible {
+  outline: 2px solid #8c8c8c !important;
+  outline-offset: 2px !important;
+}
+
+/* =====================
+   PWA Update Banner
+===================== */
+.update-banner {
+  position: fixed;
+  z-index: 11000;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  width: min(calc(100% - 24px), 460px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: rgba(24, 24, 24, 0.96);
+  box-shadow: var(--shadow-sheet);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transform: translateX(-50%);
+  animation: notice-in var(--motion-standard) var(--ease-native);
+}
+
+.update-banner strong,
+.update-banner span { display: block; }
+.update-banner strong { color: var(--text-primary); font-size: 13px; }
+.update-banner span { margin-top: 2px; color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
+.update-banner button { min-height: 36px; padding: 8px 12px; border: 0; border-radius: 9px; background: #ededed; color: #0a0a0a; font-size: 12px; font-weight: 700; }
+.update-banner .update-dismiss { width: 36px; padding: 0; background: transparent; color: #888; font-size: 0; }
+.update-banner .update-dismiss::before { content: "×"; font-size: 21px; font-weight: 400; }
+
+@keyframes notice-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
 }
 
 /* =====================
@@ -201,6 +280,7 @@ select:focus-visible {
   text-transform: uppercase;
   font-family: inherit;
   cursor: pointer;
+  touch-action: manipulation;
   transition: color var(--motion-fast) ease,
               transform var(--motion-fast) var(--ease-native),
               opacity var(--motion-fast) ease;
@@ -287,6 +367,7 @@ select:focus-visible {
   border: none;
   padding: 0;
   cursor: pointer;
+  touch-action: manipulation;
   border-radius: 10px;
   color: #888;
   -webkit-tap-highlight-color: transparent;
@@ -1954,7 +2035,7 @@ td {
 .skeleton { display:block; border-radius:10px; background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%); background-size:220% 100%; animation:skeleton-shift 900ms linear infinite; }
 .skeleton-title { width:42%; height:23px; }
 .skeleton-subtitle { width:28%; height:12px; margin-top:10px; }
-.loading-cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:32px; }
+.loading-cards { display:grid; grid-template-columns:1fr; gap:12px; margin-top:32px; }
 .skeleton-card { height:122px; border-radius:18px; }
 .skeleton-block { height:150px; margin-top:18px; border-radius:18px; }
 @keyframes skeleton-shift { to { background-position:-220% 0; } }
@@ -1964,6 +2045,61 @@ td {
   .settings-btn { width:32px; }
   .tab-bar { padding-inline:4px; }
   .tab-btn { font-size:9px; letter-spacing:.06em; }
+}
+
+@media (max-width:600px) {
+  .second-form input,
+  .second-form select,
+  .activity-search-controls input,
+  .activity-search-controls select,
+  .setting-input-wide,
+  .modal-input {
+    font-size:16px;
+  }
+
+  .update-banner {
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+  .update-banner .update-dismiss { display:none; }
+}
+
+/* Tablet: use the extra width for comparisons while keeping forms at a
+   comfortable reading measure. Phone remains the primary one-column layout. */
+@media (min-width:768px) {
+  :root { --space-page:28px; --space-card:18px; }
+
+  .app,
+  .tab-bar { max-width:760px; }
+
+  .summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .insights-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+  .loading-shell { max-width:704px; }
+  .loading-cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .tab-panel:not(#tab-home) > section,
+  #tab-wallets .wallet-section,
+  #tab-wallets .wallets-empty { max-width:640px; margin-inline:auto; }
+  .settings-panel { width:320px; }
+}
+
+/* Desktop: a wider dashboard, restrained content columns, and a floating nav
+   rail width that still reads as one focused web app rather than a stretched
+   phone screenshot. */
+@media (min-width:1100px) {
+  .app,
+  .tab-bar { max-width:900px; }
+  .app { padding-inline:36px; }
+  .loading-shell { max-width:828px; }
+  .tab-panel:not(#tab-home) > section,
+  #tab-wallets .wallet-section,
+  #tab-wallets .wallets-empty { max-width:700px; }
+  #chart-section { max-width:760px; margin-inline:auto; }
+}
+
+@media (hover:hover) and (pointer:fine) {
+  .tab-btn:hover { color:#aaa; }
+  .tab-btn.is-active:hover { color:var(--text-primary); }
+  .modal-actions button:not(.danger):hover,
+  .transfer-dest-btn:hover { background:#222; }
 }
 
 /* Opening row of a history - money brought in from last month. Italic and

@@ -11,7 +11,7 @@
    their browser never has a reason to look at the network again.
 ========================= */
 
-const CACHE_NAME = "mmt-v53";
+const CACHE_NAME = "mmt-v54";
 
 /* Everything needed to cold-start the app offline. "./" is listed separately
    from "./index.html" because that is the URL the browser actually requests
@@ -69,9 +69,9 @@ const LAUNCH_IMAGES = [
    The launch images that follow are deliberately NOT held to it; see the
    note on LAUNCH_IMAGES.
 
-   skipWaiting stops the new worker queueing behind the old one. Without it a
-   fresh version sits idle until every tab is closed, which on an installed
-   PWA can be days. */
+   The worker deliberately waits after installation. The page detects that
+   waiting state and offers a visible Refresh action, so an update never
+   interrupts a form or silently swaps code underneath an open session. */
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
@@ -85,7 +85,10 @@ self.addEventListener("install", (event) => {
       )
     )
   );
-  self.skipWaiting();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 /* ACTIVATE - delete every cache except the current one. This is the eviction
@@ -106,18 +109,29 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-/* FETCH - cache-first with background revalidation.
-
-   The cached copy is returned immediately, so the app opens instantly and
-   works with no connection. In parallel a real network request runs and
-   quietly overwrites the cache for next time.
-
-   The consequence, and the reason a deploy can look like it did not land:
-   this load is served from cache, and the fresh files only arrive after it.
-   A new version therefore appears on the SECOND open after deploying. When
-   testing an edit, unregister the worker and clear caches or you will keep
-   reading stale JavaScript and chase a bug that is not there. */
+/* FETCH - network-first for page navigations, stale-while-revalidate for the
+   immutable app assets. This gives ordinary website visits fresh HTML while
+   keeping CSS/JS/icon loads instant and preserving a complete offline start. */
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+
+  /* Navigations prefer the network so a normal website visit sees fresh HTML
+     immediately. Offline opens fall back to the cached app shell. */
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match("./index.html").then((cached) => cached || caches.match("./")))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const fetchPromise = fetch(event.request)

@@ -2239,11 +2239,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.26.0");
+  assert.equal(pkg.version, "1.27.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v53"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v54"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2256,6 +2256,59 @@ test("the cosmetic system stays shared across cards, navigation, and modals", ()
   assert.match(css, /\.modal-card\s*\{[^}]*var\(--radius-sheet\)[^}]*var\(--shadow-sheet\)/s);
   assert.match(css, /\.tab-btn\.is-active svg\s*\{[^}]*background:\s*#202020/s);
   assert.match(css, /@media \(max-width:380px\)[^{]*\{[^}]*--space-page:\s*16px/s);
+});
+
+test("web routes restore tabs and History from stable hash URLs", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() },
+    url: "https://example.org/#bills"
+  });
+  assert.ok(!w.document.getElementById("tab-bills").classList.contains("hidden"));
+  assert.equal(w.__app.settings.activeTab, "bills");
+
+  w.document.querySelector('.tab-btn[data-tab="wallets"]').click();
+  assert.equal(w.location.hash, "#wallets");
+
+  w.location.hash = "#history";
+  w.dispatchEvent(new w.PopStateEvent("popstate"));
+  assert.ok(!w.document.getElementById("history-view").classList.contains("hidden"));
+});
+
+test("tab arrows and Escape provide complete keyboard navigation", () => {
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() } });
+  const home = w.document.querySelector('.tab-btn[data-tab="home"]');
+  home.focus();
+  home.dispatchEvent(new w.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  assert.equal(w.document.activeElement.dataset.tab, "bills");
+  assert.equal(w.location.hash, "#bills");
+
+  w.document.getElementById("add-wallet-btn").click();
+  const modal = w.document.getElementById("add-wallet-modal");
+  assert.ok(!modal.classList.contains("hidden"));
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.ok(modal.classList.contains("is-closing") || modal.classList.contains("hidden"));
+});
+
+test("the PWA exposes updates instead of silently replacing an open session", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
+  assert.match(html, /id="update-banner"[^>]*aria-live="polite"/);
+  assert.match(html, /registration\.waiting/);
+  assert.match(html, /postMessage\(\{ type: "SKIP_WAITING" \}\)/);
+  assert.match(sw, /event\.request\.mode === "navigate"/);
+  assert.match(sw, /event\.data\.type === "SKIP_WAITING"/);
+});
+
+test("responsive and cross-browser foundations remain enabled", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  assert.match(html, /width=device-width, initial-scale=1\.0/);
+  assert.doesNotMatch(html, /user-scalable=no/);
+  assert.match(html, /rel="preload" href="app\.js" as="script"/);
+  assert.match(css, /@media \(min-width:768px\)/);
+  assert.match(css, /@media \(min-width:1100px\)/);
+  assert.match(css, /input\[type="number"\][\s\S]*?-moz-appearance:\s*textfield/);
+  assert.match(css, /:focus-visible[\s\S]*?outline:\s*2px solid #8c8c8c !important/);
 });
 
 test("empty and loading states explain what happens next", () => {

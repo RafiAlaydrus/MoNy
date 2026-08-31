@@ -18,10 +18,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- maximum-scale + user-scalable=no stop iOS zooming the whole page when a
-       number field is focused, which on a form-heavy app leaves the user
-       stranded at 1.3x with no obvious way back. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <!-- Keep user zoom available for accessibility. Form fields are 16px on
+       narrow screens, which prevents iOS focus zoom without disabling pinch
+       zoom for users who need it. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="A simple offline-first personal finance tracker for monthly income, bills, and spending." />
   <!-- theme-color paints the status bar and browser chrome to match the app's
        black; color-scheme tells the browser to render form controls and
@@ -62,11 +62,25 @@
   <style>
     :root { color-scheme: dark; }
     html, body { background: #000; color: #fff; }
+    .hidden { display: none !important; }
   </style>
 
   <link rel="stylesheet" href="style.css" />
+  <!-- Start the two small application scripts while the browser is still
+       parsing the static UI. Their execution order remains at the end of body. -->
+  <link rel="preload" href="money.js" as="script" />
+  <link rel="preload" href="app.js" as="script" />
 </head>
 <body>
+
+  <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
+    <div>
+      <strong>MoNy is ready to update</strong>
+      <span>Your data is saved. Refresh to use the latest version.</span>
+    </div>
+    <button id="apply-update" type="button">Refresh</button>
+    <button id="dismiss-update" class="update-dismiss" type="button" aria-label="Dismiss update notification">Later</button>
+  </div>
 
   <div id="app-loading" class="app-loading" role="status" aria-label="Loading your money overview">
     <div class="loading-shell" aria-hidden="true">
@@ -193,7 +207,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </div>
-            <div class="setting-version">v1.26.0</div>
+            <div class="setting-version">v1.27.0</div>
           </div>
         </section>
       </div>
@@ -866,7 +880,44 @@
      still works, it just will not run offline. */
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js");
+      const banner = document.getElementById("update-banner");
+      const apply = document.getElementById("apply-update");
+      const dismiss = document.getElementById("dismiss-update");
+      let waitingWorker = null;
+      let refreshing = false;
+
+      const offerUpdate = (worker) => {
+        if (!worker) return;
+        waitingWorker = worker;
+        banner.classList.remove("hidden");
+      };
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshing) return;
+        refreshing = true;
+        location.reload();
+      });
+
+      apply.addEventListener("click", () => {
+        if (waitingWorker) waitingWorker.postMessage({ type: "SKIP_WAITING" });
+      });
+      dismiss.addEventListener("click", () => banner.classList.add("hidden"));
+
+      navigator.serviceWorker.register("./service-worker.js").then((registration) => {
+        if (registration.waiting && navigator.serviceWorker.controller) {
+          offerUpdate(registration.waiting);
+        }
+        registration.addEventListener("updatefound", () => {
+          const worker = registration.installing;
+          if (!worker) return;
+          worker.addEventListener("statechange", () => {
+            if (worker.state === "installed" && navigator.serviceWorker.controller) offerUpdate(worker);
+          });
+        });
+      }).catch(() => {
+        /* Offline support is progressive enhancement. A registration failure
+           must never prevent the finance tracker itself from working. */
+      });
     });
   }
 </script>

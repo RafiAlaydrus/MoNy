@@ -4322,7 +4322,17 @@ const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
 /* `scroll` is false for the restore on startup: the page already loads at the
    top, and scrolling before first paint is both pointless and, in a bare DOM
    with no window.scrollTo, a crash. */
-function showTab(name, scroll = true) {
+function routeName() {
+  return location.hash.replace(/^#/, "").toLowerCase();
+}
+
+function writeRoute(name, replace = false) {
+  const url = `${location.pathname}${location.search}#${name}`;
+  if (routeName() === name) return;
+  history[replace ? "replaceState" : "pushState"]({ route: name }, "", url);
+}
+
+function showTab(name, scroll = true, updateRoute = true) {
   if (!tabPanels.some((p) => p.dataset.tab === name)) name = "home";
 
   const previousName = settings.activeTab;
@@ -4341,6 +4351,7 @@ function showTab(name, scroll = true) {
 
   settings.activeTab = name;
   saveSettings();
+  if (updateRoute) writeRoute(name);
 
   if (scroll && previousName !== name) {
     const forward = previousIndex === -1 || nextIndex > previousIndex;
@@ -4356,11 +4367,24 @@ function showTab(name, scroll = true) {
 
 tabButtons.forEach((btn) => {
   btn.addEventListener("click", () => showTab(btn.dataset.tab));
+  btn.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const current = tabButtons.indexOf(btn);
+    const next = event.key === "Home" ? 0
+      : event.key === "End" ? tabButtons.length - 1
+      : (current + (event.key === "ArrowRight" ? 1 : -1) + tabButtons.length) % tabButtons.length;
+    tabButtons[next].focus();
+    showTab(tabButtons[next].dataset.tab);
+  });
 });
 
 syncTabBarSpace();
 
-showTab(settings.activeTab, false);
+const initialTabRoute = ["home", "bills", "spending", "wallets"].includes(routeName())
+  ? routeName()
+  : settings.activeTab;
+showTab(initialTabRoute, false, false);
 
 /* =========================
    HISTORY (ARCHIVE VIEW)
@@ -4726,7 +4750,7 @@ function renderHistory() {
   storageLine.textContent = `Storage used: ${fmtBytes(totalStorageBytes())} of ~5 MB`;
 }
 
-historyToggle.addEventListener("click", () => {
+function openHistory(updateRoute = true) {
   /* Swap the views BEFORE rendering. Rendering first meant the trend chart
      was drawn while this view was still hidden, so its canvas measured zero
      and fitCanvas correctly declined - leaving History permanently chartless.
@@ -4737,15 +4761,101 @@ historyToggle.addEventListener("click", () => {
   tabBar.classList.add("hidden");
   playMotion(historyView, "view-enter-forward", ["view-enter-back"]);
   renderHistory();
+  if (updateRoute) writeRoute("history");
   window.scrollTo(0, 0);
-});
+}
 
-historyBack.addEventListener("click", () => {
+function closeHistory(updateRoute = true) {
   historyView.classList.add("hidden");
   appView.classList.remove("hidden");
   tabBar.classList.remove("hidden");
   playMotion(appView, "view-enter-back", ["view-enter-forward"]);
+  if (updateRoute) writeRoute(settings.activeTab || "home");
   window.scrollTo(0, 0);
+}
+
+function syncRouteFromLocation() {
+  const route = routeName();
+  if (route === "history") {
+    openHistory(false);
+    return;
+  }
+  const tab = ["home", "bills", "spending", "wallets"].includes(route) ? route : "home";
+  if (!historyView.classList.contains("hidden")) closeHistory(false);
+  showTab(tab, true, false);
+}
+
+historyToggle.addEventListener("click", () => openHistory());
+
+historyBack.addEventListener("click", () => {
+  if (routeName() === "history" && history.length > 1) {
+    closeHistory(false);
+    history.back();
+  } else closeHistory();
+});
+
+window.addEventListener("popstate", syncRouteFromLocation);
+if (routeName() === "history") openHistory(false);
+else writeRoute(initialTabRoute, true);
+
+/* =========================
+   KEYBOARD + DIALOG ACCESS
+========================= */
+
+const dialogFocusable = [
+  "button:not([disabled])", "input:not([disabled])", "select:not([disabled])",
+  "textarea:not([disabled])", "[href]", "[tabindex]:not([tabindex='-1'])"
+].join(",");
+
+document.querySelectorAll(".modal").forEach((modal) => {
+  modal.setAttribute("aria-hidden", modal.classList.contains("hidden") ? "true" : "false");
+  const card = modal.querySelector(".modal-card");
+  if (card) {
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-modal", "true");
+    card.setAttribute("tabindex", "-1");
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  const modal = document.querySelector(".modal:not(.hidden):not(.is-closing)");
+
+  if (event.key === "Escape") {
+    if (modal) {
+      event.preventDefault();
+      const close = modal.querySelector(
+        "[id^='cancel-'], #activity-close, #close-category-panel"
+      );
+      if (close) close.click();
+      else concealSurface(modal);
+      return;
+    }
+    if (!settingsPanel.classList.contains("hidden")) {
+      event.preventDefault();
+      concealSurface(settingsPanel);
+      settingsToggle.focus();
+    }
+    return;
+  }
+
+  if (event.key !== "Tab" || !modal) return;
+  const focusable = Array.from(modal.querySelectorAll(dialogFocusable)).filter((el) => {
+    return !el.classList.contains("hidden") && el.getAttribute("aria-hidden") !== "true";
+  });
+  if (!focusable.length) {
+    event.preventDefault();
+    modal.querySelector(".modal-card")?.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 });
 
 /* =========================
