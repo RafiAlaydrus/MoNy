@@ -2239,11 +2239,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.27.0");
+  assert.equal(pkg.version, "1.28.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v54"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v55"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2309,6 +2309,25 @@ test("responsive and cross-browser foundations remain enabled", () => {
   assert.match(css, /@media \(min-width:1100px\)/);
   assert.match(css, /input\[type="number"\][\s\S]*?-moz-appearance:\s*textfield/);
   assert.match(css, /:focus-visible[\s\S]*?outline:\s*2px solid #8c8c8c !important/);
+});
+
+test("every primary interaction has compact, reduced-motion-safe feedback", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+
+  assert.match(app, /function playTransient\(/);
+  assert.match(app, /function celebrateForm\(/);
+  assert.match(app, /tab-motion-indicator/);
+  assert.match(app, /chart-segment-enter/);
+  assert.match(app, /pullSpinner\.classList\.add\("is-pulling"\)/);
+  assert.match(css, /\.surface-enter\s*\{[^}]*animation:surface-enter/s);
+  assert.match(css, /\.form-success\s*\{[^}]*animation:form-success/s);
+  assert.match(css, /\.chart-segment-enter\s*\{[^}]*animation:chart-grow/s);
+  assert.match(css, /\.tab-motion-indicator\s*\{[^}]*transition:transform/s);
+  assert.match(css, /\.pull-spinner\.is-pulling\s*\{[^}]*transform:rotate/s);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.surface-enter/s);
+  assert.match(html, /id="pull-spinner"/);
 });
 
 test("empty and loading states explain what happens next", () => {

@@ -575,6 +575,24 @@ function playMotion(el, className, competing = []) {
   el.classList.add(className);
 }
 
+/* Replays a short one-shot interaction animation without accumulating timers
+   or classes when the user taps quickly. Every decorative effect comes through
+   this helper, so reduced-motion users keep the exact same app behaviour. */
+function playTransient(el, className, duration = 360) {
+  if (!el || prefersReducedMotion()) return;
+  clearTimeout(el._motionTimer);
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+  el._motionTimer = setTimeout(() => el.classList.remove(className), duration);
+}
+
+function celebrateForm(form) {
+  playTransient(form, "form-success", 380);
+  const action = form?.querySelector("[data-edit='primary'], #add-priority");
+  playTransient(action, "action-success", 300);
+}
+
 /* Modal/popover close animation with an immediate interaction cutoff. State
    changes happen when the user taps; only display:none waits for the final
    120ms frame, so motion can never hold up the action itself. */
@@ -965,6 +983,7 @@ function showTopUndo() {
   undoText.textContent = top.message;
   undoBtn.classList.remove("hidden");
   undoToast.classList.remove("hidden", "fading");
+  playTransient(undoToast, "toast-pop", 300);
 
   undoBar.style.transition = "none";
   undoBar.style.width = "100%";
@@ -1506,6 +1525,7 @@ addPriorityBtn.addEventListener("click", () => {
   wrapper.classList.add("item-enter");
   priorityList.appendChild(wrapper);
   requestAnimationFrame(() => wrapper.classList.add("item-enter-active"));
+  celebrateForm(document.getElementById("priority-form"));
   calculateRemaining();
 });
 
@@ -1938,6 +1958,7 @@ function buildWalletSection(wallet) {
     }
 
     renderWalletCard(wallet, section);
+    celebrateForm(section.querySelector(".wallet-form"));
     calculateRemaining();
   }
 
@@ -2544,6 +2565,7 @@ function addSecondChoice(type, newMoney) {
   }
 
   calculateRemaining();
+  celebrateForm(document.getElementById("second-choice-form"));
 }
 
 /* =========================
@@ -3082,7 +3104,7 @@ function renderChart() {
   const income = totalIncomeOf(data, allWallets()) || 0;
 
   if (income === 0) {
-    chartTotal.textContent = `${cur()} 0`;
+    animateMoneyTo(chartTotal, 0);
     chartBar.innerHTML = '<div class="chart-bar-empty"></div>';
     chartBar.setAttribute("aria-label", "No spending data yet");
     chartLegend.innerHTML =
@@ -3148,16 +3170,16 @@ function renderChart() {
      the bar short of full. */
   const total = segments.reduce((sum, s) => sum + s.amount, 0);
 
-  chartTotal.textContent = `${cur()} ${fmt(spent)}`;
+  animateMoneyTo(chartTotal, spent);
 
   /* flex-grow rather than a width percentage, so the 2px gaps between segments
      come out of the track instead of pushing the last one off the end.
      min-width keeps a very small category visible as a sliver: it is the whole
      reason this is a bar and not a donut, where a 1% category was a third of a
      degree and simply could not be drawn. */
-  chartBar.innerHTML = segments.map(s => `
-    <span class="chart-bar-seg"
-          style="flex-grow:${(s.amount / total) * 1000};background:${s.color}"></span>
+  chartBar.innerHTML = segments.map((s, index) => `
+    <span class="chart-bar-seg chart-segment-enter"
+          style="--chart-delay:${Math.min(index * 32, 160)}ms;flex-grow:${(s.amount / total) * 1000};background:${s.color}"></span>
   `).join("");
 
   chartBar.setAttribute("aria-label",
@@ -3169,7 +3191,7 @@ function renderChart() {
      `spentCount` marks where the spending ends and the greyscale
      not-yet-spent rows begin. */
   chartLegend.innerHTML = segments.map((s, i) => `
-    <div class="legend-item${i === spentCount && spentCount > 0 ? " legend-divide" : ""}">
+    <div class="legend-item chart-legend-enter${i === spentCount && spentCount > 0 ? " legend-divide" : ""}" style="--chart-delay:${Math.min((i + 1) * 32, 190)}ms">
       <div class="legend-left">
         <span class="legend-dot" style="background:${s.color}"></span>
         <span>${esc(s.label)}</span>
@@ -4318,6 +4340,29 @@ function syncTabBarSpace() {
 const tabBar = document.getElementById("tab-bar");
 const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
 const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
+const tabMotionIndicator = document.createElement("span");
+tabMotionIndicator.className = "tab-motion-indicator";
+tabMotionIndicator.setAttribute("aria-hidden", "true");
+tabBar.appendChild(tabMotionIndicator);
+
+function syncTabMotionIndicator() {
+  const active = tabButtons.find(btn => btn.classList.contains("is-active"));
+  if (!active) return;
+  const left = active.offsetLeft + (active.offsetWidth - 22) / 2;
+  tabMotionIndicator.style.width = "22px";
+  tabMotionIndicator.style.transform = `translateX(${Math.round(left)}px)`;
+}
+
+function playPanelEntrance(panel) {
+  if (!panel || prefersReducedMotion()) return;
+  const surfaces = panel.querySelectorAll(
+    ".card, .second-form, #priority-list, .chart-container, .insight-card, .wallet-section"
+  );
+  surfaces.forEach((surface, index) => {
+    surface.style.setProperty("--surface-delay", `${Math.min(index * 24, 144)}ms`);
+    playTransient(surface, "surface-enter", 420);
+  });
+}
 
 /* `scroll` is false for the restore on startup: the page already loads at the
    top, and scrolling before first paint is both pointless and, in a bare DOM
@@ -4348,6 +4393,7 @@ function showTab(name, scroll = true, updateRoute = true) {
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-selected", String(on));
   });
+  syncTabMotionIndicator();
 
   settings.activeTab = name;
   saveSettings();
@@ -4360,6 +4406,7 @@ function showTab(name, scroll = true, updateRoute = true) {
       forward ? "tab-enter-forward" : "tab-enter-back",
       [forward ? "tab-enter-back" : "tab-enter-forward"]
     );
+    playPanelEntrance(nextPanel);
   }
 
   if (scroll) window.scrollTo(0, 0);
@@ -4380,6 +4427,7 @@ tabButtons.forEach((btn) => {
 });
 
 syncTabBarSpace();
+window.addEventListener("resize", syncTabMotionIndicator, { passive: true });
 
 const initialTabRoute = ["home", "bills", "spending", "wallets"].includes(routeName())
   ? routeName()
@@ -4995,9 +5043,13 @@ confirmResetBtn.addEventListener("click", () => {
     if (dy > 10) {
       dragging = true;
       pullDistance = Math.min(dy, 120);
+      const progress = Math.min(pullDistance / threshold, 1);
       app.style.transition = "none";
       app.style.transform = `translateY(${pullDistance}px)`;
-      indicator.style.opacity = Math.min(pullDistance / threshold, 1);
+      indicator.style.opacity = progress;
+      indicator.style.setProperty("--pull-progress", progress);
+      pullSpinner.classList.remove("hidden");
+      pullSpinner.classList.add("is-pulling");
       pullText.textContent = pullDistance >= threshold ? "Release to refresh" : "Pull to refresh";
       e.preventDefault();
     }
@@ -5016,6 +5068,7 @@ confirmResetBtn.addEventListener("click", () => {
     if (pullDistance >= threshold) {
       pullText.textContent = "Refreshing...";
       pullSpinner.classList.remove("hidden");
+      pullSpinner.classList.remove("is-pulling");
       indicator.style.opacity = "1";
       app.style.transform = "translateY(40px)";
       setTimeout(() => location.reload(), 360);
@@ -5024,6 +5077,9 @@ confirmResetBtn.addEventListener("click", () => {
 
     pullDistance = 0;
     indicator.style.opacity = "0";
+    indicator.style.setProperty("--pull-progress", "0");
+    pullSpinner.classList.add("hidden");
+    pullSpinner.classList.remove("is-pulling");
   }, { passive: true });
 })();
 
@@ -5056,6 +5112,7 @@ function showNotice(message) {
   undoBar.style.transition = "none";
   undoBar.style.width = "0%";
   undoToast.classList.remove("hidden", "fading");
+  playTransient(undoToast, "toast-pop", 300);
 
   /* Tracked, not fire-and-forget. This shares one toast element with the undo
      stack, so an untracked timer kept running after a later showUndo had

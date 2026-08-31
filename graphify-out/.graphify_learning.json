@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-08-31T04:49:55.937032+00:00",
+  "generated_at": "2026-08-31T17:01:07.003198+00:00",
   "nodes": {
     "app_animatemoneyto": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "animateMoneyTo()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -12,16 +12,21 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.986941873,
+      "score": 0.975430817,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_appview": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "appView",
-      "last": "2026-08-30T20:49:38.596620+00:00",
+      "last": "2026-08-31T04:56:27.190033+00:00",
       "provenance": [
+        {
+          "date": "2026-08-31T04:56:27.190033+00:00",
+          "outcome": "useful",
+          "q": "do 3, 4, 5, 6, 7, 11"
+        },
         {
           "date": "2026-08-30T20:49:38.596620+00:00",
           "outcome": "useful",
@@ -33,13 +38,13 @@
           "q": "go do native fast"
         }
       ],
-      "score": 1.979265218,
+      "score": 2.944620395,
       "source_file": "app.js",
       "status": "preferred",
-      "uses": 2
+      "uses": 3
     },
     "app_attachswipetodelete": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "attachSwipeToDelete()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -49,13 +54,13 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.986941873,
+      "score": 0.975430817,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_historytoggle": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "historyToggle",
       "last": "2026-08-30T20:49:38.596620+00:00",
       "provenance": [
@@ -65,13 +70,13 @@
           "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
         }
       ],
-      "score": 0.992323345,
+      "score": 0.980749523,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_renderchart": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "renderChart()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -81,13 +86,13 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.990846676,
+      "score": 0.979290077,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_renderhistory": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "renderHistory()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -97,13 +102,13 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.990846676,
+      "score": 0.979290077,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_rendersecondchoice": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "renderSecondChoice()",
       "last": "2026-08-31T04:37:29.843991+00:00",
       "provenance": [
@@ -123,13 +128,13 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 2.982970522,
+      "score": 2.94817907,
       "source_file": "app.js",
       "status": "preferred",
       "uses": 3
     },
     "app_renderwalletcard": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "renderWalletCard()",
       "last": "2026-08-31T04:37:29.843991+00:00",
       "provenance": [
@@ -139,13 +144,13 @@
           "q": "alright, lets do 1,2,5,6,10"
         }
       ],
-      "score": 0.999800501,
+      "score": 0.98813947,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_renderwallets": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "renderWallets()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -155,13 +160,13 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.990846676,
+      "score": 0.979290077,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_showundo": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "showUndo()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -171,13 +176,13 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.986941873,
+      "score": 0.975430817,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_summarizeentry": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "summarizeEntry()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -187,29 +192,34 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.990846676,
+      "score": 0.979290077,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_tabbar": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "tabBar",
-      "last": "2026-08-30T15:10:43.901200+00:00",
+      "last": "2026-08-31T04:56:27.190033+00:00",
       "provenance": [
+        {
+          "date": "2026-08-31T04:56:27.190033+00:00",
+          "outcome": "useful",
+          "q": "do 3, 4, 5, 6, 7, 11"
+        },
         {
           "date": "2026-08-30T15:10:43.901200+00:00",
           "outcome": "useful",
           "q": "go do native fast"
         }
       ],
-      "score": 0.986941873,
+      "score": 1.963870873,
       "source_file": "app.js",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "app_wiredateinput": {
-      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "code_fingerprint": "c589f58d62f138de32a27c79d404a31133c351b9fb2cf2b1820bc8c0a8ff08bd",
       "label": "wireDateInput()",
       "last": "2026-08-31T04:23:58.502178+00:00",
       "provenance": [
@@ -219,32 +229,42 @@
           "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
         }
       ],
-      "score": 0.999583601,
+      "score": 0.9879251,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "index_bottom_tab_navigation": {
-      "code_fingerprint": "9e9e8acfd1593f72417f18f08697dc179f559a5f0e466dc0456c1349e3b8e166",
+      "code_fingerprint": "88a42d27903df441daad76900c087e052776423490faa2f1c7663e2799ac48da",
       "label": "Four-tab bottom navigation",
-      "last": "2026-08-31T04:37:29.843991+00:00",
+      "last": "2026-08-31T04:56:27.190033+00:00",
       "provenance": [
+        {
+          "date": "2026-08-31T04:56:27.190033+00:00",
+          "outcome": "useful",
+          "q": "do 3, 4, 5, 6, 7, 11"
+        },
         {
           "date": "2026-08-31T04:37:29.843991+00:00",
           "outcome": "useful",
           "q": "alright, lets do 1,2,5,6,10"
         }
       ],
-      "score": 0.999800501,
+      "score": 1.976579526,
       "source_file": "index.html",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "index_modal_action_system": {
-      "code_fingerprint": "9e9e8acfd1593f72417f18f08697dc179f559a5f0e466dc0456c1349e3b8e166",
+      "code_fingerprint": "88a42d27903df441daad76900c087e052776423490faa2f1c7663e2799ac48da",
       "label": "Modal action system",
-      "last": "2026-08-31T04:37:29.843991+00:00",
+      "last": "2026-08-31T04:56:27.190033+00:00",
       "provenance": [
+        {
+          "date": "2026-08-31T04:56:27.190033+00:00",
+          "outcome": "useful",
+          "q": "do 3, 4, 5, 6, 7, 11"
+        },
         {
           "date": "2026-08-31T04:37:29.843991+00:00",
           "outcome": "useful",
@@ -261,37 +281,47 @@
           "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
         }
       ],
-      "score": 2.991707447,
+      "score": 3.945254148,
       "source_file": "index.html",
+      "status": "preferred",
+      "uses": 4
+    },
+    "package": {
+      "code_fingerprint": "b6abdcc08375e84b7571442e71c23cbb5d21975ecd5f0ecab43fdce4a7e6d395",
+      "label": "package.json",
+      "last": "2026-08-31T04:56:27.190033+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-31T04:56:27.190033+00:00",
+          "outcome": "useful",
+          "q": "do 3, 4, 5, 6, 7, 11"
+        },
+        {
+          "date": "2026-08-31T04:37:29.843991+00:00",
+          "outcome": "useful",
+          "q": "alright, lets do 1,2,5,6,10"
+        },
+        {
+          "date": "2026-08-31T04:23:58.502178+00:00",
+          "outcome": "useful",
+          "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
+        }
+      ],
+      "score": 2.964504626,
+      "source_file": "package.json",
       "status": "preferred",
       "uses": 3
     },
-    "package": {
-      "code_fingerprint": "631b2870eb396a62c95254d5ceb850e4df897f90d303d478cbb9078a63b54d5e",
-      "label": "package.json",
-      "last": "2026-08-31T04:37:29.843991+00:00",
-      "provenance": [
-        {
-          "date": "2026-08-31T04:37:29.843991+00:00",
-          "outcome": "useful",
-          "q": "alright, lets do 1,2,5,6,10"
-        },
-        {
-          "date": "2026-08-31T04:23:58.502178+00:00",
-          "outcome": "useful",
-          "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
-        }
-      ],
-      "score": 1.999384102,
-      "source_file": "package.json",
-      "status": "preferred",
-      "uses": 2
-    },
     "package_version": {
-      "code_fingerprint": "631b2870eb396a62c95254d5ceb850e4df897f90d303d478cbb9078a63b54d5e",
+      "code_fingerprint": "b6abdcc08375e84b7571442e71c23cbb5d21975ecd5f0ecab43fdce4a7e6d395",
       "label": "version",
-      "last": "2026-08-31T04:37:29.843991+00:00",
+      "last": "2026-08-31T04:56:27.190033+00:00",
       "provenance": [
+        {
+          "date": "2026-08-31T04:56:27.190033+00:00",
+          "outcome": "useful",
+          "q": "do 3, 4, 5, 6, 7, 11"
+        },
         {
           "date": "2026-08-31T04:37:29.843991+00:00",
           "outcome": "useful",
@@ -303,10 +333,26 @@
           "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
         }
       ],
-      "score": 1.999384102,
+      "score": 2.964504626,
       "source_file": "package.json",
       "status": "preferred",
-      "uses": 2
+      "uses": 3
+    },
+    "service_worker": {
+      "code_fingerprint": "78b2322feaf4c079df05614b9e19543e23b249796fe73ac47273151e43931752",
+      "label": "service-worker.js",
+      "last": "2026-08-31T04:56:27.190033+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-31T04:56:27.190033+00:00",
+          "outcome": "useful",
+          "q": "do 3, 4, 5, 6, 7, 11"
+        }
+      ],
+      "score": 0.988440056,
+      "source_file": "service-worker.js",
+      "status": "tentative",
+      "uses": 1
     }
   },
   "version": 1
