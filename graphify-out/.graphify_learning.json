@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-08-30T20:44:09.642196+00:00",
+  "generated_at": "2026-08-31T04:17:26.233619+00:00",
   "nodes": {
     "app_animatemoneyto": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "animateMoneyTo()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -12,29 +12,34 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.994664392,
+      "score": 0.987456584,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_appview": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "appView",
-      "last": "2026-08-30T15:10:43.901200+00:00",
+      "last": "2026-08-30T20:49:38.596620+00:00",
       "provenance": [
+        {
+          "date": "2026-08-30T20:49:38.596620+00:00",
+          "outcome": "useful",
+          "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
+        },
         {
           "date": "2026-08-30T15:10:43.901200+00:00",
           "outcome": "useful",
           "q": "go do native fast"
         }
       ],
-      "score": 0.994664392,
+      "score": 1.980297447,
       "source_file": "app.js",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "app_attachswipetodelete": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "attachSwipeToDelete()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -44,13 +49,29 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.994664392,
+      "score": 0.987456584,
+      "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_historytoggle": {
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "label": "historyToggle",
+      "last": "2026-08-30T20:49:38.596620+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-30T20:49:38.596620+00:00",
+          "outcome": "useful",
+          "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
+        }
+      ],
+      "score": 0.992840863,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_renderchart": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "renderChart()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -60,13 +81,13 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.998599749,
+      "score": 0.991363424,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_renderhistory": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "renderHistory()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -76,29 +97,34 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.998599749,
+      "score": 0.991363424,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_rendersecondchoice": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "renderSecondChoice()",
-      "last": "2026-08-30T19:16:49.782154+00:00",
+      "last": "2026-08-30T20:49:38.596620+00:00",
       "provenance": [
+        {
+          "date": "2026-08-30T20:49:38.596620+00:00",
+          "outcome": "useful",
+          "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
+        },
         {
           "date": "2026-08-30T19:16:49.782154+00:00",
           "outcome": "useful",
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.998599749,
+      "score": 1.984204287,
       "source_file": "app.js",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "app_renderwallets": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "renderWallets()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -108,13 +134,13 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.998599749,
+      "score": 0.991363424,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_showundo": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "showUndo()",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -124,13 +150,13 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.994664392,
+      "score": 0.987456584,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_summarizeentry": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "summarizeEntry()",
       "last": "2026-08-30T19:16:49.782154+00:00",
       "provenance": [
@@ -140,13 +166,13 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.998599749,
+      "score": 0.991363424,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "app_tabbar": {
-      "code_fingerprint": "e41668bae58a324e7bd43fae6d870e0f228e6b21e314dcb27e5569c6f002c628",
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
       "label": "tabBar",
       "last": "2026-08-30T15:10:43.901200+00:00",
       "provenance": [
@@ -156,8 +182,24 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.994664392,
+      "score": 0.987456584,
       "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "index_modal_action_system": {
+      "code_fingerprint": "ef9c0b9a7baea6791db12d38da5af6e3ed9e5bddd76b1265c2a187c65ca69496",
+      "label": "Modal action system",
+      "last": "2026-08-30T20:49:38.596620+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-30T20:49:38.596620+00:00",
+          "outcome": "useful",
+          "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
+        }
+      ],
+      "score": 0.992840863,
+      "source_file": "index.html",
       "status": "tentative",
       "uses": 1
     }

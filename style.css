@@ -1829,7 +1829,9 @@ td {
    INSIGHTS + ACTIVITY FINDER
 ========================= */
 .section-heading-row, .activity-search-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
-.section-heading-row h3, .activity-search-head h3 { margin:2px 0 0; }
+.section-heading-row h3 { margin:2px 0 0; }
+.activity-search-head { align-items:center; margin-bottom:14px; }
+.activity-search-head h3 { margin:0; }
 .section-eyebrow { color:#818181; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
 .insights-section { margin-top:6px; }
 .insights-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
@@ -1838,17 +1840,36 @@ td {
 .insight-card strong { display:block; overflow:hidden; margin:7px 0 5px; color:#f5f5f5; font-size:clamp(17px,4.8vw,23px); line-height:1.1; text-overflow:ellipsis; white-space:nowrap; }
 .insight-card small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-.activity-search { margin:0 0 22px; padding:16px; border:1px solid #242424; border-radius:18px; background:#0d0d0d; }
-.activity-modal { align-items:flex-start; padding:calc(env(safe-area-inset-top,0px) + 58px) 0 18px; }
-.activity-modal-card { width:calc(100% - 28px); max-width:440px; max-height:calc(100% - 76px); padding:18px; text-align:left; }
-.activity-head-actions { display:flex; align-items:center; gap:10px; }
-.icon-close { display:flex; align-items:center; justify-content:center; width:32px; height:32px; padding:0; border:0; border-radius:50%; background:#1e1e1e; color:#aaa; font-size:14px; }
-.activity-search-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:14px; }
-.activity-search-controls .search-field { grid-column:1/-1; }
-.activity-search-controls input, .activity-search-controls select { width:100%; }
-.date-filter { display:flex; min-width:0; flex-direction:column; gap:5px; color:#777; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-.text-button { width:auto; padding:6px 0; border:0; background:transparent; color:#bdbdbd; }
-.activity-summary { margin:12px 0 0; color:#777; font-size:12px; }
+.activity-modal-card { max-width:360px; text-align:left; }
+.activity-search-controls { display:grid; grid-template-columns:1fr; gap:10px; }
+.activity-search-controls input,
+.activity-search-controls select {
+  width:100%;
+  min-height:45px;
+  padding:12px;
+  background:#1a1a1a;
+  border:1px solid #2a2a2a;
+  border-radius:10px;
+  color:#fff;
+  font-family:inherit;
+  font-size:15px;
+  -webkit-appearance:none;
+  appearance:none;
+}
+.activity-search-controls select {
+  padding-right:36px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23777' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+}
+.activity-search-controls select option { background:#1a1a1a; color:#fff; }
+.activity-search-controls input::placeholder { color:#777; }
+.activity-search-controls input:focus,
+.activity-search-controls select:focus { outline:none; border-color:#3a3a3a; }
+.activity-search-controls input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(.6); cursor:pointer; }
+.date-filter { display:flex; min-width:0; flex-direction:column; gap:6px; color:#777; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.text-button { width:auto; padding:6px 0; border:0; background:transparent; color:#888; font-size:12px; }
+.activity-summary { margin:14px 0 0; color:#777; font-size:12px; line-height:1.45; }
 .activity-results { margin-top:8px; }
 .activity-result { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 14px; padding:12px 0; border-top:1px solid #202020; }
 .activity-result-main { min-width:0; }
@@ -1870,7 +1891,6 @@ td {
 .skeleton-card { height:122px; border-radius:18px; }
 .skeleton-block { height:150px; margin-top:18px; border-radius:18px; }
 @keyframes skeleton-shift { to { background-position:-220% 0; } }
-@media (max-width:360px) { .activity-search-controls { grid-template-columns:1fr; } .activity-search-controls .search-field { grid-column:auto; } }
 @media (max-width:380px) { header h1 { font-size:22px; white-space:nowrap; } .settings-btn { width:32px; } }
 
 /* Opening row of a history - money brought in from last month. Italic and

@@ -2220,6 +2220,32 @@ test("activity search opens from the header before History and closes accessibly
   assert.equal(w.document.activeElement, searchButton, "closing returns focus to the trigger");
 });
 
+test("activity search follows the repository modal and form language", () => {
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /activity-modal-card[^>]*role="dialog"/);
+  assert.match(html, /id="activity-close"[^>]*>Done</,
+    "the finder uses the same bottom action language as other modals");
+  assert.match(css, /\.activity-modal-card\s*\{[^}]*max-width:360px/s,
+    "the finder keeps the established modal width");
+  assert.match(css, /\.activity-search-controls input,[\s\S]*?background:#1a1a1a;[\s\S]*?border-radius:10px;/,
+    "its controls use the same dark field and radius as transaction forms");
+  assert.doesNotMatch(css, /\.activity-modal\s*\{[^}]*align-items:flex-start/s,
+    "it no longer invents an oversized top-aligned modal treatment");
+});
+
+test("release version is consistent across package, lockfile, UI, and cache", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
+  assert.equal(pkg.version, "1.25.2");
+  assert.equal(lock.version, pkg.version);
+  assert.equal(lock.packages[""].version, pkg.version);
+  assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
+  assert.match(sw, /CACHE_NAME = "mmt-v52"/);
+});
+
 test("empty and loading states explain what happens next", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="app-loading"/);
