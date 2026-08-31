@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-31T04:17:26.233619+00:00",
+  "generated_at": "2026-08-31T04:31:24.723572+00:00",
   "nodes": {
     "app_animatemoneyto": {
       "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
@@ -12,7 +12,7 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.987456584,
+      "score": 0.987235195,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -33,7 +33,7 @@
           "q": "go do native fast"
         }
       ],
-      "score": 1.980297447,
+      "score": 1.97985346,
       "source_file": "app.js",
       "status": "preferred",
       "uses": 2
@@ -49,7 +49,7 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.987456584,
+      "score": 0.987235195,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -65,7 +65,7 @@
           "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
         }
       ],
-      "score": 0.992840863,
+      "score": 0.992618266,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -81,7 +81,7 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.991363424,
+      "score": 0.991141158,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -97,7 +97,7 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.991363424,
+      "score": 0.991141158,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -118,7 +118,7 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 1.984204287,
+      "score": 1.983759424,
       "source_file": "app.js",
       "status": "preferred",
       "uses": 2
@@ -134,7 +134,7 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.991363424,
+      "score": 0.991141158,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -150,7 +150,7 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.987456584,
+      "score": 0.987235195,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -166,7 +166,7 @@
           "q": "lets do 5,6,8"
         }
       ],
-      "score": 0.991363424,
+      "score": 0.991141158,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
@@ -182,24 +182,77 @@
           "q": "go do native fast"
         }
       ],
-      "score": 0.987456584,
+      "score": 0.987235195,
+      "source_file": "app.js",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_wiredateinput": {
+      "code_fingerprint": "f15e653fb1320d26983962ae3a254ffa36662893d4112ab05bbd34866760249b",
+      "label": "wireDateInput()",
+      "last": "2026-08-31T04:23:58.502178+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-31T04:23:58.502178+00:00",
+          "outcome": "useful",
+          "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
+        }
+      ],
+      "score": 0.99988068,
       "source_file": "app.js",
       "status": "tentative",
       "uses": 1
     },
     "index_modal_action_system": {
-      "code_fingerprint": "ef9c0b9a7baea6791db12d38da5af6e3ed9e5bddd76b1265c2a187c65ca69496",
+      "code_fingerprint": "bf149c75bbdeb078e62e898a3789f2764b89dcd55d786cc9fee2e6499871fff2",
       "label": "Modal action system",
-      "last": "2026-08-30T20:49:38.596620+00:00",
+      "last": "2026-08-31T04:23:58.502178+00:00",
       "provenance": [
+        {
+          "date": "2026-08-31T04:23:58.502178+00:00",
+          "outcome": "useful",
+          "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
+        },
         {
           "date": "2026-08-30T20:49:38.596620+00:00",
           "outcome": "useful",
           "q": "for the activity find, instead of a card, make it a magnify glasses in top, left of history"
         }
       ],
-      "score": 0.992840863,
+      "score": 1.992498945,
       "source_file": "index.html",
+      "status": "preferred",
+      "uses": 2
+    },
+    "package": {
+      "code_fingerprint": "f55db1dba01bb58a11384d432b176ad27e7dead816a62d7a746db5937e323b58",
+      "label": "package.json",
+      "last": "2026-08-31T04:23:58.502178+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-31T04:23:58.502178+00:00",
+          "outcome": "useful",
+          "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
+        }
+      ],
+      "score": 0.99988068,
+      "source_file": "package.json",
+      "status": "tentative",
+      "uses": 1
+    },
+    "package_version": {
+      "code_fingerprint": "f55db1dba01bb58a11384d432b176ad27e7dead816a62d7a746db5937e323b58",
+      "label": "version",
+      "last": "2026-08-31T04:23:58.502178+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-31T04:23:58.502178+00:00",
+          "outcome": "useful",
+          "q": "can you change the find card, match with the other style in this repo, from now on i want you to note that in this repo you need to match the style with everything else, and after finishing update i need you to bump up the version"
+        }
+      ],
+      "score": 0.99988068,
+      "source_file": "package.json",
       "status": "tentative",
       "uses": 1
     }

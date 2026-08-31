@@ -2239,11 +2239,23 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.25.2");
+  assert.equal(pkg.version, "1.26.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v52"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v53"/);
+});
+
+test("the cosmetic system stays shared across cards, navigation, and modals", () => {
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+
+  assert.match(css, /--radius-card:\s*16px/);
+  assert.match(css, /--radius-sheet:\s*20px/);
+  assert.match(css, /--space-page:\s*20px/);
+  assert.match(css, /\.card\s*\{[^}]*var\(--radius-card\)[^}]*var\(--space-card\)/s);
+  assert.match(css, /\.modal-card\s*\{[^}]*var\(--radius-sheet\)[^}]*var\(--shadow-sheet\)/s);
+  assert.match(css, /\.tab-btn\.is-active svg\s*\{[^}]*background:\s*#202020/s);
+  assert.match(css, /@media \(max-width:380px\)[^{]*\{[^}]*--space-page:\s*16px/s);
 });
 
 test("empty and loading states explain what happens next", () => {

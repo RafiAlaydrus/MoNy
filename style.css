@@ -36,6 +36,21 @@
   --motion-emphasis: 220ms;
   --ease-native: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-native: cubic-bezier(0.4, 0, 1, 1);
+  --surface-card: #111;
+  --surface-raised: #171717;
+  --surface-field: #1a1a1a;
+  --border-subtle: #242424;
+  --border-strong: #303030;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #707070;
+  --radius-control: 10px;
+  --radius-card: 16px;
+  --radius-sheet: 20px;
+  --space-page: 20px;
+  --space-card: 16px;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  --shadow-sheet: 0 24px 70px rgba(0, 0, 0, 0.72), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
 }
 
 html, body {
@@ -71,6 +86,13 @@ button {
 button:active {
   transform: scale(0.97);
   transition-duration: var(--motion-press);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #8c8c8c;
+  outline-offset: 2px;
 }
 
 /* =====================
@@ -115,7 +137,7 @@ button:active {
 .app {
   max-width: 480px;
   margin: 0 auto;
-  padding: 20px;
+  padding: var(--space-page);
 }
 
 /* Room for the fixed tab bar, so the last row of a list is never parked
@@ -147,13 +169,17 @@ button:active {
   /* The extra bottom padding lifts the labels clear of the iPhone home
      indicator, which sits inside the safe-area inset rather than below it -
      inset alone left the words touching the bar. */
-  padding: 8px 4px calc(18px + env(safe-area-inset-bottom, 0px));
-  background: rgba(0, 0, 0, 0.92);
+  gap: 2px;
+  padding: 7px 8px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(15, 15, 15, 0.94), rgba(0, 0, 0, 0.97));
   /* The blur is what stops content scrolling underneath from reading as a
      smear of grey behind the labels. */
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid #1c1c1c;
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.45);
 }
 
 .tab-btn {
@@ -161,15 +187,17 @@ button:active {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 6px 0;
+  gap: 4px;
+  min-height: 50px;
+  padding: 5px 0 4px;
   background: none;
   border: none;
   /* Dim by default; the active tab is the only near-white one. Greyscale, so
      brightness carries the selection the way colour would elsewhere. */
-  color: #6a6a6a;
+  color: #686868;
   font-size: 10px;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-family: inherit;
   cursor: pointer;
@@ -178,8 +206,22 @@ button:active {
               opacity var(--motion-fast) ease;
 }
 
+.tab-btn svg {
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  border-radius: 9px;
+  transition: background-color var(--motion-fast) ease, transform var(--motion-fast) var(--ease-native);
+}
+
 .tab-btn.is-active {
-  color: #fff;
+  color: var(--text-primary);
+}
+
+.tab-btn.is-active svg {
+  background: #202020;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.045) inset;
+  transform: translateY(-1px);
 }
 
 .tab-btn:active {
@@ -478,20 +520,22 @@ button:active {
 }
 
 header {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 header h1 {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: clamp(27px, 7.4vw, 32px);
+  font-weight: 750;
   margin: 0;
-  letter-spacing: 0.3px;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
 }
 
 header p {
-  margin-top: 6px;
+  margin: 7px 0 0;
   font-size: 14px;
-  color: #9a9a9a;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
 /* =====================
@@ -501,58 +545,66 @@ header p {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .card {
-  background: #111;
-  border: 1px solid #232323;
-  border-radius: 14px;
-  padding: 16px;
+  background: linear-gradient(145deg, #141414, var(--surface-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  box-shadow: var(--shadow-card);
 }
 
 .card span {
   display: block;
   font-size: 12px;
-  color: #8a8a8a;
-  margin-bottom: 6px;
+  color: var(--text-tertiary);
+  margin-bottom: 7px;
 }
 
 .card > span {
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 650;
+  letter-spacing: 0.11em;
   font-size: 11px;
 }
 
 .card h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
 }
 
 /* Emphasize remaining money */
 #remaining-money {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 28px;
+  font-weight: 720;
 }
 
 /* =====================
    Section Titles
 ===================== */
 h3 {
-  margin: 16px 0 10px;
-  font-size: 18px;
-  font-weight: 600;
+  margin: 22px 0 12px;
+  font-size: 19px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 /* =====================
    Priority Section
 ===================== */
 #priority-list {
-  background: #0f0f0f;
-  border: 1px solid #1e1e1e;
-  border-radius: 14px;
-  padding: 10px 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: 10px var(--space-card);
+  box-shadow: var(--shadow-card);
 }
 
 /* SWIPE TO DELETE - three layers stacked in one wrapper.
@@ -611,10 +663,11 @@ h3 {
    Second Choice Form
 ===================== */
 .second-form {
-  background: #0f0f0f;
-  border: 1px solid #1e1e1e;
-  border-radius: 14px;
-  padding: 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  box-shadow: var(--shadow-card);
 }
 
 .second-form input,
@@ -622,9 +675,9 @@ h3 {
   width: 100%;
   padding: 12px;
   margin-bottom: 10px;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  border-radius: 10px;
+  background: var(--surface-field);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
   color: #fff;
   font-size: 15px;
   -webkit-appearance: none;
@@ -865,7 +918,10 @@ td {
   right: 0;
   top: var(--vv-top, 0px);
   height: var(--vv-height, 100%);
-  background: rgba(0, 0, 0, 0.6);
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -881,14 +937,15 @@ td {
    pickers grow with the number of wallets, and on a short screen with the
    keyboard up they must scroll internally rather than overflow the card. */
 .modal-card {
-  background: #111;
-  border-radius: 16px;
+  background: linear-gradient(155deg, var(--surface-raised), #101010 70%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sheet);
   padding: 20px;
-  width: 90%;
+  width: 100%;
   max-width: 360px;
   max-height: 100%;
   overflow-y: auto;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-sheet);
   pointer-events: auto;
   z-index: 10000;
 }
@@ -932,25 +989,33 @@ td {
 }
 
 .modal-card h3 {
-  margin-bottom: 10px;
+  margin: 0 0 10px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
 }
 
 .modal-card p {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 14px;
+  line-height: 1.45;
 }
 
 .modal-actions {
   display: flex;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 22px;
+  padding-top: 2px;
 }
 
 .modal-actions button {
   flex: 1;
-  padding: 12px;
-  border-radius: 12px;
+  min-height: 44px;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
   border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 650;
   cursor: pointer;
 }
 
@@ -960,9 +1025,9 @@ td {
 }
 
 .modal-actions button:not(.danger) {
-  background: transparent;
-  border: 1px solid #333;
-  color: #ccc;
+  background: #191919;
+  border: 1px solid var(--border-strong);
+  color: #d0d0d0;
 }
 
 /* Prevent app from stealing clicks when modal is open */
@@ -1365,10 +1430,11 @@ td {
 }
 
 .chart-container {
-  background: #111;
-  border: 1px solid #232323;
-  border-radius: 14px;
-  padding: 16px;
+  background: linear-gradient(145deg, #141414, var(--surface-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   /* Stretch, not centre: everything in here is now full-width rather than a
@@ -1522,7 +1588,7 @@ td {
   flex: 1;
   background: #0f0f0f;
   border: 1px solid #1e1e1e;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 10px 6px;
   text-align: center;
 }
@@ -1558,11 +1624,12 @@ td {
 }
 
 .history-row {
-  background: #111;
-  border: 1px solid #232323;
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
+  background: linear-gradient(145deg, #141414, var(--surface-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: 14px var(--space-card);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
 }
 
 .history-row-main {
@@ -1832,10 +1899,10 @@ td {
 .section-heading-row h3 { margin:2px 0 0; }
 .activity-search-head { align-items:center; margin-bottom:14px; }
 .activity-search-head h3 { margin:0; }
-.section-eyebrow { color:#818181; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+.section-eyebrow { color:var(--text-tertiary); font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
 .insights-section { margin-top:6px; }
 .insights-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
-.insight-card { min-width:0; padding:15px; border:1px solid #262626; border-radius:16px; background:linear-gradient(145deg,#151515,#0c0c0c); }
+.insight-card { min-width:0; padding:var(--space-card); border:1px solid var(--border-subtle); border-radius:var(--radius-card); background:linear-gradient(145deg,#151515,#0d0d0d); box-shadow:var(--shadow-card); }
 .insight-card > span, .insight-card small { display:block; color:#898989; font-size:12px; }
 .insight-card strong { display:block; overflow:hidden; margin:7px 0 5px; color:#f5f5f5; font-size:clamp(17px,4.8vw,23px); line-height:1.1; text-overflow:ellipsis; white-space:nowrap; }
 .insight-card small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1847,9 +1914,9 @@ td {
   width:100%;
   min-height:45px;
   padding:12px;
-  background:#1a1a1a;
-  border:1px solid #2a2a2a;
-  border-radius:10px;
+  background:var(--surface-field);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-control);
   color:#fff;
   font-family:inherit;
   font-size:15px;
@@ -1891,7 +1958,13 @@ td {
 .skeleton-card { height:122px; border-radius:18px; }
 .skeleton-block { height:150px; margin-top:18px; border-radius:18px; }
 @keyframes skeleton-shift { to { background-position:-220% 0; } }
-@media (max-width:380px) { header h1 { font-size:22px; white-space:nowrap; } .settings-btn { width:32px; } }
+@media (max-width:380px) {
+  :root { --space-page:16px; --space-card:14px; }
+  header h1 { font-size:24px; white-space:nowrap; }
+  .settings-btn { width:32px; }
+  .tab-bar { padding-inline:4px; }
+  .tab-btn { font-size:9px; letter-spacing:.06em; }
+}
 
 /* Opening row of a history - money brought in from last month. Italic and
    muted so it reads as a statement about the list rather than an entry in
