@@ -78,6 +78,7 @@
 :root[data-theme="light"] .insight-card strong { color:#171717; }
 :root[data-theme="light"] #tab-bar { background:rgba(255,255,255,.92); border-color:#ddd; }
 :root[data-theme="light"] .setting-btn-action { background:#e8e8e5; color:#222; }
+:root[data-theme="light"] .settings-group { background:#fafaf8; border-color:#deded9; }
 
 .wallet-settings-row small { display:block; margin-top:3px; color:var(--text-tertiary); font-size:11px; }
 .recurring-form { margin-top:14px; }
@@ -418,17 +419,20 @@ select:focus-visible {
   .settings-btn { transition: none; }
 }
 
-.settings-panel {
-  position: absolute;
-  top: 36px;
-  right: 0;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  border-radius: 14px;
-  padding: 14px 16px;
-  width: 280px;
-  z-index: 100;
-}
+.settings-modal { align-items:center; justify-content:center; padding:20px; }
+.settings-panel-card { width:min(100%, 440px); max-height:min(82dvh, 720px); overflow:auto; padding:20px; }
+.settings-modal-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
+.settings-modal-head h3 { margin:4px 0 0; font-size:24px; }
+.settings-modal-head .settings-btn { flex:0 0 auto; }
+.settings-modal-actions { margin-top:18px; }
+.settings-group { margin:0; padding:16px; border:1px solid var(--border-subtle); border-radius:var(--radius-card); background:rgba(255,255,255,.018); }
+.settings-group + .settings-group { margin-top:12px; }
+.settings-group h4 { margin:0 0 13px; color:var(--text-tertiary); font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+.settings-group .setting-row + .setting-row { margin-top:12px; }
+.settings-group .setting-note { margin:7px 0 0; }
+.settings-group .setting-note + .setting-row { margin-top:10px; }
+.settings-group .wallets-settings-list { margin-top:10px; }
+.settings-group .setting-btn-action { margin-top:10px; }
 
 .setting-row {
   display: flex;
@@ -1871,10 +1875,7 @@ td {
 
 /* Grows out of the button that opened it, hence the top-right origin - a
    default centre origin makes the panel appear to expand from nowhere. */
-.settings-panel:not(.hidden) {
-  transform-origin: top right;
-  animation: pop-in var(--motion-fast) var(--ease-native);
-}
+.settings-modal:not(.hidden) .settings-panel-card { animation: pop-in var(--motion-fast) var(--ease-native); }
 
 .modal:not(.hidden):not(.is-closing) {
   animation: fade-in var(--motion-standard) ease;
@@ -1893,10 +1894,7 @@ td {
   animation: pop-out var(--motion-fast) var(--ease-in-native) forwards;
 }
 
-.settings-panel.is-closing {
-  pointer-events: none;
-  animation: pop-out var(--motion-fast) var(--ease-in-native) forwards;
-}
+.settings-modal.is-closing .settings-panel-card { pointer-events:none; animation:pop-out var(--motion-fast) var(--ease-in-native) forwards; }
 
 @keyframes pop-in {
   from { opacity: 0; transform: translateY(4px) scale(0.98); }
@@ -2182,15 +2180,15 @@ td {
   animation:chart-legend-in var(--motion-standard) var(--ease-native) var(--chart-delay, 0ms) forwards;
 }
 
-.settings-panel:not(.hidden) .setting-row,
-.settings-panel:not(.hidden) .setting-btn-action,
-.settings-panel:not(.hidden) .setting-note {
+.settings-modal:not(.hidden) .setting-row,
+.settings-modal:not(.hidden) .setting-btn-action,
+.settings-modal:not(.hidden) .setting-note {
   animation:setting-row-in var(--motion-standard) var(--ease-native) both;
 }
-.settings-panel:not(.hidden) .setting-row:nth-of-type(2),
-.settings-panel:not(.hidden) .setting-btn-action { animation-delay:24ms; }
-.settings-panel:not(.hidden) .setting-row:nth-of-type(3) { animation-delay:48ms; }
-.settings-panel:not(.hidden) .setting-row:nth-of-type(4) { animation-delay:72ms; }
+.settings-modal:not(.hidden) .setting-row:nth-of-type(2),
+.settings-modal:not(.hidden) .setting-btn-action { animation-delay:24ms; }
+.settings-modal:not(.hidden) .setting-row:nth-of-type(3) { animation-delay:48ms; }
+.settings-modal:not(.hidden) .setting-row:nth-of-type(4) { animation-delay:72ms; }
 
 .surface-enter { animation:surface-enter var(--motion-standard) var(--ease-native) var(--surface-delay, 0ms) both; }
 .form-success { animation:form-success 380ms var(--ease-native); }

@@ -136,92 +136,46 @@
             </svg>
           </button>
 
-          <div id="settings-panel" class="settings-panel hidden">
-            <div class="setting-row">
-              <span>Show monthly chart</span>
-              <label class="toggle">
-                <input type="checkbox" id="chart-toggle" />
-                <span class="toggle-slider"></span>
-              </label>
+          <div id="settings-panel" class="modal settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div class="modal-card settings-panel-card">
+            <div class="settings-modal-head">
+              <div><span class="section-eyebrow">Preferences</span><h3 id="settings-title">Settings</h3></div>
+              <button id="close-settings-top" class="settings-btn" type="button" aria-label="Close settings">✕</button>
             </div>
-            <!-- Which day a budget cycle begins. Options are built by app.js
-                 so 1 can be labelled as the plain calendar month. Changing it
-                 never re-cuts the cycle on screen - it only moves the next
-                 rollover, and the note below says exactly when that is. -->
-            <div class="setting-row">
-              <span>Month starts</span>
-              <select id="month-start-select" class="setting-select"></select>
-            </div>
-            <p id="month-start-note" class="setting-note hidden"></p>
-            <div class="setting-row">
-              <span>Carry balance forward</span>
-              <label class="toggle">
-                <input type="checkbox" id="carry-over-toggle" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="setting-row">
-              <span>Currency</span>
-              <select id="currency-select" class="setting-select">
-                <option value="RM">RM</option>
-                <option value="$">USD ($)</option>
-                <option value="S$">SGD (S$)</option>
-                <option value="€">EUR (€)</option>
-                <option value="£">GBP (£)</option>
-                <option value="¥">JPY (¥)</option>
-                <option value="₩">KRW (₩)</option>
-                <option value="Rp">IDR (Rp)</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <span>Appearance</span>
-              <select id="theme-select" class="setting-select">
-                <option value="system">System</option>
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <span>Sort transactions</span>
-              <select id="sort-select" class="setting-select">
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <span>Budget limit</span>
-              <input type="number" inputmode="decimal" id="budget-limit-input" class="setting-input" placeholder="Off" />
-            </div>
-            <div class="setting-row wallets-header">
-              <span>Wallets</span>
-              <span id="wallets-count" class="wallets-count">0 wallets</span>
-            </div>
-            <div id="wallets-settings-list" class="wallets-settings-list"></div>
-            <button id="add-wallet-btn" class="setting-btn-action">+ Add Wallet</button>
-            <!-- Inline margin removed: the ~ combinator in style.css now
-                 spaces this correctly even with the Add Wallet button above. -->
-            <!-- Categories get their own panel rather than sitting inline:
-                 two editable lists with rename fields is more than a settings
-                 row can hold, and it pushed Export/Import off the screen. -->
-            <div class="setting-row">
-              <span>Category settings</span>
-              <span id="category-count" class="wallets-count">0</span>
-            </div>
-            <button id="open-category-panel-btn" class="setting-btn-action">Edit Categories</button>
-            <button id="open-recurring-panel-btn" class="setting-btn-action">Recurring transactions</button>
-            <div class="setting-row backup-row">
-              <span>Local backup</span>
-              <span id="backup-status" class="wallets-count">Not backed up yet</span>
-            </div>
-            <button id="restore-backup-btn" class="setting-btn-action">Restore latest backup</button>
-            <div class="setting-row">
+            <section class="settings-group" aria-labelledby="settings-budget-title">
+              <h4 id="settings-budget-title">Budget &amp; cycle</h4>
+              <div class="setting-row"><span>Month starts</span><select id="month-start-select" class="setting-select"></select></div>
+              <p id="month-start-note" class="setting-note hidden"></p>
+              <div class="setting-row"><span>Carry balance forward</span><label class="toggle"><input type="checkbox" id="carry-over-toggle" /><span class="toggle-slider"></span></label></div>
+              <div class="setting-row"><span>Currency</span><select id="currency-select" class="setting-select"><option value="RM">RM</option><option value="$">USD ($)</option><option value="S$">SGD (S$)</option><option value="€">EUR (€)</option><option value="£">GBP (£)</option><option value="¥">JPY (¥)</option><option value="₩">KRW (₩)</option><option value="Rp">IDR (Rp)</option></select></div>
+              <div class="setting-row"><span>Budget limit</span><input type="number" inputmode="decimal" id="budget-limit-input" class="setting-input" placeholder="Off" /></div>
+            </section>
+            <section class="settings-group" aria-labelledby="settings-display-title">
+              <h4 id="settings-display-title">Display</h4>
+              <div class="setting-row"><span>Show monthly chart</span><label class="toggle"><input type="checkbox" id="chart-toggle" /><span class="toggle-slider"></span></label></div>
+              <div class="setting-row"><span>Appearance</span><select id="theme-select" class="setting-select"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
+              <div class="setting-row"><span>Sort transactions</span><select id="sort-select" class="setting-select"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div>
+            </section>
+            <section class="settings-group" aria-labelledby="settings-manage-title">
+              <h4 id="settings-manage-title">Manage money</h4>
+              <div class="setting-row wallets-header"><span>Wallets</span><span id="wallets-count" class="wallets-count">0 wallets</span></div>
+              <div id="wallets-settings-list" class="wallets-settings-list"></div>
+              <button id="add-wallet-btn" class="setting-btn-action">+ Add Wallet</button>
+              <div class="setting-row"><span>Category settings</span><span id="category-count" class="wallets-count">0</span></div>
+              <button id="open-category-panel-btn" class="setting-btn-action">Edit Categories</button>
+              <button id="open-recurring-panel-btn" class="setting-btn-action">Recurring transactions</button>
+            </section>
+            <section class="settings-group" aria-labelledby="settings-data-title">
+              <h4 id="settings-data-title">Data &amp; backup</h4>
+              <div class="setting-row backup-row"><span>Local backup</span><span id="backup-status" class="wallets-count">Not backed up yet</span></div>
+              <button id="restore-backup-btn" class="setting-btn-action">Restore latest backup</button>
               <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
-            </div>
-            <div class="setting-row">
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
+            </section>
+            <div class="setting-version">v1.32.0</div>
+            <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
-            <div class="setting-version">v1.29.0</div>
           </div>
         </section>
       </div>

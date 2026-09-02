@@ -3287,16 +3287,18 @@ const settingsPanel = document.getElementById("settings-panel");
 settingsToggle.addEventListener("click", () => {
   if (settingsPanel.classList.contains("hidden") || settingsPanel.classList.contains("is-closing")) {
     revealSurface(settingsPanel);
+    requestAnimationFrame(() => document.getElementById("month-start-select").focus());
   } else {
     concealSurface(settingsPanel);
   }
 });
 
-// Closes settings when clicking outside
-document.addEventListener("click", (e) => {
-  if (!settingsPanel.contains(e.target) && !settingsToggle.contains(e.target)) {
-    concealSurface(settingsPanel);
-  }
+function closeSettings() { concealSurface(settingsPanel); settingsToggle.focus(); }
+document.getElementById("close-settings").addEventListener("click", closeSettings);
+document.getElementById("close-settings-top").addEventListener("click", closeSettings);
+settingsPanel.addEventListener("click", event => { if (event.target === settingsPanel) closeSettings(); });
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && !settingsPanel.classList.contains("hidden")) closeSettings();
 });
 
 const chartToggle = document.getElementById("chart-toggle");
@@ -3446,11 +3448,16 @@ function applyTheme() {
 }
 themeSelect.value = settings.theme;
 applyTheme();
-themeSelect.addEventListener("change", () => {
+function saveThemeSelection() {
   settings.theme = themeSelect.value;
   saveSettings();
   applyTheme();
-});
+}
+/* iOS keeps its native select sheet open after a choice. `change` can wait
+   until that sheet closes, so also listen to input and update the page while
+   the chosen row is still visible. */
+themeSelect.addEventListener("input", saveThemeSelection);
+themeSelect.addEventListener("change", saveThemeSelection);
 
 /* =========================
    SORT SETTING
