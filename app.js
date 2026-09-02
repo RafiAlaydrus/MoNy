@@ -6,11 +6,13 @@ const STORAGE_KEY = "monthly-money-tracker";
 const SETTINGS_KEY = "monthly-money-tracker-settings";
 const BACKUP_PRIORITY_KEY = "monthly-money-tracker-priority-backup";
 const ARCHIVE_KEY = "monthly-money-tracker-archive";
+const SNAPSHOT_KEY = "monthly-money-tracker-latest-backup";
 
 /* Persistence. Declared before anything writes, because the migrations below
    already save. A quota failure is surfaced once instead of losing data
    silently. */
 let storageWarned = false;
+let snapshotReady = false;
 
 function save(key, value) {
   try {
@@ -33,9 +35,9 @@ function save(key, value) {
 /* One wrapper per stored key. Every write in the app goes through these three
    rather than touching localStorage directly, so a full-storage failure is
    caught in one place instead of silently dropping data at 36 call sites. */
-function saveData() { return save(STORAGE_KEY, data); }
-function saveSettings() { return save(SETTINGS_KEY, settings); }
-function saveArchive() { return save(ARCHIVE_KEY, archive); }
+function saveData() { const ok = save(STORAGE_KEY, data); if (ok && snapshotReady) saveSnapshot(); return ok; }
+function saveSettings() { const ok = save(SETTINGS_KEY, settings); if (ok && snapshotReady) saveSnapshot(); return ok; }
+function saveArchive() { const ok = save(ARCHIVE_KEY, archive); if (ok && snapshotReady) saveSnapshot(); return ok; }
 
 const now = new Date();
 
@@ -116,6 +118,8 @@ if (settings.carryOver === undefined) settings.carryOver = true;
    longer than a short month clamp to its last day, so 31 starts February on
    the 28th. */
 if (settings.monthStartDay === undefined) settings.monthStartDay = 1;
+if (!['system', 'dark', 'light'].includes(settings.theme)) settings.theme = 'system';
+if (!Array.isArray(settings.recurring)) settings.recurring = [];
 
 /* The categories offered by the two entry forms.
  *
@@ -398,6 +402,7 @@ function performRollover(today) {
   }
 
   const fresh = freshMonthData(carry, nextStart);
+  applyRecurringTransactions(fresh);
   Object.keys(data).forEach(k => { delete data[k]; });
   Object.assign(data, fresh);
   saveData();
@@ -411,6 +416,30 @@ function performRollover(today) {
    reload, and everything keyed by this (the export filename, the trend
    chart's live bar, resetData) has to follow it. */
 let currentMonthKey = data.month;
+
+/* A single local recovery copy is updated after successful writes. It never
+   leaves this device and is intentionally separate from Export: a mistaken
+   import can be rolled back without needing a downloaded file. */
+function saveSnapshot() {
+  try {
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(), data, settings, archive,
+      priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
+    }));
+    renderBackupStatus();
+  } catch (_) { /* The regular write already reports quota failures. */ }
+}
+
+function applyRecurringTransactions(target) {
+  (settings.recurring || []).forEach(template => {
+    if (!template || !template.name || !(Number(template.amount) > 0)) return;
+    const item = { name: template.name, category: template.category || "Others", amount: Number(template.amount), date: `${target.cycleStart}T12:00:00.000Z` };
+    if (template.type === "bill") target.priority.push({ ...item, paid: false });
+    else target.secondChoice.push({ ...item, type: template.type === "income" ? "add" : "take", newMoney: template.type === "income" });
+  });
+}
+
+snapshotReady = true;
 
 /* MIGRATION: back-fill carry-over for a month that already rolled over.
 
@@ -2748,13 +2777,16 @@ function renderInsights() {
   const categoryNote = document.getElementById("insight-category-note");
   const comparisonEl = document.getElementById("insight-comparison");
   const comparisonNote = document.getElementById("insight-comparison-note");
+  const paceEl = document.getElementById("insight-pace");
+  const paceNote = document.getElementById("insight-pace-note");
 
   if (monthIsUnset(data)) {
-    dailyEl.textContent = projectedEl.textContent = categoryEl.textContent = comparisonEl.textContent = "—";
+    dailyEl.textContent = projectedEl.textContent = categoryEl.textContent = comparisonEl.textContent = paceEl.textContent = "—";
     dailyNote.textContent = "Set income to calculate";
     projectedNote.textContent = "After unpaid bills";
     categoryNote.textContent = "No spending yet";
     comparisonNote.textContent = "No completed cycle yet";
+    paceNote.textContent = "Set income to calculate";
     return;
   }
 
@@ -2787,6 +2819,17 @@ function renderInsights() {
       comparisonEl.textContent = `${change > 0 ? "+" : ""}${Math.round(change)}%`;
       comparisonNote.textContent = `${change <= 0 ? "Less" : "More"} than ${monthLabel(previousKey)}`;
     }
+  }
+  if (!settings.budgetLimit) {
+    paceEl.textContent = "—";
+    paceNote.textContent = "Set a budget limit to compare";
+  } else {
+    const spent = breakdown.spent;
+    const pct = Math.round((spent / settings.budgetLimit) * 100);
+    paceEl.textContent = `${pct}% used`;
+    paceNote.textContent = spent > settings.budgetLimit
+      ? `${cur()} ${fmt(spent - settings.budgetLimit)} over your limit`
+      : `${cur()} ${fmt(settings.budgetLimit - spent)} still available`;
   }
 }
 
@@ -3395,6 +3438,20 @@ currencySelect.addEventListener("change", () => {
   calculateRemaining();
 });
 
+const themeSelect = document.getElementById("theme-select");
+function applyTheme() {
+  const theme = settings.theme === "system" ? "" : settings.theme;
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f5f5f5" : "#000000";
+}
+themeSelect.value = settings.theme;
+applyTheme();
+themeSelect.addEventListener("change", () => {
+  settings.theme = themeSelect.value;
+  saveSettings();
+  applyTheme();
+});
+
 /* =========================
    SORT SETTING
 ========================= */
@@ -3910,6 +3967,57 @@ renderWalletsSettings();
 // The two entry dropdowns hold no options in the markup - build them now.
 renderAllCategoryOptions();
 renderAllCategorySettings();
+
+/* =========================
+   RECURRING & LOCAL BACKUP
+========================= */
+const recurringModal = document.getElementById("recurring-modal");
+const recurringList = document.getElementById("recurring-list");
+function renderRecurring() {
+  recurringList.innerHTML = settings.recurring.length
+    ? settings.recurring.map((item, index) => `<div class="wallet-settings-row"><span>${esc(item.name)}<small>${esc(item.type)} · ${esc(item.category || "Others")} · ${esc(cur())} ${fmt(item.amount)}</small></span><button data-recurring-delete="${index}" aria-label="Remove ${esc(item.name)}">✕</button></div>`).join("")
+    : '<p class="setting-note">No recurring transactions yet.</p>';
+  recurringList.querySelectorAll("[data-recurring-delete]").forEach(btn => btn.addEventListener("click", () => {
+    settings.recurring.splice(Number(btn.dataset.recurringDelete), 1);
+    saveSettings(); renderRecurring();
+  }));
+}
+document.getElementById("open-recurring-panel-btn").addEventListener("click", () => { renderRecurring(); revealSurface(recurringModal); });
+document.getElementById("close-recurring").addEventListener("click", () => concealSurface(recurringModal));
+document.getElementById("add-recurring").addEventListener("click", () => {
+  const name = document.getElementById("recurring-name");
+  const type = document.getElementById("recurring-type");
+  const category = document.getElementById("recurring-category");
+  const amount = document.getElementById("recurring-amount");
+  if (!name.value.trim() || !(Number(amount.value) > 0)) { name.classList.toggle("input-error", !name.value.trim()); amount.classList.toggle("input-error", !(Number(amount.value) > 0)); return; }
+  settings.recurring.push({ name: name.value.trim(), type: type.value, category: category.value.trim() || "Others", amount: Number(amount.value) });
+  saveSettings(); name.value = category.value = amount.value = ""; renderRecurring();
+});
+
+const backupStatus = document.getElementById("backup-status");
+function renderBackupStatus() {
+  if (!backupStatus) return;
+  const snapshot = load(SNAPSHOT_KEY, null);
+  backupStatus.textContent = snapshot && snapshot.savedAt
+    ? `Saved ${new Date(snapshot.savedAt).toLocaleDateString("default", { day: "numeric", month: "short" })}`
+    : "Not backed up yet";
+}
+const restoreBackupModal = document.getElementById("restore-backup-modal");
+document.getElementById("restore-backup-btn").addEventListener("click", () => {
+  const snapshot = load(SNAPSHOT_KEY, null);
+  if (!snapshot || !snapshot.data) { alert("There is no local backup to restore yet."); return; }
+  document.getElementById("restore-backup-text").textContent = `Replace this app with the local backup from ${new Date(snapshot.savedAt).toLocaleString()}?`;
+  revealSurface(restoreBackupModal);
+});
+document.getElementById("cancel-restore-backup").addEventListener("click", () => concealSurface(restoreBackupModal));
+document.getElementById("confirm-restore-backup").addEventListener("click", () => {
+  const snapshot = load(SNAPSHOT_KEY, null);
+  if (!snapshot || !snapshot.data) return;
+  const ok = save(STORAGE_KEY, snapshot.data) && save(SETTINGS_KEY, snapshot.settings || {}) && save(ARCHIVE_KEY, snapshot.archive || {});
+  if (Array.isArray(snapshot.priorityBackup)) save(BACKUP_PRIORITY_KEY, snapshot.priorityBackup);
+  if (ok) location.reload();
+});
+renderBackupStatus();
 
 /* =========================
    IMPORT DATA

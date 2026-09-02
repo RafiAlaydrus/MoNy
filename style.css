@@ -54,6 +54,34 @@
   --shadow-sheet: 0 24px 70px rgba(0, 0, 0, 0.72), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
 }
 
+/* Light is intentionally a quiet paper version of the same monochrome system,
+   not a separate visual identity. System leaves the existing dark PWA chrome
+   untouched and follows the device where the browser supports it. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="light"] body { background:#f5f5f3; color:#171717; }
+:root[data-theme="light"] .app,
+:root[data-theme="light"] #history-view { background:#f5f5f3; color:#171717; }
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .chart-container,
+:root[data-theme="light"] .insight-card,
+:root[data-theme="light"] .settings-panel,
+:root[data-theme="light"] .modal-card { background:#fff; color:#171717; border-color:#ddd; box-shadow:0 1px 0 rgba(0,0,0,.04); }
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] .setting-select,
+:root[data-theme="light"] .setting-input { background:#f2f2f0; color:#171717; border-color:#d0d0cc; color-scheme:light; }
+:root[data-theme="light"] .settings-btn,
+:root[data-theme="light"] .setting-row,
+:root[data-theme="light"] .insight-card > span,
+:root[data-theme="light"] .insight-card small { color:#5f5f5b; }
+:root[data-theme="light"] .insight-card strong { color:#171717; }
+:root[data-theme="light"] #tab-bar { background:rgba(255,255,255,.92); border-color:#ddd; }
+:root[data-theme="light"] .setting-btn-action { background:#e8e8e5; color:#222; }
+
+.wallet-settings-row small { display:block; margin-top:3px; color:var(--text-tertiary); font-size:11px; }
+.recurring-form { margin-top:14px; }
+
 html, body {
   margin: 0;
   padding: 0;
