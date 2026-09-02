@@ -80,6 +80,75 @@
 :root[data-theme="light"] .setting-btn-action { background:#e8e8e5; color:#222; }
 :root[data-theme="light"] .settings-group { background:#fafaf8; border-color:#deded9; }
 
+/* Complete light palette. The app started dark-only, so a few individual
+   components intentionally used explicit dark fills instead of tokens. Keep
+   those overrides together here; light mode must never leave dark text on a
+   dark surface, or white text on a white surface. */
+:root[data-theme="light"] {
+  --surface-card:#ffffff;
+  --surface-raised:#f6f6f4;
+  --surface-field:#f3f3f1;
+  --border-subtle:#deded9;
+  --border-strong:#c9c9c3;
+  --text-primary:#171717;
+  --text-secondary:#62625f;
+  --text-tertiary:#797974;
+  --shadow-card:0 1px 2px rgba(0,0,0,.05);
+  --shadow-sheet:0 24px 70px rgba(0,0,0,.18),0 1px 0 rgba(0,0,0,.04) inset;
+}
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .chart-container,
+:root[data-theme="light"] .history-row { background:#fff; }
+:root[data-theme="light"] #priority-list,
+:root[data-theme="light"] .second-form,
+:root[data-theme="light"] .wallet-form { background:#f7f7f5; }
+:root[data-theme="light"] #priority-list li { background:#fff; border-color:#e4e4e0; color:#1a1a1a; }
+:root[data-theme="light"] .second-form input,
+:root[data-theme="light"] .second-form select,
+:root[data-theme="light"] .wallet-card input,
+:root[data-theme="light"] .wallet-form input { background:#fff; border-color:#d2d2cd; color:#1a1a1a; }
+:root[data-theme="light"] .second-form select option { background:#fff; color:#1a1a1a; }
+:root[data-theme="light"] .second-form input::placeholder,
+:root[data-theme="light"] .second-form select:invalid,
+:root[data-theme="light"] .date-placeholder { color:#858581; }
+:root[data-theme="light"] .second-form input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
+:root[data-theme="light"] .table-toggle,
+:root[data-theme="light"] thead,
+:root[data-theme="light"] .wallets-count { color:#6a6a66; border-color:#d9d9d4; }
+:root[data-theme="light"] tbody tr { border-color:#deded9; }
+:root[data-theme="light"] #take-money,
+:root[data-theme="light"] #save-priority,
+:root[data-theme="light"] .actions [data-role="take-btn"] { border-color:#bdbdb8; color:#454541; }
+:root[data-theme="light"] .transfer-btn { border-color:#bdbdb8; color:#5d5d59; }
+:root[data-theme="light"] .transfer-btn:active { background:#ecece8; }
+:root[data-theme="light"] .spend-bar-track { background:#e1e1dd; }
+:root[data-theme="light"] .spend-bar-fill { background:#30302e; }
+:root[data-theme="light"] .spend-bar-limit { background:#1d1d1c; }
+:root[data-theme="light"] .spend-bar-label,
+:root[data-theme="light"] .projection-line { color:#60605c; }
+:root[data-theme="light"] .chart-head-value,
+:root[data-theme="light"] .legend-amount { color:#1a1a1a; }
+:root[data-theme="light"] .legend-item { color:#5d5d59; }
+:root[data-theme="light"] .legend-divide { border-color:#d4d4d0; }
+:root[data-theme="light"] .chart-bar-empty { background:#e2e2de; }
+:root[data-theme="light"] .lock-badge { background:#e7e7e3; border-color:#d0d0ca; color:#5d5d59; }
+:root[data-theme="light"] .transfer-dest-btn,
+:root[data-theme="light"] .stat-cell { background:#f4f4f1; border-color:#deded9; color:#20201e; }
+:root[data-theme="light"] .transfer-dest-sub,
+:root[data-theme="light"] .stat-label,
+:root[data-theme="light"] .stat-sub,
+:root[data-theme="light"] .history-sub,
+:root[data-theme="light"] .history-meta { color:#72726d; }
+:root[data-theme="light"] .stat-value { color:#20201e; }
+:root[data-theme="light"] .history-detail { border-color:#deded9; }
+:root[data-theme="light"] .history-delete { border-color:#cacac5; color:#666661; }
+:root[data-theme="light"] .history-delete:active { background:#ecece8; }
+:root[data-theme="light"] .empty-state,
+:root[data-theme="light"] .empty-state-rich,
+:root[data-theme="light"] .chart-empty,
+:root[data-theme="light"] .trend-empty { color:#777772; }
+:root[data-theme="light"] .empty-state-rich { border-color:#cacac5; }
+
 .wallet-settings-row small { display:block; margin-top:3px; color:var(--text-tertiary); font-size:11px; }
 .recurring-form { margin-top:14px; }
 

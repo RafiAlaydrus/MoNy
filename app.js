@@ -3284,6 +3284,11 @@ if (appLoading) {
 const settingsToggle = document.getElementById("settings-toggle");
 const settingsPanel = document.getElementById("settings-panel");
 
+/* A fixed modal nested inside the header inherits that header's stacking and
+   touch context on Safari. Put it at the document root before wiring events,
+   like the other full-screen overlays, so its controls always receive taps. */
+document.body.appendChild(settingsPanel);
+
 settingsToggle.addEventListener("click", () => {
   if (settingsPanel.classList.contains("hidden") || settingsPanel.classList.contains("is-closing")) {
     revealSurface(settingsPanel);
@@ -3295,10 +3300,19 @@ settingsToggle.addEventListener("click", () => {
 
 /* Settings is a utility sheet, not a destructive confirmation. Close it in
    the same tap rather than leaving an invisible closing layer over the app. */
-function closeSettings() { concealSurface(settingsPanel, true); settingsToggle.focus(); }
-document.getElementById("close-settings").addEventListener("click", closeSettings);
-document.getElementById("close-settings-top").addEventListener("click", closeSettings);
-settingsPanel.addEventListener("click", event => { if (event.target === settingsPanel) closeSettings(); });
+function closeSettings(event) {
+  if (event) event.preventDefault();
+  settingsPanel.classList.add("hidden");
+  settingsPanel.classList.remove("is-closing");
+  settingsPanel.setAttribute("aria-hidden", "true");
+  settingsToggle.focus();
+}
+const settingsCloseControls = [document.getElementById("close-settings"), document.getElementById("close-settings-top")];
+settingsCloseControls.forEach(control => {
+  control.addEventListener("click", closeSettings);
+  control.addEventListener("pointerup", closeSettings);
+});
+settingsPanel.addEventListener("pointerdown", event => { if (event.target === settingsPanel) closeSettings(event); });
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && !settingsPanel.classList.contains("hidden")) closeSettings();
 });
