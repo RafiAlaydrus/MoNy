@@ -3293,7 +3293,9 @@ settingsToggle.addEventListener("click", () => {
   }
 });
 
-function closeSettings() { concealSurface(settingsPanel); settingsToggle.focus(); }
+/* Settings is a utility sheet, not a destructive confirmation. Close it in
+   the same tap rather than leaving an invisible closing layer over the app. */
+function closeSettings() { concealSurface(settingsPanel, true); settingsToggle.focus(); }
 document.getElementById("close-settings").addEventListener("click", closeSettings);
 document.getElementById("close-settings-top").addEventListener("click", closeSettings);
 settingsPanel.addEventListener("click", event => { if (event.target === settingsPanel) closeSettings(); });

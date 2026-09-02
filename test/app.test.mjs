@@ -2239,11 +2239,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.32.0");
+  assert.equal(pkg.version, "1.33.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v59"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v60"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2303,7 +2303,8 @@ test("responsive and cross-browser foundations remain enabled", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
   assert.match(html, /width=device-width, initial-scale=1\.0/);
-  assert.doesNotMatch(html, /user-scalable=no/);
+  assert.match(html, /maximum-scale=1\.0, user-scalable=no/);
+  assert.match(css, /html \{ touch-action: manipulation; \}/);
   assert.match(html, /rel="preload" href="app\.js" as="script"/);
   assert.match(css, /@media \(min-width:768px\)/);
   assert.match(css, /@media \(min-width:1100px\)/);

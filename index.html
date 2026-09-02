@@ -18,10 +18,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- Keep user zoom available for accessibility. Form fields are 16px on
-       narrow screens, which prevents iOS focus zoom without disabling pinch
-       zoom for users who need it. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="A simple offline-first personal finance tracker for monthly income, bills, and spending." />
   <!-- theme-color paints the status bar and browser chrome to match the app's
        black; color-scheme tells the browser to render form controls and
@@ -173,7 +170,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </section>
-            <div class="setting-version">v1.32.0</div>
+            <div class="setting-version">v1.33.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>

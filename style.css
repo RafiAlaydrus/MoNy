@@ -97,6 +97,9 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Prevent accidental double-tap enlargement while interacting with the app. */
+html { touch-action: manipulation; }
+
 body {
   min-height: 100vh;
   min-height: 100dvh;
