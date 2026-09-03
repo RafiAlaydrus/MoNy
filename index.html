@@ -63,9 +63,10 @@
   </style>
 
   <link rel="stylesheet" href="style.css" />
-  <!-- Start the two small application scripts while the browser is still
+  <!-- Start the small application scripts while the browser is still
        parsing the static UI. Their execution order remains at the end of body. -->
   <link rel="preload" href="money.js" as="script" />
+  <link rel="preload" href="ui-helpers.js" as="script" />
   <link rel="preload" href="app.js" as="script" />
 </head>
 <body>
@@ -170,7 +171,7 @@
               <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
             </section>
-            <div class="setting-version">v1.35.0</div>
+            <div class="setting-version">v1.36.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -866,11 +867,13 @@
 
   <!-- LOAD ORDER IS LOAD-BEARING. money.js must come first: it assigns its
        functions onto the global object, and app.js calls them as bare globals
-       at parse time. Swapping these two lines breaks the app instantly.
+       at parse time. ui-helpers.js then exposes the shared motion helpers
+       app.js uses. Swapping these lines breaks the app instantly.
 
        Neither is deferred, so both run before the service worker registers
        below - which is also why app.js can assume the DOM above it exists. -->
   <script src="money.js"></script>
+  <script src="ui-helpers.js"></script>
   <script src="app.js"></script>
   <script>
   /* Register the offline cache, but only after load, so fetching and caching

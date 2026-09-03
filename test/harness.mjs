@@ -24,6 +24,7 @@ const read = f => readFileSync(join(root, f), "utf8");
 // Read once - the files do not change between tests.
 const HTML = read("index.html");
 const MONEY_JS = read("money.js");
+const UI_HELPERS_JS = read("ui-helpers.js");
 const APP_JS = read("app.js");
 
 /* Boots the app with a given localStorage and a pinned date.
@@ -109,7 +110,7 @@ export function bootApp({ storage = {}, today = "2026-08-15", url = "https://exa
   `;
 
   // money.js first: app.js calls its functions as globals and breaks without it.
-  window.eval(`${MONEY_JS}\n;\n${APP_JS}\n;\n${epilogue}`);
+  window.eval(`${MONEY_JS}\n;\n${UI_HELPERS_JS}\n;\n${APP_JS}\n;\n${epilogue}`);
 
   window.__jsdomErrors = errors;
   return window;

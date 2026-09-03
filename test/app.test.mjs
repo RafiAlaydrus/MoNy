@@ -1768,6 +1768,63 @@ test("the category panel opens from settings and closes again", async () => {
 });
 
 /* ---------------------------------------------------------------------------
+   INCREMENTAL RENDERING AND RELEASE FEATURES
+--------------------------------------------------------------------------- */
+
+test("editing one wallet leaves every other wallet section mounted", () => {
+  const wallets = [{ id: "w0", name: "Grocery" }, { id: "w1", name: "Fuel" }];
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, wallets },
+      [KEYS.data]: month({ walletData: {
+        w0: { budget: 100, items: [] }, w1: { budget: 100, items: [] }
+      } })
+    }
+  });
+  const untouched = w.document.querySelector('[data-wallet-id="w1"]');
+
+  w.__app.run('renderWallet(allWallets().find(wallet => wallet.id === "w0"))');
+
+  assert.strictEqual(w.document.querySelector('[data-wallet-id="w1"]'), untouched,
+    "a local wallet refresh must preserve other wallet forms and their input state");
+});
+
+test("recurring templates are applied exactly once when a live cycle rolls over", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: { ...SETTINGS, recurring: [
+        { name: "Rent", type: "bill", category: "Bills", amount: 900 },
+        { name: "Payday", type: "income", category: "Others", amount: 3000 },
+        { name: "Internet", type: "expense", category: "Bills", amount: 120 }
+      ] },
+      [KEYS.data]: month()
+    },
+    today: "2026-08-31"
+  });
+
+  w.__setToday("2026-09-01");
+  assert.equal(w.__app.run("checkCycleRollover()"), true);
+  assert.equal(w.__app.data.priority[0].name, "Rent");
+  assert.equal(JSON.stringify(w.__app.data.secondChoice.map(item => [item.name, item.type])),
+    JSON.stringify([["Payday", "add"], ["Internet", "take"]]));
+  assert.equal(w.__app.run("checkCycleRollover()"), false,
+    "re-checking on the same day cannot duplicate templates");
+});
+
+test("theme choice and local recovery snapshot persist through the real handlers", () => {
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() } });
+  const theme = w.document.getElementById("theme-select");
+  theme.value = "light";
+  theme.dispatchEvent(new w.Event("input"));
+
+  assert.equal(w.document.documentElement.dataset.theme, "light");
+  assert.equal(stored(w, KEYS.settings).theme, "light");
+  const snapshot = JSON.parse(w.localStorage.getItem("monthly-money-tracker-latest-backup"));
+  assert.equal(snapshot.settings.theme, "light");
+  assert.equal(snapshot.data.month, "2026-8");
+});
+
+/* ---------------------------------------------------------------------------
    RESERVED AND COLLIDING CATEGORY NAMES
 
    isTransferEntry() treats `category === "Transfer"` as a wallet transfer
@@ -2239,11 +2296,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.35.0");
+  assert.equal(pkg.version, "1.36.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v62"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v63"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2316,8 +2373,9 @@ test("every primary interaction has compact, reduced-motion-safe feedback", () =
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const helpers = readFileSync(new URL("../ui-helpers.js", import.meta.url), "utf8");
 
-  assert.match(app, /function playTransient\(/);
+  assert.match(helpers, /function playTransient\(/);
   assert.match(app, /function celebrateForm\(/);
   assert.match(app, /tab-motion-indicator/);
   assert.match(app, /chart-segment-enter/);

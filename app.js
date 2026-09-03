@@ -588,11 +588,7 @@ const chartLegend = document.getElementById("chart-legend");
 ========================= */
 
 const MOTION_FAST_MS = 120;
-
-function prefersReducedMotion() {
-  return typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
+const { prefersReducedMotion, playTransient, revealSurface, concealSurface } = window.MoNyUI;
 
 /* Replaying one short class on the incoming surface keeps navigation motion
    independent from rendering. Nothing waits for it and a browser without CSS
@@ -607,15 +603,6 @@ function playMotion(el, className, competing = []) {
 /* Replays a short one-shot interaction animation without accumulating timers
    or classes when the user taps quickly. Every decorative effect comes through
    this helper, so reduced-motion users keep the exact same app behaviour. */
-function playTransient(el, className, duration = 360) {
-  if (!el || prefersReducedMotion()) return;
-  clearTimeout(el._motionTimer);
-  el.classList.remove(className);
-  void el.offsetWidth;
-  el.classList.add(className);
-  el._motionTimer = setTimeout(() => el.classList.remove(className), duration);
-}
-
 function celebrateForm(form) {
   playTransient(form, "form-success", 380);
   const action = form?.querySelector("[data-edit='primary'], #add-priority");
@@ -625,34 +612,6 @@ function celebrateForm(form) {
 /* Modal/popover close animation with an immediate interaction cutoff. State
    changes happen when the user taps; only display:none waits for the final
    120ms frame, so motion can never hold up the action itself. */
-function revealSurface(el) {
-  if (!el) return;
-  clearTimeout(el._motionHideTimer);
-  el._motionHideTimer = null;
-  el.classList.remove("hidden", "is-closing");
-  el.setAttribute("aria-hidden", "false");
-}
-
-function concealSurface(el, immediate = false) {
-  if (!el || el.classList.contains("hidden")) return;
-  clearTimeout(el._motionHideTimer);
-
-  if (immediate || prefersReducedMotion()) {
-    el.classList.add("hidden");
-    el.classList.remove("is-closing");
-    el.setAttribute("aria-hidden", "true");
-    return;
-  }
-
-  el.classList.add("is-closing");
-  el.setAttribute("aria-hidden", "true");
-  el._motionHideTimer = setTimeout(() => {
-    el.classList.add("hidden");
-    el.classList.remove("is-closing");
-    el._motionHideTimer = null;
-  }, MOTION_FAST_MS);
-}
-
 /* Matches a canvas's backing store to the device's pixel density.
  *
  * Both charts are hand-drawn, and both used to draw into a fixed backing
@@ -1667,7 +1626,9 @@ function deleteWalletItem(wallet, item, tbody, section) {
     renderWalletItemsTable(wallet, tbody, section);
     renderWalletCard(wallet, section);
   }
-  renderSecondChoice();
+  // An ordinary wallet transaction does not change main activity. A transfer
+  // does, because its counterpart may live there.
+  if (pairedRemoved) renderSecondChoice();
   calculateRemaining();
 
   showUndo(
@@ -2087,7 +2048,7 @@ function buildWalletSection(wallet) {
         item.amount = amount;
         item.date = resolveDate(dateInput.value);
         saveData();
-        renderWallets();
+        renderWallet(wallet);
         calculateRemaining();
         return true;
       }
@@ -2157,6 +2118,19 @@ function renderWallets() {
   // element bindings further down the file exist.
   const empty = document.getElementById("wallets-empty");
   if (empty) empty.classList.toggle("hidden", open.length > 0);
+}
+
+// Replaces one wallet section without tearing down every other wallet's form,
+// history rows, and in-progress input. Structural settings changes still use
+// renderWallets(); normal item edits can stay local to their wallet.
+function renderWallet(wallet) {
+  const existing = [...walletsContainer.querySelectorAll(".wallet-section")]
+    .find(section => section.dataset.walletId === wallet.id);
+  if (!existing) {
+    renderWallets();
+    return;
+  }
+  existing.replaceWith(buildWalletSection(wallet));
 }
 
 /* =========================
