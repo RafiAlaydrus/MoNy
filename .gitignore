@@ -13,3 +13,6 @@ CLAUDE.md
 # repo root - nothing here is part of it, and GitHub Pages must not serve it.
 server.mjs
 .claude/
+
+# Generated local code-analysis workspace; never part of the shipped PWA.
+graphify-out/
