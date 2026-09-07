@@ -2296,11 +2296,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.37.0");
+  assert.equal(pkg.version, "1.38.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v64"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v65"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2348,11 +2348,14 @@ test("tab arrows and Escape provide complete keyboard navigation", () => {
 
 test("the PWA exposes updates instead of silently replacing an open session", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const pwa = readFileSync(new URL("../pwa.js", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
   assert.match(html, /id="update-banner"[^>]*aria-live="polite"/);
-  assert.match(html, /registration\.waiting/);
-  assert.match(html, /postMessage\(\{ type: "SKIP_WAITING" \}\)/);
-  assert.match(sw, /event\.request\.mode === "navigate"/);
+  assert.match(html, /src="pwa\.js"/);
+  assert.match(pwa, /registration\.waiting/);
+  assert.match(pwa, /postMessage\(\{ type: "SKIP_WAITING" \}\)/);
+  assert.match(pwa, /mony:before-update/);
+  assert.match(sw, /cacheable = navigation/);
   assert.match(sw, /event\.data\.type === "SKIP_WAITING"/);
 });
 
@@ -2366,7 +2369,7 @@ test("responsive and cross-browser foundations remain enabled", () => {
   assert.match(css, /@media \(min-width:768px\)/);
   assert.match(css, /@media \(min-width:1100px\)/);
   assert.match(css, /input\[type="number"\][\s\S]*?-moz-appearance:\s*textfield/);
-  assert.match(css, /:focus-visible[\s\S]*?outline:\s*2px solid #8c8c8c !important/);
+  assert.match(css, /:focus-visible[\s\S]*?outline:\s*2px solid var\(--focus-ring\)/);
 });
 
 test("every primary interaction has compact, reduced-motion-safe feedback", () => {

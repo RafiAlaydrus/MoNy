@@ -1737,6 +1737,69 @@ function makeRowDeletable(row, onDelete) {
   });
 }
 
+const HISTORY_PAGE_SIZE = 50;
+const historyPages = new Map();
+let historyRecordId = 0;
+
+function sortedTransactions(items) {
+  const direction = settings.sortOrder === "newest" ? -1 : 1;
+  return [...items].sort((a, b) => direction * String(a.date || "").localeCompare(String(b.date || "")));
+}
+
+function renderPagedRecords(host, key, records, buildRecord, columns = 0, scope = "") {
+  const context = `${data.month}|${data.cycleStart}|${settings.sortOrder}|${scope}`;
+  let page = historyPages.get(key);
+  if (!page || page.context !== context) {
+    page = { context, limit: HISTORY_PAGE_SIZE };
+    historyPages.set(key, page);
+  }
+  if (!host.id) host.id = `history-records-${++historyRecordId}`;
+  const control = document.createElement(columns ? "tr" : "div");
+  control.className = "history-page-control";
+  const actions = columns ? document.createElement("td") : control;
+  if (columns) {
+    actions.colSpan = columns;
+    control.appendChild(actions);
+  }
+  const count = document.createElement("p");
+  count.className = "history-page-count";
+  count.setAttribute("role", "status");
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "text-button history-more";
+  more.setAttribute("aria-controls", host.id);
+  actions.append(count, more);
+  let shown = 0;
+
+  function appendPage(focusNew = false) {
+    const fragment = document.createDocumentFragment();
+    let first;
+    const end = Math.min(page.limit, records.length);
+    for (; shown < end; shown++) {
+      const row = buildRecord(records[shown]);
+      first ||= row;
+      fragment.appendChild(row);
+    }
+    control.remove();
+    host.appendChild(fragment);
+    if (records.length > HISTORY_PAGE_SIZE) {
+      count.textContent = `Showing ${shown} of ${records.length}`;
+      more.textContent = `Show ${Math.min(HISTORY_PAGE_SIZE, records.length - shown)} more`;
+      more.hidden = shown === records.length;
+      host.appendChild(control);
+    }
+    if (focusNew && first) {
+      if (!first.hasAttribute("tabindex")) first.tabIndex = -1;
+      first.focus({ preventScroll: true });
+    }
+  }
+  more.addEventListener("click", () => {
+    page.limit += HISTORY_PAGE_SIZE;
+    appendPage(true);
+  });
+  appendPage();
+}
+
 // Renders a wallet's transaction table
 function renderWalletItemsTable(wallet, tbody, section) {
   tbody.innerHTML = "";
@@ -1749,23 +1812,14 @@ function renderWalletItemsTable(wallet, tbody, section) {
   if (wd.items.length === 0) {
     // The opening line alone is still a history worth showing.
     if (carried <= 0) {
-      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No items yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="3"><div class="empty-state-rich"><strong>No wallet activity yet</strong><p>Tap the balance to set a budget, then record your first purchase above.</p></div></td></tr>';
     }
     return;
   }
 
-  const sorted = [...wd.items];
-  if (settings.sortOrder === "newest") {
-    sorted.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  } else {
-    sorted.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  }
-
   const host = section || tbody.closest(".wallet-section");
-  sorted.forEach(item => {
-    const row = buildWalletItemRow(item, wallet, tbody, host);
-    tbody.appendChild(row);
-  });
+  renderPagedRecords(tbody, `wallet:${wallet.id}`, sortedTransactions(wd.items),
+    item => buildWalletItemRow(item, wallet, tbody, host), 3);
 }
 
 // Updates a wallet's progress bar
@@ -1930,17 +1984,19 @@ function buildWalletSection(wallet) {
     dateInput.classList.add("is-empty");
     [nameInput, amountInput].forEach(el => el.classList.remove("input-error"));
 
-    if (dateValue) {
+    if (dateValue || wd.items.length > HISTORY_PAGE_SIZE) {
       // A picked date can belong anywhere in the list, so re-sort the table
       renderWalletItemsTable(wallet, tbody, section);
     } else {
-      const emptyRow = tbody.querySelector("td.empty-state");
+      const emptyRow = tbody.querySelector("td.empty-state, .empty-state-rich");
       if (emptyRow) emptyRow.closest("tr").remove();
       const newItem = wd.items[wd.items.length - 1];
       const row = buildWalletItemRow(newItem, wallet, tbody, section);
       row.classList.add("item-enter");
       if (settings.sortOrder === "newest") {
-        tbody.prepend(row);
+        const carriedRow = tbody.querySelector(".carried-row");
+        if (carriedRow) carriedRow.after(row);
+        else tbody.prepend(row);
       } else {
         tbody.appendChild(row);
       }
@@ -2117,7 +2173,13 @@ function renderWallets() {
   // Looked up each time rather than cached: renderWallets runs before the
   // element bindings further down the file exist.
   const empty = document.getElementById("wallets-empty");
-  if (empty) empty.classList.toggle("hidden", open.length > 0);
+  if (empty) {
+    empty.classList.toggle("hidden", open.length > 0);
+    empty.querySelector("p").textContent = settings.wallets.length ? "No open wallets." : "No wallets yet.";
+    empty.querySelector(".wallets-empty-note").textContent = settings.wallets.length
+      ? "Your closed wallets are saved in Settings. Add a wallet to keep a new budget separate."
+      : "Give part of your balance a purpose: groceries, fuel, or anything you want to keep separate.";
+  }
 }
 
 // Replaces one wallet section without tearing down every other wallet's form,
@@ -2420,17 +2482,7 @@ function renderSecondChoice() {
     return;
   }
 
-  const sorted = [...data.secondChoice];
-  if (settings.sortOrder === "newest") {
-    sorted.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  } else {
-    sorted.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  }
-
-  sorted.forEach(item => {
-    const row = buildSecondChoiceRow(item);
-    scTable.appendChild(row);
-  });
+  renderPagedRecords(scTable, "secondChoice", sortedTransactions(data.secondChoice), buildSecondChoiceRow, 4);
 }
 
 // Validates the Second choice form, marking any bad fields. Returns the
@@ -2550,7 +2602,7 @@ function addSecondChoice(type, newMoney) {
   scDate.classList.add("is-empty");
   fields.forEach(f => f.el.classList.remove("input-error"));
 
-  if (backdated) {
+  if (backdated || data.secondChoice.length > HISTORY_PAGE_SIZE) {
     // A picked date can belong anywhere in the list, so re-sort the table
     renderSecondChoice();
   } else {
@@ -2560,7 +2612,9 @@ function addSecondChoice(type, newMoney) {
     const scRow = buildSecondChoiceRow(newSc);
     scRow.classList.add("item-enter");
     if (settings.sortOrder === "newest") {
-      scTable.prepend(scRow);
+      const carriedRow = scTable.querySelector(".carried-row");
+      if (carriedRow) carriedRow.after(scRow);
+      else scTable.prepend(scRow);
     } else {
       scTable.appendChild(scRow);
     }
@@ -2859,15 +2913,30 @@ function renderActivityFinder() {
   const active = !!query || activityType.value !== "all" || activitySource.value !== "all" ||
     activityCategory.value !== "all" || !!activityFrom.value || !!activityTo.value;
   activityClear.classList.toggle("hidden", !active);
+  const invalidDates = !!activityFrom.value && !!activityTo.value && activityFrom.value > activityTo.value;
+  activityFrom.setAttribute("aria-invalid", String(invalidDates));
+  activityTo.setAttribute("aria-invalid", String(invalidDates));
 
-  if (!active) {
-    activitySummary.textContent = "Use search or a filter to find activity across this cycle.";
-    activityResults.innerHTML = "";
+  if (invalidDates) {
+    activitySummary.textContent = "The start date must be on or before the end date.";
+    activityResults.innerHTML = '<div class="empty-state-rich"><strong>Check the date range</strong><p>Choose an end date after the start date to see your activity.</p></div>';
+    historyPages.delete("activity");
     return;
   }
 
+  if (!active) {
+    activitySummary.textContent = "Use search or a filter to find activity across this cycle.";
+    activityResults.innerHTML = records.length
+      ? '<div class="empty-state-rich"><strong>Find your activity</strong><p>Search a name or choose a filter to find expenses, income, wallet transfers, and paid bills.</p></div>'
+      : '<div class="empty-state-rich"><strong>Your activity starts here</strong><p>Record an expense, add money, or pay a bill. You can find it here whenever you need it.</p></div>';
+    historyPages.delete("activity");
+    return;
+  }
+
+  const scope = JSON.stringify([query, activityType.value, activitySource.value, activityCategory.value,
+    activityFrom.value, activityTo.value]);
   const filtered = records.filter(record => {
-    const date = activityDateValue(record.date);
+    const date = activityFrom.value || activityTo.value ? activityDateValue(record.date) : "";
     return (!query || `${record.name} ${record.category} ${record.sourceLabel}`.toLowerCase().includes(query)) &&
       (activityType.value === "all" || record.type === activityType.value) &&
       (activitySource.value === "all" || record.source === activitySource.value) &&
@@ -2878,18 +2947,23 @@ function renderActivityFinder() {
   activitySummary.textContent = `${filtered.length} ${filtered.length === 1 ? "result" : "results"} from ${records.length} records`;
   if (!filtered.length) {
     activityResults.innerHTML = '<div class="empty-state-rich"><strong>No matching activity</strong><p>Try a broader search or clear one of the filters.</p></div>';
+    historyPages.delete("activity");
     return;
   }
-  activityResults.innerHTML = filtered.map(record => `
-    <div class="activity-result">
+  activityResults.innerHTML = "";
+  renderPagedRecords(activityResults, "activity", filtered, record => {
+    const result = document.createElement("div");
+    result.className = "activity-result";
+    result.innerHTML = `
       <div class="activity-result-main">
         <div class="activity-result-name">${esc(record.name)}</div>
         <div class="activity-result-meta">${esc(record.category)} · ${esc(record.sourceLabel)}</div>
       </div>
       <div class="activity-result-amount">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</div>
       <div class="activity-result-meta">${esc(record.type === "bill" ? "Paid bill" : record.type)}</div>
-      <div class="activity-result-date">${esc(entryDateLabel(record.date).text)}</div>
-    </div>`).join("");
+      <div class="activity-result-date">${esc(entryDateLabel(record.date).text)}</div>`;
+    return result;
+  }, 0, scope);
 }
 
 if (activityResults) {
@@ -3431,10 +3505,12 @@ currencySelect.addEventListener("change", () => {
 });
 
 const themeSelect = document.getElementById("theme-select");
+const systemTheme = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: light)") : null;
 function applyTheme() {
-  const theme = settings.theme === "system" ? "" : settings.theme;
+  const theme = settings.theme === "system" ? (systemTheme?.matches ? "light" : "dark") : settings.theme;
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f5f5f5" : "#000000";
+  document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f5f5f3" : "#000000";
+  document.querySelector('meta[name="color-scheme"]').content = theme;
 }
 themeSelect.value = settings.theme;
 applyTheme();
@@ -3442,12 +3518,19 @@ function saveThemeSelection() {
   settings.theme = themeSelect.value;
   saveSettings();
   applyTheme();
+  if (!historyView.classList.contains("hidden")) renderHistory();
 }
 /* iOS keeps its native select sheet open after a choice. `change` can wait
    until that sheet closes, so also listen to input and update the page while
    the chosen row is still visible. */
 themeSelect.addEventListener("input", saveThemeSelection);
 themeSelect.addEventListener("change", saveThemeSelection);
+systemTheme?.addEventListener("change", () => {
+  if (settings.theme === "system") {
+    applyTheme();
+    if (!historyView.classList.contains("hidden")) renderHistory();
+  }
+});
 
 /* =========================
    SORT SETTING
@@ -3992,27 +4075,58 @@ document.getElementById("add-recurring").addEventListener("click", () => {
 });
 
 const backupStatus = document.getElementById("backup-status");
+const RECOVERY_KEY = "monthly-money-tracker-recovery-backup";
+const dataControlFeedback = document.getElementById("data-control-feedback");
+function setDataControlError(element, message = "") {
+  element.textContent = message;
+  element.classList.toggle("hidden", !message);
+}
+function latestRecoveryBackup() {
+  return load(RECOVERY_KEY, null) || load(SNAPSHOT_KEY, null);
+}
 function renderBackupStatus() {
   if (!backupStatus) return;
-  const snapshot = load(SNAPSHOT_KEY, null);
-  backupStatus.textContent = snapshot && snapshot.savedAt
-    ? `Saved ${new Date(snapshot.savedAt).toLocaleDateString("default", { day: "numeric", month: "short" })}`
+  const snapshot = latestRecoveryBackup();
+  const validStamp = snapshot && Number.isFinite(Date.parse(snapshot.savedAt));
+  backupStatus.textContent = validStamp
+    ? `${snapshot.reason ? `Before ${snapshot.reason} · ` : "Saved "}${new Date(snapshot.savedAt).toLocaleDateString("default", { day: "numeric", month: "short" })}`
     : "Not backed up yet";
+  document.getElementById("restore-backup-btn").textContent = snapshot && snapshot.reason
+    ? "Restore recovery backup" : "Restore latest backup";
 }
 const restoreBackupModal = document.getElementById("restore-backup-modal");
+const restoreBackupError = document.getElementById("restore-backup-error");
+let pendingRestore = null;
 document.getElementById("restore-backup-btn").addEventListener("click", () => {
-  const snapshot = load(SNAPSHOT_KEY, null);
-  if (!snapshot || !snapshot.data) { alert("There is no local backup to restore yet."); return; }
-  document.getElementById("restore-backup-text").textContent = `Replace this app with the local backup from ${new Date(snapshot.savedAt).toLocaleString()}?`;
+  pendingRestore = null;
+  setDataControlError(dataControlFeedback);
+  const snapshot = latestRecoveryBackup();
+  if (!snapshot) {
+    setDataControlError(dataControlFeedback, "There is no local backup yet. You can import an exported backup file instead.");
+    return;
+  }
+  const problem = validateImport(snapshot);
+  if (problem) {
+    setDataControlError(dataControlFeedback, `This local backup cannot be restored. ${problem}`);
+    return;
+  }
+  pendingRestore = snapshot;
+  setDataControlError(restoreBackupError);
+  document.getElementById("restore-backup-text").textContent =
+    `Replace your current data with this local backup? Your current data will be kept as the next recovery copy.${backupTimestamp(snapshot.savedAt, "Saved")}`;
+  renderBackupPreview(document.getElementById("restore-backup-preview"), snapshot);
   revealSurface(restoreBackupModal);
 });
-document.getElementById("cancel-restore-backup").addEventListener("click", () => concealSurface(restoreBackupModal));
+document.getElementById("cancel-restore-backup").addEventListener("click", () => {
+  pendingRestore = null;
+  concealSurface(restoreBackupModal);
+});
 document.getElementById("confirm-restore-backup").addEventListener("click", () => {
-  const snapshot = load(SNAPSHOT_KEY, null);
-  if (!snapshot || !snapshot.data) return;
-  const ok = save(STORAGE_KEY, snapshot.data) && save(SETTINGS_KEY, snapshot.settings || {}) && save(ARCHIVE_KEY, snapshot.archive || {});
-  if (Array.isArray(snapshot.priorityBackup)) save(BACKUP_PRIORITY_KEY, snapshot.priorityBackup);
-  if (ok) location.reload();
+  if (!pendingRestore) return;
+  const result = replaceBackupData(pendingRestore, "restore");
+  if (!result.ok) { setDataControlError(restoreBackupError, result.message); return; }
+  pendingRestore = null;
+  location.reload();
 });
 renderBackupStatus();
 
@@ -4024,9 +4138,12 @@ const importBtn = document.getElementById("import-data-btn");
 const importFile = document.getElementById("import-file");
 const importModal = document.getElementById("import-modal");
 const importModalText = document.getElementById("import-modal-text");
+const importPreview = document.getElementById("import-preview");
+const importError = document.getElementById("import-error");
 const confirmImportBtn = document.getElementById("confirm-import");
 const cancelImportBtn = document.getElementById("cancel-import");
 let pendingImport = null;
+let importReadId = 0;
 
 // Accepts only files that really look like one of our exports, so a wrong
 // pick can't quietly replace a month with nonsense.
@@ -4249,6 +4366,16 @@ function validateSettings(settings) {
   if (settings.activeTab !== undefined && !["home", "bills", "spending", "wallets"].includes(settings.activeTab)) {
     return "That file's active tab is invalid.";
   }
+  if (settings.theme !== undefined && !["system", "dark", "light"].includes(settings.theme)) {
+    return "That file's appearance setting is invalid.";
+  }
+  if (settings.recurring !== undefined && (!Array.isArray(settings.recurring) || settings.recurring.some(item =>
+    !isRecord(item) || !isNonEmptyString(item.name) ||
+    !["bill", "expense", "income"].includes(item.type) || !isFiniteAmount(item.amount) ||
+    (item.category !== undefined && !isNonEmptyString(item.category))
+  ))) {
+    return "That file's recurring transactions are malformed.";
+  }
   if (settings.currency !== undefined && !isNonEmptyString(settings.currency)) {
     return "That file's currency is invalid.";
   }
@@ -4266,6 +4393,12 @@ function validateSettings(settings) {
 
 function validateImport(obj) {
   if (!isRecord(obj)) return "That file isn't valid JSON data.";
+  if (obj.app !== undefined && obj.app !== "monthly-money-tracker") {
+    return "Choose a backup exported from MoNy.";
+  }
+  if (obj.formatVersion !== undefined && obj.formatVersion !== 1) {
+    return "This backup format is not supported by this version of MoNy.";
+  }
 
   let problem = validateMonthData(obj.data, "That file");
   if (problem) return problem;
@@ -4306,88 +4439,137 @@ function validateImport(obj) {
   return null;
 }
 
-// Writes a key when the file carries content for it and clears it otherwise,
-// so the app after an import matches the file exactly rather than blending
-// the file's contents with whatever was already there.
-function replaceKey(key, value, hasContent) {
-  if (!hasContent) { localStorage.removeItem(key); return true; }
-  return save(key, value);
+function backupTimestamp(value, label) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "";
+  return ` ${label} ${new Date(value).toLocaleString("default", { dateStyle: "medium", timeStyle: "short" })}.`;
 }
 
-importBtn.addEventListener("click", () => importFile.click());
+function renderBackupPreview(element, backup) {
+  const month = backup.data;
+  const wallets = backup.settings && Array.isArray(backup.settings.wallets)
+    ? backup.settings.wallets.filter(wallet => !wallet.deleted).length
+    : month.groceryBudget !== undefined || month.groceryItems !== undefined ? 1 : 0;
+  const walletEntries = Object.values(month.walletData || {}).reduce((sum, wallet) => sum + wallet.items.length, 0)
+    + (month.groceryItems || []).length;
+  const rows = [
+    ["Current month", monthLabel(month.month)],
+    ["Cycle", month.cycleStart && month.cycleNext ? `${month.cycleStart} to ${month.cycleNext} (next cycle starts)` : "Calendar month"],
+    ["Priority bills", month.priority.length],
+    ["Spending / income entries", month.secondChoice.length],
+    ["Wallets / wallet entries", `${wallets} / ${walletEntries}`],
+    ["Archived months", Object.keys(backup.archive || {}).length],
+    ["Saved priority bills", (backup.priorityBackup || []).length]
+  ];
+  element.innerHTML = rows.map(([label, value]) =>
+    `<div class="setting-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
+  ).join("");
+}
+
+function commitStoredChanges(changes, reason) {
+  const previous = new Map();
+  const written = [];
+  try {
+    const recovery = { savedAt: new Date().toISOString(), reason, data, settings, archive,
+      priorityBackup: load(BACKUP_PRIORITY_KEY, null) || [] };
+    const replacements = [[RECOVERY_KEY, JSON.stringify(recovery)], ...Object.entries(changes).map(([key, value]) =>
+      [key, value === undefined ? null : JSON.stringify(value)])];
+    replacements.forEach(([key]) => previous.set(key, localStorage.getItem(key)));
+    for (const [key, value] of replacements) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+      written.push(key);
+    }
+    return { ok: true };
+  } catch (error) {
+    let rolledBack = true;
+    for (const key of written.reverse()) {
+      if (key === RECOVERY_KEY && !rolledBack) continue;
+      try {
+        const value = previous.get(key);
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      } catch (_) { rolledBack = false; }
+    }
+    return { ok: false, message: rolledBack
+      ? "Couldn't save this change. Your existing data is unchanged. Free some browser storage and try again."
+      : "Couldn't finish saving. Keep this app open and export your current data before trying again. A recovery copy is still on this device." };
+  }
+}
+
+function replaceBackupData(backup, reason) {
+  return commitStoredChanges({
+    [STORAGE_KEY]: backup.data,
+    [SETTINGS_KEY]: backup.settings || undefined,
+    [ARCHIVE_KEY]: backup.archive && Object.keys(backup.archive).length ? backup.archive : undefined,
+    [BACKUP_PRIORITY_KEY]: Array.isArray(backup.priorityBackup) && backup.priorityBackup.length ? backup.priorityBackup : undefined
+  }, reason);
+}
+
+importBtn.addEventListener("click", () => {
+  setDataControlError(dataControlFeedback);
+  importFile.click();
+});
 
 importFile.addEventListener("change", () => {
   const file = importFile.files && importFile.files[0];
   if (!file) return;
-
+  const readId = ++importReadId;
+  pendingImport = null;
+  confirmImportBtn.disabled = true;
+  setDataControlError(importError);
+  importPreview.innerHTML = "";
+  importModalText.textContent = `Checking ${file.name}…`;
+  revealSurface(importModal);
   const reader = new FileReader();
   reader.onload = () => {
+    if (readId !== importReadId) return;
+    importFile.value = "";
     let parsed;
     try {
       parsed = JSON.parse(reader.result);
     } catch (err) {
-      alert("Couldn't read that file - it isn't valid JSON.");
-      importFile.value = "";
+      importModalText.textContent = "This file could not be imported. Your current data has not changed.";
+      setDataControlError(importError, "Choose a JSON backup exported from MoNy. This file is not valid JSON.");
       return;
     }
 
     const problem = validateImport(parsed);
     if (problem) {
-      alert(problem);
-      importFile.value = "";
+      importModalText.textContent = "This backup could not be imported. Your current data has not changed.";
+      setDataControlError(importError, problem);
       return;
     }
 
     pendingImport = parsed;
-
-    const months = parsed.archive ? Object.keys(parsed.archive).length : 0;
-    const walletCount = parsed.settings && Array.isArray(parsed.settings.wallets)
-      ? parsed.settings.wallets.filter(w => !w.deleted).length : 0;
-    const savedBills = Array.isArray(parsed.priorityBackup) ? parsed.priorityBackup.length : 0;
-
-    const contents = [
-      parsed.data.month ? `the month of ${monthLabel(parsed.data.month)}` : "one month",
-      `${walletCount} wallet${walletCount === 1 ? "" : "s"}`,
-      `${months} archived month${months === 1 ? "" : "s"}`
-    ];
-    if (savedBills > 0) contents.push(`${savedBills} saved priority bill${savedBills === 1 ? "" : "s"}`);
-
-    const stamp = parsed.exportedAt
-      ? ` Exported ${new Date(parsed.exportedAt).toLocaleString("default", { dateStyle: "medium", timeStyle: "short" })}.`
-      : "";
-
+    confirmImportBtn.disabled = false;
+    renderBackupPreview(importPreview, parsed);
     importModalText.textContent =
-      `The app will be replaced with exactly what this file holds: ${contents.join(", ")}.` +
-      `${stamp} Anything not in the file is cleared, and your current data cannot be recovered afterwards.`;
-
-    revealSurface(importModal);
-    importFile.value = "";
+      `Replace your data with ${file.name}? Data and settings missing from the file will be cleared. Your current data will be kept as a local recovery copy.${backupTimestamp(parsed.exportedAt, "Exported")}`;
   };
   reader.onerror = () => {
-    alert("Couldn't read that file.");
+    if (readId !== importReadId) return;
+    importModalText.textContent = "Your current data has not changed.";
+    setDataControlError(importError, "Couldn't read this file. Close this preview and choose the backup again.");
     importFile.value = "";
   };
   reader.readAsText(file);
 });
 
 cancelImportBtn.addEventListener("click", () => {
+  importReadId++;
   concealSurface(importModal);
   pendingImport = null;
+  confirmImportBtn.disabled = true;
 });
 
 confirmImportBtn.addEventListener("click", () => {
   if (!pendingImport) return;
-  const p = pendingImport;
-
-  const ok =
-    save(STORAGE_KEY, p.data) &&
-    replaceKey(SETTINGS_KEY, p.settings, !!p.settings) &&
-    replaceKey(ARCHIVE_KEY, p.archive, !!p.archive && Object.keys(p.archive).length > 0) &&
-    replaceKey(BACKUP_PRIORITY_KEY, p.priorityBackup, Array.isArray(p.priorityBackup) && p.priorityBackup.length > 0);
-
+  const result = replaceBackupData(pendingImport, "import");
+  if (!result.ok) { setDataControlError(importError, result.message); return; }
   pendingImport = null;
+  confirmImportBtn.disabled = true;
   concealSurface(importModal, true);
-  if (ok) location.reload();
+  location.reload();
 });
 
 /* =========================
@@ -4649,10 +4831,11 @@ function drawTrendChart(entries) {
   const baseY = H - padBottom;
 
   trendCtx.clearRect(0, 0, W, H);
+  const light = document.documentElement.dataset.theme === "light";
 
   /* Baseline. The 0.5 offset puts a 1px stroke on a whole pixel instead of
      straddling two, which would render as a soft 2px grey smear. */
-  trendCtx.strokeStyle = "#2a2a2a";
+  trendCtx.strokeStyle = light ? "#d4d4cf" : "#2a2a2a";
   trendCtx.lineWidth = 1;
   trendCtx.beginPath();
   trendCtx.moveTo(padSide, baseY + 0.5);
@@ -4688,16 +4871,16 @@ function drawTrendChart(entries) {
        The maxArchived > 0 guard stops every bar going white in a history
        where nothing has been spent at all. */
     if (e.live) {
-      trendCtx.fillStyle = "#4a4a4a";
+      trendCtx.fillStyle = light ? "#a0a09b" : "#4a4a4a";
     } else if (e.spent === maxArchived && maxArchived > 0) {
-      trendCtx.fillStyle = "#ffffff";
+      trendCtx.fillStyle = light ? "#20201e" : "#ffffff";
     } else {
       trendCtx.fillStyle = "#8a8a8a";
     }
     trendCtx.fillRect(x, y, barW, h);
 
     /* Month name under the axis, centred on the bar. */
-    trendCtx.fillStyle = "#666";
+    trendCtx.fillStyle = light ? "#60605c" : "#999";
     trendCtx.font = "11px -apple-system, sans-serif";
     trendCtx.textAlign = "center";
     trendCtx.textBaseline = "top";
@@ -4706,7 +4889,7 @@ function drawTrendChart(entries) {
     /* Value labels only when there is room. Past six bars the slots are
        narrower than the text and the numbers collide into a grey smudge. */
     if (entries.length <= 6) {
-      trendCtx.fillStyle = e.live ? "#666" : "#aaa";
+      trendCtx.fillStyle = light ? "#60605c" : (e.live ? "#999" : "#aaa");
       trendCtx.font = "10px -apple-system, sans-serif";
       trendCtx.textBaseline = "bottom";
       trendCtx.fillText(fmtWhole(e.spent), x + barW / 2, y - 4);
@@ -4894,9 +5077,7 @@ function renderHistory() {
   if (keys.length === 0) {
     historyList.innerHTML = '<div class="empty-state-rich"><strong>No completed cycles yet</strong><p>Your first cycle will appear here automatically when its end date is reached.</p></div>';
   } else {
-    [...keys].reverse().forEach(key => {
-      historyList.appendChild(buildHistoryRow(key));
-    });
+    renderPagedRecords(historyList, "archive", [...keys].reverse(), buildHistoryRow);
   }
 
   deleteArchiveBtn.classList.toggle("hidden", keys.length === 0);
@@ -5040,7 +5221,7 @@ confirmArchiveDeleteBtn.addEventListener("click", () => {
 });
 
 /* =========================
-   SECRET RESET (DOUBLE CLICK HEADER)
+   RESET CURRENT MONTH
 ========================= */
 
 /* Resets data in place to avoid stale object references.
@@ -5055,26 +5236,31 @@ confirmArchiveDeleteBtn.addEventListener("click", () => {
    migration treats an ABSENT carryOver as "not yet done" and would helpfully
    restore last month's balance on the next load - undoing the reset. Writing
    a real 0 marks the month as handled and makes the reset stick. */
-function resetData() {
-  data.month = currentMonthKey;
-  data.income = null;
-  data.carryOver = 0;
-  data.carryIn = { main: 0, wallets: {} };
-  data.priority = [];
-  data.priorityLocked = false;
-  data.walletData = {};
-  data.secondChoice = [];
+function resetData(target = data) {
+  target.month = currentMonthKey;
+  target.income = null;
+  target.carryOver = 0;
+  target.carryIn = { main: 0, wallets: {} };
+  target.priority = [];
+  target.priorityLocked = false;
+  target.walletData = {};
+  target.secondChoice = [];
 }
 
 const secretReset = document.getElementById("secret-reset");
 const resetModal = document.getElementById("reset-modal");
 const confirmResetBtn = document.getElementById("confirm-reset");
 const cancelResetBtn = document.getElementById("cancel-reset");
+const resetError = document.getElementById("reset-error");
 
-// Opens the reset modal on header double-click
-secretReset.addEventListener("dblclick", () => {
+function openResetMonth() {
+  setDataControlError(resetError);
+  document.getElementById("reset-modal-text").textContent =
+    `Clear income, bills, spending, and wallet balances for ${monthLabel(data.month)}? Your settings, archived months, and cycle dates stay. A recovery copy is saved first.`;
   revealSurface(resetModal);
-});
+}
+secretReset.addEventListener("dblclick", openResetMonth);
+document.getElementById("reset-month-btn").addEventListener("click", openResetMonth);
 
 // Cancels the reset
 cancelResetBtn.addEventListener("click", () => {
@@ -5083,12 +5269,13 @@ cancelResetBtn.addEventListener("click", () => {
 
 // Confirms the reset and wipes the month
 confirmResetBtn.addEventListener("click", () => {
-  if (data.priority.length > 0) {
-    localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
-  }
-
-  resetData();
-  saveData();
+  const nextData = JSON.parse(JSON.stringify(data));
+  resetData(nextData);
+  const changes = { [STORAGE_KEY]: nextData };
+  if (data.priority.length > 0) changes[BACKUP_PRIORITY_KEY] = data.priority;
+  const result = commitStoredChanges(changes, "reset");
+  if (!result.ok) { setDataControlError(resetError, result.message); return; }
+  Object.assign(data, nextData);
   location.reload();
 });
 
@@ -5305,6 +5492,21 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pageshow", () => { checkCycleRollover(); });
 window.addEventListener("focus", () => { checkCycleRollover(); });
+
+document.addEventListener("mony:before-update", (event) => {
+  const draft = Array.from(document.querySelectorAll(".second-form input, .wallet-form input"))
+    .some(input => input.value.trim() !== "");
+  if (draft || editing || !incomeInput.classList.contains("hidden")) {
+    event.preventDefault();
+    event.detail.message = "Save or clear your entry before refreshing. Your draft is still here.";
+    return;
+  }
+  flushUndoStack();
+  if (!saveData()) {
+    event.preventDefault();
+    event.detail.message = "Your changes could not be saved. Export a backup before refreshing.";
+  }
+});
 
 /* Both charts size their backing store to the box they are drawn into, so a
    rotation or window resize leaves them scaled from the old dimensions. The

@@ -11,7 +11,7 @@
    their browser never has a reason to look at the network again.
 ========================= */
 
-const CACHE_NAME = "mmt-v64";
+const CACHE_NAME = "mmt-v65";
 
 /* Everything needed to cold-start the app offline. "./" is listed separately
    from "./index.html" because that is the URL the browser actually requests
@@ -27,6 +27,7 @@ const ASSETS = [
   "./money.js",
   "./ui-helpers.js",
   "./app.js",
+  "./pwa.js",
   "./manifest.json",
 ];
 
@@ -76,12 +77,12 @@ const LAUNCH_IMAGES = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll(ASSETS).then(() =>
+      cache.addAll(ASSETS.map(url => new Request(new URL(url, self.registration.scope), { cache: "reload" }))).then(() =>
         /* Tolerant, one at a time: a launch image that 404s is logged by the
            browser and skipped, and the install still succeeds. See the note on
            LAUNCH_IMAGES for why these must not be able to fail the install. */
         Promise.all(LAUNCH_IMAGES.map((url) =>
-          cache.add(url).catch(() => {})
+          cache.add(new Request(new URL(url, self.registration.scope), { cache: "reload" })).catch(() => {})
         ))
       )
     )
@@ -89,7 +90,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
+  if (event.data && event.data.type === "SKIP_WAITING") event.waitUntil(self.skipWaiting());
 });
 
 /* ACTIVATE - delete every cache except the current one. This is the eviction
@@ -102,60 +103,34 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
+          .filter((key) => /^mmt-v\d+$/.test(key) && key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-/* FETCH - network-first for page navigations, stale-while-revalidate for the
-   immutable app assets. This gives ordinary website visits fresh HTML while
-   keeping CSS/JS/icon loads instant and preserving a complete offline start. */
+/* Serve a complete release from its own cache until the user accepts the
+   next one. Mixing fresh HTML with yesterday's scripts breaks offline apps. */
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-
-  /* Navigations prefer the network so a normal website visit sees fresh HTML
-     immediately. Offline opens fall back to the cached app shell. */
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match("./index.html").then((cached) => cached || caches.match("./")))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((response) => {
-          /* Only cache successes. Without this guard a 404 or a captive
-             portal's interception page gets stored and then served happily
-             offline forever. */
-          if (response.ok) {
-            /* A response body can only be read once, so the copy going into
-               the cache has to be cloned before the original is returned. */
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        /* Offline: the network rejected, so fall back to whatever was cached.
-           Resolves to undefined for an uncached URL, which surfaces as a
-           normal navigation failure. */
-        .catch(() => cached);
-
-      /* Cache hit wins immediately; the fetch above keeps running to refresh
-         it. On a miss, the network promise is the response. */
-      return cached || fetchPromise;
-    })
-  );
+  const url = new URL(event.request.url);
+  const scope = new URL(self.registration.scope);
+  if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+  const navigation = event.request.mode === "navigate";
+  const key = navigation ? new URL("./index.html", scope).href : event.request;
+  const cacheable = navigation || [...ASSETS, ...LAUNCH_IMAGES]
+    .some(asset => new URL(asset, scope).href === url.href);
+  if (!cacheable) return;
+  event.respondWith(caches.open(CACHE_NAME).then(async cache => {
+    const cached = await cache.match(key);
+    if (cached) return cached;
+    try {
+      const response = await fetch(event.request);
+      if (response.ok) await cache.put(key, response.clone());
+      return response;
+    } catch {
+      return Response.error();
+    }
+  }));
 });

@@ -37,6 +37,7 @@
   --ease-native: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-native: cubic-bezier(0.4, 0, 1, 1);
   --ease-spring: cubic-bezier(0.34, 1.5, 0.64, 1);
+  --surface-page: #000;
   --surface-card: #111;
   --surface-raised: #171717;
   --surface-field: #1a1a1a;
@@ -44,7 +45,10 @@
   --border-strong: #303030;
   --text-primary: #f5f5f5;
   --text-secondary: #a0a0a0;
-  --text-tertiary: #707070;
+  --text-tertiary: #929292;
+  --surface-action: #e8e8e8;
+  --text-on-action: #0a0a0a;
+  --focus-ring: #b0b0b0;
   --radius-control: 10px;
   --radius-card: 16px;
   --radius-sheet: 20px;
@@ -52,6 +56,7 @@
   --space-card: 16px;
   --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.025) inset;
   --shadow-sheet: 0 24px 70px rgba(0, 0, 0, 0.72), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --shadow-nav: 0 -12px 34px rgba(0, 0, 0, 0.45);
 }
 
 /* Light is intentionally a quiet paper version of the same monochrome system,
@@ -85,6 +90,7 @@
    those overrides together here; light mode must never leave dark text on a
    dark surface, or white text on a white surface. */
 :root[data-theme="light"] {
+  --surface-page:#f5f5f3;
   --surface-card:#ffffff;
   --surface-raised:#f6f6f4;
   --surface-field:#f3f3f1;
@@ -92,9 +98,13 @@
   --border-strong:#c9c9c3;
   --text-primary:#171717;
   --text-secondary:#62625f;
-  --text-tertiary:#797974;
+  --text-tertiary:#656560;
+  --surface-action:#202020;
+  --text-on-action:#fff;
+  --focus-ring:#575751;
   --shadow-card:0 1px 2px rgba(0,0,0,.05);
   --shadow-sheet:0 24px 70px rgba(0,0,0,.18),0 1px 0 rgba(0,0,0,.04) inset;
+  --shadow-nav:0 -6px 24px rgba(0,0,0,.08);
 }
 :root[data-theme="light"] .card,
 :root[data-theme="light"] .chart-container,
@@ -110,7 +120,7 @@
 :root[data-theme="light"] .second-form select option { background:#fff; color:#1a1a1a; }
 :root[data-theme="light"] .second-form input::placeholder,
 :root[data-theme="light"] .second-form select:invalid,
-:root[data-theme="light"] .date-placeholder { color:#858581; }
+:root[data-theme="light"] .date-placeholder { color:var(--text-tertiary); }
 :root[data-theme="light"] .second-form input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
 :root[data-theme="light"] .table-toggle,
 :root[data-theme="light"] thead,
@@ -146,8 +156,17 @@
 :root[data-theme="light"] .empty-state,
 :root[data-theme="light"] .empty-state-rich,
 :root[data-theme="light"] .chart-empty,
-:root[data-theme="light"] .trend-empty { color:#777772; }
+:root[data-theme="light"] .trend-empty { color:var(--text-secondary); }
 :root[data-theme="light"] .empty-state-rich { border-color:#cacac5; }
+:root[data-theme="light"] .tab-btn.is-active svg { background:#e7e7e3; box-shadow:none; }
+:root[data-theme="light"] .settings-btn:active { background:#e7e7e3; color:var(--text-primary); }
+:root[data-theme="light"] .toggle-slider { background:#d5d5d0; }
+:root[data-theme="light"] .toggle input:checked + .toggle-slider { background:#202020; box-shadow:none; }
+:root[data-theme="light"] .toggle input:checked + .toggle-slider::before { background:#fff; }
+:root[data-theme="light"] .spend-bar-projected { background:#bcbcb6; }
+:root[data-theme="light"] .activity-search-controls select option { background:#fff; color:#171717; }
+:root[data-theme="light"] .activity-search-controls input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
+:root[data-theme="light"] .skeleton { background:linear-gradient(90deg,#e9e9e5 25%,#f3f3f0 50%,#e9e9e5 75%); background-size:220% 100%; }
 
 .wallet-settings-row small { display:block; margin-top:3px; color:var(--text-tertiary); font-size:11px; }
 .recurring-form { margin-top:14px; }
@@ -155,8 +174,8 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #000;
-  color: #fff;
+  background: var(--surface-page);
+  color: var(--text-primary);
   /* System font stack - no webfont, so nothing to download and nothing to
      fail offline. */
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
@@ -208,7 +227,7 @@ input:-webkit-autofill:focus {
 input[type="checkbox"] {
   /* Near-white tick, since the browser default is a bright blue that would
      be the only colour outside the chart. */
-  accent-color: #e8e8e8;
+  accent-color: var(--surface-action);
 }
 
 /* Immediate tactile feedback for custom controls. The pressed state arrives
@@ -229,14 +248,14 @@ button:active {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #8c8c8c;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 /* Component focus rules remove the default outline to suppress browser-blue.
    This final class-independent ring restores a consistent keyboard affordance. */
-:where(button, input, select, textarea):focus-visible {
-  outline: 2px solid #8c8c8c !important;
+:where(button, input, select, textarea, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
   outline-offset: 2px !important;
 }
 
@@ -256,7 +275,7 @@ select:focus-visible {
   padding: 12px 12px 12px 14px;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
-  background: rgba(24, 24, 24, 0.96);
+  background: var(--surface-raised);
   box-shadow: var(--shadow-sheet);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -268,8 +287,8 @@ select:focus-visible {
 .update-banner span { display: block; }
 .update-banner strong { color: var(--text-primary); font-size: 13px; }
 .update-banner span { margin-top: 2px; color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
-.update-banner button { min-height: 36px; padding: 8px 12px; border: 0; border-radius: 9px; background: #ededed; color: #0a0a0a; font-size: 12px; font-weight: 700; }
-.update-banner .update-dismiss { width: 36px; padding: 0; background: transparent; color: #888; font-size: 0; }
+.update-banner button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 9px; background: var(--surface-action); color: var(--text-on-action); font-size: 12px; font-weight: 700; }
+.update-banner .update-dismiss { width: 44px; padding: 0; background: transparent; color: var(--text-secondary); font-size: 0; }
 .update-banner .update-dismiss::before { content: "×"; font-size: 21px; font-weight: 400; }
 
 @keyframes notice-in {
@@ -360,7 +379,7 @@ select:focus-visible {
   border: 1px solid var(--border-subtle);
   border-bottom: none;
   border-radius: 18px 18px 0 0;
-  box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-nav);
 }
 
 .tab-btn {
@@ -375,7 +394,7 @@ select:focus-visible {
   border: none;
   /* Dim by default; the active tab is the only near-white one. Greyscale, so
      brightness carries the selection the way colour would elsewhere. */
-  color: #686868;
+  color: var(--text-tertiary);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -463,8 +482,9 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   background: none;
   border: none;
   padding: 0;
@@ -492,7 +512,7 @@ select:focus-visible {
 }
 
 .settings-modal { align-items:center; justify-content:center; padding:20px; }
-.settings-panel-card { width:min(100%, 440px); max-height:min(82dvh, 720px); overflow:auto; padding:20px; }
+.modal-card.settings-panel-card { width:min(100%, 440px); max-width:440px; max-height:min(100%, 720px); overflow:auto; padding:20px; }
 .settings-modal-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
 .settings-modal-head h3 { margin:4px 0 0; font-size:24px; }
 .settings-modal-head .settings-btn { flex:0 0 auto; }
@@ -513,6 +533,7 @@ select:focus-visible {
   gap: 12px;
   font-size: 13px;
   color: #ccc;
+  min-height:44px;
 }
 
 /* Every settings row after the first is spaced from the one above.
@@ -550,6 +571,8 @@ select:focus-visible {
   -webkit-appearance: none;
   appearance: none;
   cursor: pointer;
+  min-height:44px;
+  max-width:56%;
 }
 
 .setting-input {
@@ -561,6 +584,7 @@ select:focus-visible {
   font-size: 13px;
   width: 80px;
   text-align: right;
+  min-height:44px;
 }
 
 .setting-input::placeholder {
@@ -576,6 +600,7 @@ select:focus-visible {
   padding: 10px;
   font-size: 13px;
   cursor: pointer;
+  min-height:44px;
 }
 
 .setting-btn-action:active {
@@ -655,7 +680,7 @@ select:focus-visible {
   position: relative;
   display: inline-block;
   width: 44px;
-  height: 24px;
+  height: 44px;
   flex-shrink: 0;
 }
 
@@ -667,7 +692,7 @@ select:focus-visible {
 
 .toggle-slider {
   position: absolute;
-  inset: 0;
+  inset: 10px 0;
   background: #333;
   border-radius: 24px;
   cursor: pointer;
@@ -695,6 +720,11 @@ select:focus-visible {
   transform: translateX(20px);
 }
 
+.toggle input:focus-visible + .toggle-slider {
+  outline:2px solid var(--focus-ring);
+  outline-offset:4px;
+}
+
 /* =====================
    Header
 ===================== */
@@ -715,6 +745,7 @@ header h1 {
   margin: 0;
   line-height: 1.05;
   letter-spacing: -0.035em;
+  min-width:0;
 }
 
 header p {
@@ -868,6 +899,7 @@ h3 {
   font-size: 15px;
   -webkit-appearance: none;
   appearance: none;
+  min-width:0;
 }
 
 .second-form select {
@@ -966,6 +998,7 @@ h3 {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   cursor: pointer;
+  min-height:44px;
 }
 
 .table-toggle:active {
@@ -1011,8 +1044,8 @@ h3 {
 }
 
 #add-money {
-  background: #e8e8e8;
-  color: #0a0a0a;
+  background: var(--surface-action);
+  color: var(--text-on-action);
 }
 
 #take-money {
@@ -1134,6 +1167,9 @@ td {
   box-shadow: var(--shadow-sheet);
   pointer-events: auto;
   z-index: 10000;
+  overscroll-behavior:contain;
+  overflow-wrap:anywhere;
+  scroll-padding-block:20px;
 }
 
 /* The category editor holds two full lists, so it needs the height an alert
@@ -1206,14 +1242,14 @@ td {
 }
 
 .modal-actions .danger {
-  background: #e8e8e8;
-  color: #0a0a0a;
+  background: var(--surface-action);
+  color: var(--text-on-action);
 }
 
 .modal-actions button:not(.danger) {
-  background: #191919;
+  background: var(--surface-field);
   border: 1px solid var(--border-strong);
-  color: #d0d0d0;
+  color: var(--text-primary);
 }
 
 /* Prevent app from stealing clicks when modal is open */
@@ -1283,6 +1319,7 @@ td {
   border: 1px solid #383838;
   font-family: inherit;
   cursor: pointer;
+  min-height:44px;
 }
 
 .lock-badge::after {
@@ -1303,11 +1340,11 @@ td {
 ===================== */
 .undo-toast {
   position: fixed;
-  bottom: 30px;
+  bottom: var(--tab-bar-space, 96px);
   left: 50%;
   transform: translateX(-50%);
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   padding: 12px 16px;
   display: flex;
@@ -1316,6 +1353,7 @@ td {
   z-index: 9000;
   min-width: 260px;
   max-width: 400px;
+  width: min(calc(100% - 32px), 400px);
   flex-wrap: wrap;
   animation: toast-in var(--motion-standard) var(--ease-native);
 }
@@ -1325,7 +1363,7 @@ td {
 }
 
 .undo-toast span {
-  color: #ccc;
+  color: var(--text-secondary);
   font-size: 14px;
   flex: 1;
 }
@@ -1333,11 +1371,12 @@ td {
 #undo-btn {
   background: none;
   border: none;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  padding: 0;
+  padding: 0 8px;
+  min-height:44px;
 }
 
 /* width: 100% forces the timer onto its own line below the text and button,
@@ -1345,7 +1384,7 @@ td {
 .undo-timer {
   width: 100%;
   height: 3px;
-  background: #2a2a2a;
+  background: var(--border-subtle);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -1357,7 +1396,7 @@ td {
    much time is actually left. */
 .undo-bar {
   height: 100%;
-  background: #e8e8e8;
+  background: var(--surface-action);
   border-radius: 3px;
   width: 100%;
   transition: width linear;
@@ -1407,8 +1446,8 @@ td {
 }
 
 .actions [data-role="add-btn"] {
-  background: #e8e8e8;
-  color: #0a0a0a;
+  background: var(--surface-action);
+  color: var(--text-on-action);
 }
 
 .actions [data-role="take-btn"] {
@@ -1427,6 +1466,7 @@ td {
   color: #888;
   font-size: 13px;
   cursor: pointer;
+  min-height:44px;
 }
 
 .transfer-btn:active {
@@ -1491,11 +1531,15 @@ td {
   margin: 0;
 }
 
-.wallet-setting-row {
+.wallet-setting-row,
+.wallet-settings-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
+.wallet-settings-row { justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-subtle); }
+.wallet-settings-row > span { min-width:0; overflow-wrap:anywhere; }
 
 /* Category rows reuse .wallet-setting-row for layout. The chip carries the
    exact colour the chart gives that category, so this list doubles as the
@@ -1542,14 +1586,15 @@ td {
   color: #555;
 }
 
-.wallet-delete-btn {
+.wallet-delete-btn,
+.wallet-settings-row > button {
   flex-shrink: 0;
   background: none;
   border: 1px solid #333;
   color: #8a8a8a;
   border-radius: 8px;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
@@ -1580,8 +1625,8 @@ td {
 
 /* Add Priority */
 #add-priority {
-  background: #e8e8e8;
-  color: #0a0a0a;
+  background: var(--surface-action);
+  color: var(--text-on-action);
 }
 
 .copy-last-btn {
@@ -1594,6 +1639,7 @@ td {
   color: #888;
   font-size: 13px;
   cursor: pointer;
+  min-height:44px;
 }
 
 .copy-last-btn:active {
@@ -1709,12 +1755,15 @@ td {
   justify-content: space-between;
   font-size: 13px;
   color: #ccc;
+  gap:12px;
 }
 
 .legend-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width:0;
+  overflow-wrap:anywhere;
 }
 
 .legend-dot {
@@ -1777,6 +1826,8 @@ td {
   border-radius: var(--radius-control);
   padding: 10px 6px;
   text-align: center;
+  min-width:0;
+  overflow-wrap:anywhere;
 }
 
 .stat-label {
@@ -1854,8 +1905,8 @@ td {
   border: 1px solid #333;
   color: #8a8a8a;
   border-radius: 8px;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
@@ -1886,8 +1937,8 @@ td {
   padding: 12px;
   border-radius: 12px;
   border: none;
-  background: #e8e8e8;
-  color: #0a0a0a;
+  background: var(--surface-action);
+  color: var(--text-on-action);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -2115,20 +2166,20 @@ td {
 .activity-search-controls select:focus { outline:none; border-color:#3a3a3a; }
 .activity-search-controls input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(.6); cursor:pointer; }
 .date-filter { display:flex; min-width:0; flex-direction:column; gap:6px; color:#777; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-.text-button { width:auto; padding:6px 0; border:0; background:transparent; color:#888; font-size:12px; }
+.text-button { width:auto; min-height:44px; padding:6px 8px; border:0; background:transparent; color:var(--text-secondary); font-size:12px; }
 .activity-summary { margin:14px 0 0; color:#777; font-size:12px; line-height:1.45; }
 .activity-results { margin-top:8px; }
-.activity-result { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 14px; padding:12px 0; border-top:1px solid #202020; }
+.activity-result { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 14px; padding:12px 0; border-top:1px solid var(--border-subtle); }
 .activity-result-main { min-width:0; }
 .activity-result-name, .activity-result-amount { font-weight:700; }
 .activity-result-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .activity-result-meta, .activity-result-date { color:#777; font-size:11px; }
 .activity-result-amount, .activity-result-date { text-align:right; }
 .empty-state-rich { padding:22px 16px; border:1px dashed #2d2d2d; border-radius:14px; color:#8d8d8d; text-align:center; }
-.empty-state-rich strong { display:block; margin-bottom:5px; color:#d5d5d5; }
+.empty-state-rich strong { display:block; margin-bottom:5px; color:var(--text-primary); }
 .empty-state-rich p { margin:0; font-size:12px; line-height:1.5; }
 
-.app-loading { position:fixed; z-index:10000; inset:0; padding:max(28px,env(safe-area-inset-top)) 18px 24px; background:#000; transition:opacity var(--motion-fast) ease; }
+.app-loading { position:fixed; z-index:10000; inset:0; padding:max(28px,env(safe-area-inset-top)) 18px 24px; background:var(--surface-page); transition:opacity var(--motion-fast) ease; }
 .app-loading.is-ready { opacity:0; pointer-events:none; }
 .loading-shell { max-width:560px; margin:0 auto; }
 .skeleton { display:block; border-radius:10px; background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%); background-size:220% 100%; animation:skeleton-shift 900ms linear infinite; }
@@ -2140,26 +2191,33 @@ td {
 @keyframes skeleton-shift { to { background-position:-220% 0; } }
 @media (max-width:380px) {
   :root { --space-page:16px; --space-card:14px; }
-  header h1 { font-size:24px; white-space:nowrap; }
-  .settings-btn { width:32px; }
   .tab-bar { padding-inline:4px; }
   .tab-btn { font-size:9px; letter-spacing:.06em; }
 }
 
 @media (max-width:600px) {
+  header h1 { font-size:clamp(20px,5.4vw,28px); }
+  .header-row { align-items:center; }
+  .settings-bar { flex-shrink:0; }
   .second-form input,
   .second-form select,
   .activity-search-controls input,
   .activity-search-controls select,
   .setting-input-wide,
+  .setting-input,
+  .setting-select,
   .modal-input {
     font-size:16px;
   }
 
-  .update-banner {
-    grid-template-columns:minmax(0,1fr) auto;
-  }
-  .update-banner .update-dismiss { display:none; }
+  .update-banner { gap:6px; padding:10px; }
+  .modal-card.settings-panel-card { padding:16px; }
+  .settings-group { padding:12px; }
+  .setting-row { gap:8px; }
+  .backup-row { align-items:flex-start; }
+  .backup-row > :last-child { max-width:55%; text-align:right; }
+  .history-row-main { flex-wrap:wrap; }
+  .history-right { margin-left:auto; }
 }
 
 /* Tablet: use the extra width for comparisons while keeping forms at a
@@ -2195,10 +2253,10 @@ td {
 }
 
 @media (hover:hover) and (pointer:fine) {
-  .tab-btn:hover { color:#aaa; }
+  .tab-btn:hover { color:var(--text-primary); }
   .tab-btn.is-active:hover { color:var(--text-primary); }
   .modal-actions button:not(.danger):hover,
-  .transfer-dest-btn:hover { background:#222; }
+  .transfer-dest-btn:hover { background:var(--border-subtle); }
 }
 
 /* =====================
@@ -2223,8 +2281,7 @@ td {
   left:0;
   height:2px;
   border-radius:999px;
-  background:#f2f2f2;
-  box-shadow:0 0 10px rgba(255,255,255,.35);
+  background:var(--text-primary);
   pointer-events:none;
   transition:transform var(--motion-emphasis) var(--ease-spring), width var(--motion-fast) var(--ease-native);
 }
@@ -2304,6 +2361,11 @@ td {
   .settings-panel:not(.hidden) .setting-note,
   .wallet-card.card-pulse { animation:none; }
   .tab-motion-indicator { transition:none; }
+  .chart-segment-enter { transform:none; }
+  .chart-legend-enter { opacity:1; transform:none; }
+  .settings-modal:not(.hidden) .setting-row,
+  .settings-modal:not(.hidden) .setting-btn-action,
+  .settings-modal:not(.hidden) .setting-note { animation:none; }
 }
 
 /* Opening row of a history - money brought in from last month. Italic and
@@ -2353,3 +2415,32 @@ td {
   border-left: 2px solid #6f6f6f;
   border-radius: 0 14px 14px 0;
 }
+
+.date-stamp, .returned-mark, .setting-note, .setting-version,
+.storage-line, .modal-hint, .category-locked, .history-meta,
+.stat-label, .stat-sub, .transfer-dest-sub, .activity-result-meta,
+.activity-result-date, .activity-summary, .date-filter,
+.carried-row td, .wallets-empty, .wallets-empty-note,
+.chart-empty, .trend-empty, .empty-state, .projection-part.is-projected {
+  color:var(--text-tertiary);
+}
+.wallets-empty-note { color:var(--text-tertiary) !important; }
+.wallets-empty p, .category-name, .budget-hint, .budget-warning,
+.legend-overspent .legend-amount { color:var(--text-primary); }
+.setting-version, .category-group-head { border-color:var(--border-subtle); }
+.setting-input::placeholder, .setting-input-wide::placeholder,
+.second-form input::placeholder, .activity-search-controls input::placeholder { color:var(--text-tertiary); }
+.wallet-delete-btn, .wallet-settings-row > button, .copy-last-btn,
+#wallets-empty-add, .actions button[data-edit="cancel"] {
+  color:var(--text-secondary);
+  border-color:var(--border-strong);
+}
+.wallet-delete-btn:active, .wallet-settings-row > button:active,
+.copy-last-btn:active { background:var(--surface-field); }
+.setting-btn-action:disabled, .history-more:disabled { opacity:.55; cursor:default; transform:none; }
+.history-page-control { border:0; text-align:center; }
+.history-page-control > td { padding:14px 0 0; text-align:center; }
+.history-page-count { margin:10px 0 4px; color:var(--text-tertiary); font-size:12px; }
+.history-more { width:100%; margin-top:4px; border:1px solid var(--border-strong); border-radius:var(--radius-control); background:var(--surface-field); color:var(--text-primary); font-weight:600; }
+.history-more:active { background:var(--border-subtle); }
+.sr-only { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }

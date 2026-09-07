@@ -61,6 +61,16 @@
     html, body { background: #000; color: #fff; }
     .hidden { display: none !important; }
   </style>
+  <script>
+    try {
+      const saved = JSON.parse(localStorage.getItem("monthly-money-tracker-settings") || "{}");
+      const theme = saved.theme === "light" || saved.theme === "dark" ? saved.theme
+        : (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      document.documentElement.dataset.theme = theme;
+      document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f5f5f3" : "#000000";
+      document.querySelector('meta[name="color-scheme"]').content = theme;
+    } catch {}
+  </script>
 
   <link rel="stylesheet" href="style.css" />
   <!-- Start the small application scripts while the browser is still
@@ -74,7 +84,7 @@
   <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
     <div>
       <strong>MoNy is ready to update</strong>
-      <span>Your data is saved. Refresh to use the latest version.</span>
+      <span>A new version is ready. Finish your entry, then refresh.</span>
     </div>
     <button id="apply-update" type="button">Refresh</button>
     <button id="dismiss-update" class="update-dismiss" type="button" aria-label="Dismiss update notification">Later</button>
@@ -165,13 +175,21 @@
             </section>
             <section class="settings-group" aria-labelledby="settings-data-title">
               <h4 id="settings-data-title">Data &amp; backup</h4>
-              <div class="setting-row backup-row"><span>Local backup</span><span id="backup-status" class="wallets-count">Not backed up yet</span></div>
-              <button id="restore-backup-btn" class="setting-btn-action">Restore latest backup</button>
-              <button id="export-data-btn" class="setting-btn-action">Export Data (JSON)</button>
-              <button id="import-data-btn" class="setting-btn-action">Import Data (JSON)</button>
+              <p class="setting-note">Save a file you can keep outside this browser. Import lets you review a backup before replacing your data.</p>
+              <button id="export-data-btn" class="setting-btn-action">Export backup file</button>
+              <button id="import-data-btn" class="setting-btn-action">Import backup file</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
+              <p id="data-control-feedback" class="modal-error hidden" role="status" aria-live="polite"></p>
             </section>
-            <div class="setting-version">v1.37.0</div>
+            <section class="settings-group" aria-labelledby="settings-recovery-title">
+              <h4 id="settings-recovery-title">Recovery &amp; reset</h4>
+              <div class="setting-row backup-row"><span>On this device</span><span id="backup-status" class="wallets-count">Not backed up yet</span></div>
+              <button id="restore-backup-btn" class="setting-btn-action">Restore latest backup</button>
+              <p class="setting-note">A recovery copy is kept before an import, restore, or reset. Clearing browser data also removes local backups.</p>
+              <button id="reset-month-btn" class="setting-btn-action danger">Reset current month</button>
+              <p class="setting-note">Clears this month's income, bills, spending, and balances. Your settings and archived months stay.</p>
+            </section>
+            <div class="setting-version">v1.38.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -740,12 +758,14 @@
        already there. -->
   <div id="import-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Import Data?</h3>
+      <h3>Review backup</h3>
       <p id="import-modal-text"></p>
+      <div id="import-preview" class="data-preview"></div>
+      <p id="import-error" class="modal-error hidden" role="alert"></p>
 
       <div class="modal-actions">
         <button id="cancel-import" aria-label="Cancel import">Cancel</button>
-        <button id="confirm-import" class="danger" aria-label="Confirm import and replace data">Replace</button>
+        <button id="confirm-import" class="danger" aria-label="Confirm import and replace data" disabled>Replace data</button>
       </div>
     </div>
   </div>
@@ -772,6 +792,8 @@
     <div class="modal-card">
       <h3>Restore latest backup?</h3>
       <p id="restore-backup-text"></p>
+      <div id="restore-backup-preview" class="data-preview"></div>
+      <p id="restore-backup-error" class="modal-error hidden" role="alert"></p>
       <div class="modal-actions">
         <button id="cancel-restore-backup" type="button">Cancel</button>
         <button id="confirm-restore-backup" class="danger" type="button">Restore</button>
@@ -815,21 +837,16 @@
     </div>
   </div>
 
-  <!-- SECRET RESET - reached by double-tapping the "MONTHLY SPENT" header.
-       Undocumented on purpose, and the only way out of a locked priority list.
-       Clears this month only; priority bills are backed up first, and the
-       partial month is NOT archived. -->
+  <!-- Reset clears the current cycle only, after saving a recovery copy. -->
   <div id="reset-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Reset Everything?</h3>
-      <p>
-        This will erase all data for this month.<br />
-        This action cannot be undone.
-      </p>
+      <h3>Reset current month?</h3>
+      <p id="reset-modal-text">This clears this month's income, bills, spending, and wallet balances. Your settings and archived months stay. A recovery copy is saved first.</p>
+      <p id="reset-error" class="modal-error hidden" role="alert"></p>
 
       <div class="modal-actions">
         <button id="cancel-reset" aria-label="Cancel reset">Cancel</button>
-        <button id="confirm-reset" class="danger" aria-label="Confirm reset all data">Yes, Reset</button>
+        <button id="confirm-reset" class="danger" aria-label="Confirm reset current month">Reset month</button>
       </div>
     </div>
   </div>
@@ -875,54 +892,7 @@
   <script src="money.js"></script>
   <script src="ui-helpers.js"></script>
   <script src="app.js"></script>
-  <script>
-  /* Register the offline cache, but only after load, so fetching and caching
-     the asset list never competes with the first paint. Guarded because the
-     API is absent over file:// and in some private-browsing modes - the app
-     still works, it just will not run offline. */
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      const banner = document.getElementById("update-banner");
-      const apply = document.getElementById("apply-update");
-      const dismiss = document.getElementById("dismiss-update");
-      let waitingWorker = null;
-      let refreshing = false;
-
-      const offerUpdate = (worker) => {
-        if (!worker) return;
-        waitingWorker = worker;
-        banner.classList.remove("hidden");
-      };
-
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (refreshing) return;
-        refreshing = true;
-        location.reload();
-      });
-
-      apply.addEventListener("click", () => {
-        if (waitingWorker) waitingWorker.postMessage({ type: "SKIP_WAITING" });
-      });
-      dismiss.addEventListener("click", () => banner.classList.add("hidden"));
-
-      navigator.serviceWorker.register("./service-worker.js").then((registration) => {
-        if (registration.waiting && navigator.serviceWorker.controller) {
-          offerUpdate(registration.waiting);
-        }
-        registration.addEventListener("updatefound", () => {
-          const worker = registration.installing;
-          if (!worker) return;
-          worker.addEventListener("statechange", () => {
-            if (worker.state === "installed" && navigator.serviceWorker.controller) offerUpdate(worker);
-          });
-        });
-      }).catch(() => {
-        /* Offline support is progressive enhancement. A registration failure
-           must never prevent the finance tracker itself from working. */
-      });
-    });
-  }
-</script>
+  <script src="pwa.js"></script>
 
 </body>
 </html>
