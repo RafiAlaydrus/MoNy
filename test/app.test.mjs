@@ -2296,11 +2296,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.38.0");
+  assert.equal(pkg.version, "1.38.1");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v65"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v66"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2344,6 +2344,22 @@ test("tab arrows and Escape provide complete keyboard navigation", () => {
   assert.ok(!modal.classList.contains("hidden"));
   w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   assert.ok(modal.classList.contains("is-closing") || modal.classList.contains("hidden"));
+});
+
+test("a dialog opened from Settings is layered above the Settings sheet", () => {
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() } });
+  const settings = w.document.getElementById("settings-panel");
+  const addWallet = w.document.getElementById("add-wallet-modal");
+
+  w.document.getElementById("settings-toggle").click();
+  w.document.getElementById("add-wallet-btn").click();
+
+  assert.ok(!settings.classList.contains("hidden"));
+  assert.ok(!addWallet.classList.contains("hidden"));
+  assert.ok(Number(addWallet.style.getPropertyValue("--modal-layer")) >
+    Number(settings.style.getPropertyValue("--modal-layer")),
+  "the dialog must sit above the sheet that opened it");
+  assert.equal(w.document.activeElement.id, "add-wallet-name");
 });
 
 test("the PWA exposes updates instead of silently replacing an open session", () => {

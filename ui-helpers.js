@@ -5,6 +5,8 @@
  * state and screen-specific rendering, while this file owns reusable motion.
  */
 (function attachUiHelpers(global) {
+  const BASE_MODAL_LAYER = 9999;
+
   function prefersReducedMotion() {
     return typeof global.matchMedia === "function" &&
       global.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -23,6 +25,17 @@
     if (!el) return;
     clearTimeout(el._motionHideTimer);
     el._motionHideTimer = null;
+    /* Settings is moved to the document root for Safari tap handling. That
+       means DOM order alone puts it above every dialog that Settings opens.
+       Give each newly opened overlay the next layer instead: Add Wallet,
+       categories, recovery, and every future dialog then appear in front of
+       the sheet that launched them. */
+    if (el.classList.contains("modal")) {
+      const highestLayer = Array.from(document.querySelectorAll(".modal:not(.hidden)"))
+        .filter(surface => surface !== el && !surface.classList.contains("is-closing"))
+        .reduce((highest, surface) => Math.max(highest, Number(surface.style.getPropertyValue("--modal-layer")) || BASE_MODAL_LAYER), BASE_MODAL_LAYER - 1);
+      el.style.setProperty("--modal-layer", String(highestLayer + 1));
+    }
     el.classList.remove("hidden", "is-closing");
     el.setAttribute("aria-hidden", "false");
   }
