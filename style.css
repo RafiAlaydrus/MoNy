@@ -2238,18 +2238,49 @@ td {
   .settings-panel { width:320px; }
 }
 
-/* Desktop: a wider dashboard, restrained content columns, and a floating nav
-   rail width that still reads as one focused web app rather than a stretched
-   phone screenshot. */
+@media (min-width:900px) {
+  .modal-card.settings-panel-card {
+    display:flex;
+    flex-direction:column;
+    width:min(100%, 1080px);
+    max-width:1080px;
+    max-height:100%;
+    overflow:hidden;
+  }
+  .settings-modal-head,
+  .settings-modal-actions,
+  .settings-panel-card > .setting-version { flex-shrink:0; }
+  .settings-groups {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    align-items:start;
+    gap:12px;
+    min-height:0;
+    overflow:auto;
+    overscroll-behavior:contain;
+    padding:2px;
+  }
+  .settings-group + .settings-group { margin-top:0; }
+}
+
+/* Laptop layouts use horizontal space; phone and tablet retain their flow. */
 @media (min-width:1100px) {
-  .app,
+  .app { max-width:1280px; }
   .tab-bar { max-width:900px; }
   .app { padding-inline:36px; }
-  .loading-shell { max-width:828px; }
+  .loading-shell { max-width:1208px; }
   .tab-panel:not(#tab-home) > section,
   #tab-wallets .wallet-section,
   #tab-wallets .wallets-empty { max-width:700px; }
-  #chart-section { max-width:760px; margin-inline:auto; }
+  #tab-home { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(0,1fr); gap:24px; align-items:start; }
+  #chart-section { margin:0; min-width:0; }
+  #tab-home .summary { grid-template-columns:minmax(0,1fr); margin:0; }
+  #tab-home:not(:has(#chart-section:not(.hidden))) .summary { grid-column:1 / -1; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #tab-home .insights-section { grid-column:1 / -1; margin:0; }
+  .insights-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .insight-card small { white-space:normal; }
+  .settings-groups { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .settings-group[aria-labelledby="settings-recovery-title"] { grid-column:span 2; }
 }
 
 @media (hover:hover) and (pointer:fine) {
