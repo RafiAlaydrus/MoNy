@@ -676,6 +676,25 @@ syncing between them. Use Export/Import (see
 [Backing up and moving your data](#backing-up-and-moving-your-data)) to
 move data from one to another.
 
+**Can I edit in several browser tabs at once?**
+Only one tab sharing the same browser storage can edit at a time. Other tabs
+show **Editing paused** before loading records. Close the editing tab, then
+select **Reload** in the tab you want to use. This uses the browser's
+[Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API);
+editing requires a supported browser on HTTPS or localhost.
+
+**What protects transfers and month rollover?**
+Transfer confirmations are single-use, and both sides are saved together.
+A shortfall top-up and its expense also save together; failed saves restore
+the previous balances and keep the entry available to retry. Rollover and
+cycle-day changes keep a temporary recovery journal until all records save.
+If the app closes during that write, the next launch restores the previous
+state before retrying. Do not clear browser data during recovery.
+
+Opening after several months carries the closing balance into the current
+cycle once. Unopened cycles and their recurring expenses are not fabricated.
+Existing archived cycles are never silently replaced.
+
 **What happens if I clear my browser's data, cache, or storage for this
 site?**
 Your entries for this app will be permanently deleted, unless you exported

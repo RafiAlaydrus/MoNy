@@ -38,7 +38,7 @@ const APP_JS = read("app.js");
  * Returns the jsdom window, with every app.js function reachable as a property
  * because app.js declares them at script scope.
  */
-export function bootApp({ storage = {}, today = "2026-08-15", url = "https://example.org/" } = {}) {
+export function bootApp({ storage = {}, today = "2026-08-15", url = "https://example.org/", beforeBoot } = {}) {
   /* Swallow jsdom's noise about unimplemented canvas and CSS it cannot parse.
      Real errors are surfaced by the assertions, not by this console. */
   const virtualConsole = new VirtualConsole();
@@ -89,6 +89,7 @@ export function bootApp({ storage = {}, today = "2026-08-15", url = "https://exa
   Object.entries(storage).forEach(([k, v]) => {
     window.localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
   });
+  if (beforeBoot) beforeBoot(window);
 
   /* Everything goes through ONE eval, deliberately.
 

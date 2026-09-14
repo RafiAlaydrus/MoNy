@@ -7,6 +7,47 @@ const SETTINGS_KEY = "monthly-money-tracker-settings";
 const BACKUP_PRIORITY_KEY = "monthly-money-tracker-priority-backup";
 const ARCHIVE_KEY = "monthly-money-tracker-archive";
 const SNAPSHOT_KEY = "monthly-money-tracker-latest-backup";
+const JOURNAL_KEY = "monthly-money-tracker-pending-write";
+const RECOVERY_KEY = "monthly-money-tracker-recovery-backup";
+const STATE_KEYS = [STORAGE_KEY, SETTINGS_KEY, ARCHIVE_KEY, BACKUP_PRIORITY_KEY];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+let storageConflict = false;
+let moneyBatch = false;
+
+// An interrupted multi-key save is rolled back before migrations or rollover.
+function recoverPendingWrite() {
+  const raw = localStorage.getItem(JOURNAL_KEY);
+  if (!raw) return;
+  const previous = JSON.parse(raw);
+  if (!Array.isArray(previous) || previous.some(pair => !Array.isArray(pair) ||
+      ![...STATE_KEYS, RECOVERY_KEY].includes(pair[0]) ||
+      (pair[1] !== null && typeof pair[1] !== "string"))) {
+    throw new Error("The pending save needs recovery. Stored records have not been replaced.");
+  }
+  previous.forEach(([key, value]) => {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  });
+  localStorage.removeItem(JOURNAL_KEY);
+}
+recoverPendingWrite();
+const expectedStorage = new Map(STATE_KEYS.map(key => [key, localStorage.getItem(key)]));
+
+function storageIsCurrent() {
+  if (storageConflict) return false;
+  if (STATE_KEYS.some(key => localStorage.getItem(key) !== expectedStorage.get(key))) {
+    storageConflict = true;
+    const message = "Your records changed in another tab. Reload this tab before editing so newer records are not overwritten.";
+    if (window.MoNySession) window.MoNySession.block(message);
+    else alert(message);
+    return false;
+  }
+  return true;
+}
+
+window.addEventListener("storage", event => {
+  if (event.key === null || STATE_KEYS.includes(event.key)) storageIsCurrent();
+});
 
 /* Persistence. Declared before anything writes, because the migrations below
    already save. A quota failure is surfaced once instead of losing data
@@ -16,7 +57,10 @@ let snapshotReady = false;
 
 function save(key, value) {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    if (!storageIsCurrent()) return false;
+    const raw = JSON.stringify(value);
+    localStorage.setItem(key, raw);
+    if (expectedStorage.has(key)) expectedStorage.set(key, raw);
     return true;
   } catch (err) {
     if (!storageWarned) {
@@ -35,9 +79,35 @@ function save(key, value) {
 /* One wrapper per stored key. Every write in the app goes through these three
    rather than touching localStorage directly, so a full-storage failure is
    caught in one place instead of silently dropping data at 36 call sites. */
-function saveData() { const ok = save(STORAGE_KEY, data); if (ok && snapshotReady) saveSnapshot(); return ok; }
-function saveSettings() { const ok = save(SETTINGS_KEY, settings); if (ok && snapshotReady) saveSnapshot(); return ok; }
+function saveData() { if (moneyBatch) return true; const ok = save(STORAGE_KEY, data); if (ok && snapshotReady) saveSnapshot(); return ok; }
+function saveSettings() { if (moneyBatch) return true; const ok = save(SETTINGS_KEY, settings); if (ok && snapshotReady) saveSnapshot(); return ok; }
 function saveArchive() { const ok = save(ARCHIVE_KEY, archive); if (ok && snapshotReady) saveSnapshot(); return ok; }
+
+function commitStateChanges(changes) {
+  if (!storageIsCurrent()) return { ok: false, message: "Reload this tab before editing. Your records changed in another tab." };
+  const entries = Object.entries(changes).map(([key, value]) => [key, value === undefined ? null : JSON.stringify(value)]);
+  const previous = entries.map(([key]) => [key, localStorage.getItem(key)]);
+  try {
+    localStorage.setItem(JOURNAL_KEY, JSON.stringify(previous));
+    entries.forEach(([key, value]) => {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    });
+    localStorage.removeItem(JOURNAL_KEY);
+    entries.forEach(([key, value]) => { if (expectedStorage.has(key)) expectedStorage.set(key, value); });
+    return { ok: true };
+  } catch (_) {
+    try {
+      recoverPendingWrite();
+      return { ok: false, message: "Couldn't save this change. Your existing data is unchanged. Free some browser storage and try again." };
+    } catch (_) {
+      storageConflict = true;
+      const message = "Couldn't finish saving. Close other MoNy tabs and reload to recover the interrupted save. Do not clear browser data.";
+      if (window.MoNySession) window.MoNySession.block(message);
+      return { ok: false, message };
+    }
+  }
+}
 
 const now = new Date();
 
@@ -354,17 +424,23 @@ if (!data) {
  * nodes already exist, and swapping the object out from under them would
  * leave them writing into a month that is no longer on screen. */
 function performRollover(today) {
+  if (!storageIsCurrent() || today < data.cycleNext) return false;
+  if (!isValidYmd(data.cycleStart) || !isValidYmd(data.cycleNext) || data.cycleNext <= data.cycleStart) {
+    alert("This cycle has invalid dates. Export a backup before correcting it.");
+    return false;
+  }
+  const nextArchive = { ...archive };
   if (monthHasContent(data)) {
-    archive[data.month] = {
+    if (archive[data.month]) {
+      alert("This cycle already exists in History. Rollover was stopped to protect it. Export a backup before resolving the duplicate cycle.");
+      return false;
+    }
+    nextArchive[data.month] = {
       data: JSON.parse(JSON.stringify(data)),
       wallets: settings.wallets.map(w => ({ id: w.id, name: w.name })),
       currency: settings.currency,
       closedAt: new Date().toISOString()
     };
-    saveArchive();
-  }
-  if ((data.priority || []).length > 0) {
-    localStorage.setItem(BACKUP_PRIORITY_KEY, JSON.stringify(data.priority));
   }
   /* What the closing month leaves behind, measured BEFORE closed wallets are
      purged below - a wallet closed during the month has already returned its
@@ -376,15 +452,12 @@ function performRollover(today) {
 
   // Closed wallets only needed to survive the month they were closed in;
   // their figures are in the archive now.
-  if (settings.wallets.some(w => w.deleted)) {
-    settings.wallets = settings.wallets.filter(w => !w.deleted);
-    saveSettings();
-  }
+  const nextSettings = { ...settings, wallets: settings.wallets.filter(w => !w.deleted) };
 
   /* Only carry balances for wallets that still exist. A wallet closed in the
      old month must not reappear holding money in the new one. */
   if (carry) {
-    const live = new Set(settings.wallets.map(w => w.id));
+    const live = new Set(nextSettings.wallets.map(w => w.id));
     Object.keys(carry.wallets).forEach(id => {
       if (!live.has(id)) delete carry.wallets[id];
     });
@@ -394,18 +467,29 @@ function performRollover(today) {
   /* The new cycle begins where the old one said it would - cycleNext, not a
      figure recomputed from today. If the app was not opened for a while it
      may already be several cycles stale, so this walks forward until the
-     start it lands on actually contains today. Each step is a real cycle
-     boundary, so no month is skipped and none is invented. */
+     start it lands on actually contains today. Unopened cycles are not
+     fabricated, and their recurring expenses are not charged retroactively. */
   let nextStart = data.cycleNext;
   while (today >= nextCycleStartOf(nextStart, settings.monthStartDay)) {
     nextStart = nextCycleStartOf(nextStart, settings.monthStartDay);
   }
 
   const fresh = freshMonthData(carry, nextStart);
+  if (archive[fresh.month]) {
+    alert("The next cycle already exists in History. Rollover was stopped to protect your records.");
+    return false;
+  }
   applyRecurringTransactions(fresh);
+  const changes = { [ARCHIVE_KEY]: nextArchive, [SETTINGS_KEY]: nextSettings, [STORAGE_KEY]: fresh };
+  if ((data.priority || []).length > 0) changes[BACKUP_PRIORITY_KEY] = data.priority;
+  const result = commitStateChanges(changes);
+  if (!result.ok) { alert(result.message); return false; }
+  Object.assign(archive, nextArchive);
+  Object.assign(settings, nextSettings);
   Object.keys(data).forEach(k => { delete data[k]; });
   Object.assign(data, fresh);
-  saveData();
+  if (snapshotReady) saveSnapshot();
+  return true;
 }
 
 /* The cycle on screen, as an archive key. Derived from the month record that
@@ -416,6 +500,7 @@ function performRollover(today) {
    reload, and everything keyed by this (the export filename, the trend
    chart's live bar, resetData) has to follow it. */
 let currentMonthKey = data.month;
+let checkingCycle = false;
 
 /* A single local recovery copy is updated after successful writes. It never
    leaves this device and is intentionally separate from Export: a mistaken
@@ -1500,7 +1585,7 @@ addPriorityBtn.addEventListener("click", () => {
   if (hasError) return;
 
   data.priority.push({ name, category, amount, paid: false, date: new Date().toISOString() });
-  saveData();
+  if (!saveData()) { data.priority.pop(); return; }
 
   pbName.value = "";
   pbCategory.selectedIndex = 0;
@@ -1522,7 +1607,7 @@ addPriorityBtn.addEventListener("click", () => {
 ========================= */
 
 const copyLastBtn = document.getElementById("copy-last-priority");
-const backupPriority = load(BACKUP_PRIORITY_KEY, null);
+let backupPriority = load(BACKUP_PRIORITY_KEY, null);
 
 // Shows or hides the "Copy Last Priority" button
 function updateCopyLastBtn() {
@@ -1970,7 +2055,7 @@ function buildWalletSection(wallet) {
   function commitItem(type, name, amount, dateValue, rebuilt) {
     const wd = ensureWalletData(wallet.id);
     wd.items.push({ name, amount, type, date: resolveDate(dateValue) });
-    saveData();
+    if (!saveData()) { wd.items.pop(); return false; }
 
     if (rebuilt) {
       renderWallets();
@@ -2204,9 +2289,81 @@ const transferSummary = document.getElementById("transfer-summary");
 const transferDestinations = document.getElementById("transfer-destinations");
 const cancelTransferBtn = document.getElementById("cancel-transfer");
 
+function restoreInPlace(target, source) {
+  Object.keys(target).forEach(key => { if (!(key in source)) delete target[key]; });
+  Object.entries(source).forEach(([key, value]) => {
+    if (value && typeof value === "object" && target[key] &&
+        typeof target[key] === "object" && Array.isArray(value) === Array.isArray(target[key])) {
+      restoreInPlace(target[key], value);
+    } else target[key] = value;
+  });
+  if (Array.isArray(source)) target.length = source.length;
+}
+
+// Covering a shortfall and recording its expense are one persisted action.
+function runMoneyAction(action) {
+  if (moneyBatch) return action() !== false;
+  if (!storageIsCurrent()) return false;
+  const before = JSON.parse(JSON.stringify(data));
+  const beforeSettings = JSON.parse(JSON.stringify(settings));
+  const drafts = Array.from(document.querySelectorAll("input, select")).map(el => ({
+    el, value: el.value, wallet: el.closest("[data-wallet-id]")?.dataset.walletId, role: el.dataset.role
+  }));
+  moneyBatch = true;
+  let ok = false;
+  try {
+    if (action() !== false) {
+      moneyBatch = false;
+      if (JSON.stringify(settings) !== JSON.stringify(beforeSettings)) {
+        const result = commitStateChanges({ [STORAGE_KEY]: data, [SETTINGS_KEY]: settings });
+        ok = result.ok;
+        if (!ok) alert(result.message);
+      } else ok = save(STORAGE_KEY, data);
+    }
+  } finally {
+    moneyBatch = false;
+    if (!ok) {
+      restoreInPlace(data, before);
+      restoreInPlace(settings, beforeSettings);
+      renderPriority(); renderWallets(); renderSecondChoice(); renderIncome(); calculateRemaining();
+      drafts.forEach(({ el, value, wallet, role }) => {
+        const target = el.isConnected ? el : wallet && role
+          ? Array.from(document.querySelectorAll('[data-wallet-id]')).find(section => section.dataset.walletId === wallet)?.querySelector(`[data-role="${role}"]`)
+          : null;
+        if (target && target.type !== "file") target.value = value;
+      });
+    }
+  }
+  if (ok) saveSnapshot();
+  return ok;
+}
+
+function moneyConfirmation(modal) {
+  const token = {};
+  const cycle = data.cycleStart;
+  modal._confirmation = token;
+  return action => {
+    if (token.used || modal._confirmation !== token || modal.classList.contains("hidden") ||
+        modal.classList.contains("is-closing") || cycle !== data.cycleStart || todayString() >= data.cycleNext) return false;
+    if (!runMoneyAction(action)) return false;
+    token.used = true;
+    concealSurface(modal);
+    return true;
+  };
+}
+
 // Moves money out of a wallet into Main or another wallet. Both halves share a
 // txId so deleting either one takes the other with it.
 function executeTransfer(sourceWallet, destId, name, amount, date) {
+  if (!moneyBatch) return runMoneyAction(() => executeTransfer(sourceWallet, destId, name, amount, date));
+  const source = activeWallets().find(w => w.id === sourceWallet.id);
+  const destinationExists = destId === "main" || activeWallets().some(w => w.id === destId);
+  if (!source || !destinationExists || destId === source.id || !isValidAmount(amount) ||
+      Number(amount) > getWalletBalance(source.id) + 1e-9) {
+    alert("This transfer is no longer available. Check the wallets and their balances, then try again.");
+    return false;
+  }
+  amount = Number(amount);
   const destName = transferPartyName(destId);
   const txId = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -2231,10 +2388,12 @@ function executeTransfer(sourceWallet, destId, name, amount, date) {
   renderWallets();
   renderSecondChoice();
   calculateRemaining();
+  return true;
 }
 
 // Opens the destination picker for a pending transfer
 function openTransferModal(wallet, name, amount, date, onDone) {
+  const confirm = moneyConfirmation(transferModal);
   transferSummary.textContent = `Move ${cur()} ${fmt(amount)} from ${wallet.name} to:`;
   transferDestinations.innerHTML = "";
 
@@ -2251,9 +2410,7 @@ function openTransferModal(wallet, name, amount, date, onDone) {
     btn.setAttribute("aria-label", `Transfer to ${dest.name}`);
     btn.innerHTML = `${esc(dest.name)}<span class="transfer-dest-sub">${esc(dest.sub)}</span>`;
     btn.addEventListener("click", () => {
-      executeTransfer(wallet, dest.id, name, amount, date);
-      concealSurface(transferModal);
-      onDone();
+      if (confirm(() => executeTransfer(wallet, dest.id, name, amount, date))) onDone();
     });
     transferDestinations.appendChild(btn);
   });
@@ -2279,6 +2436,7 @@ let overspendCancel = null;
 // shortfall from a wallet that can fully absorb it, record it anyway and let
 // Remaining go negative, or cancel. `proceed` performs the original action.
 function askOverspend({ amount, available, label, transferName, proceed, onCancel, excludeWalletId }) {
+  const confirm = moneyConfirmation(overspendModal);
   // Round to cents so the covering transfer stores a clean figure rather than
   // float dust like 943.8299999999999
   const shortfall = Math.round((amount - available) * 100) / 100;
@@ -2297,11 +2455,12 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
     btn.innerHTML = `Cover ${esc(cur())} ${fmt(shortfall)} from ${esc(wallet.name)}` +
       `<span class="transfer-dest-sub">Has ${esc(cur())} ${fmt(balance)}. Moves it to your main balance first.</span>`;
     btn.addEventListener("click", () => {
-      closeOverspend();
       // A real tagged transfer, so it is excluded from income and deleting
       // either half removes both
-      executeTransfer(wallet, "main", `Cover ${transferName}`, shortfall, new Date().toISOString());
-      proceed();
+      if (confirm(() => {
+        if (!executeTransfer(wallet, "main", `Cover ${transferName}`, shortfall, new Date().toISOString())) return false;
+        return proceed();
+      })) overspendCancel = null;
     });
     overspendOptions.appendChild(btn);
   });
@@ -2311,7 +2470,7 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
   anyway.setAttribute("aria-label", "Record it anyway and go overspent");
   anyway.innerHTML = `Record it anyway` +
     `<span class="transfer-dest-sub">Remaining goes to ${esc(cur())} ${fmt(available - amount)}.</span>`;
-  anyway.addEventListener("click", () => { closeOverspend(); proceed(); });
+  anyway.addEventListener("click", () => { if (confirm(proceed)) overspendCancel = null; });
   overspendOptions.appendChild(anyway);
 
   overspendCancel = onCancel || null;
@@ -2331,6 +2490,7 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
  * route forward was to work out for yourself that the budget had to be raised.
  */
 function askWalletShortfall({ wallet, amount, available, transferName, proceed, onCancel }) {
+  const confirm = moneyConfirmation(overspendModal);
   const shortfall = Math.round((amount - available) * 100) / 100;
 
   overspendSummary.textContent =
@@ -2347,12 +2507,13 @@ function askWalletShortfall({ wallet, amount, available, transferName, proceed, 
     fromMain.innerHTML = `Add ${esc(cur())} ${fmt(shortfall)} from main balance` +
       `<span class="transfer-dest-sub">You have ${esc(cur())} ${fmt(mainAvailable)} left. Remaining drops to ${esc(cur())} ${fmt(mainAvailable - shortfall)}.</span>`;
     fromMain.addEventListener("click", () => {
-      closeOverspend();
-      ensureWalletData(wallet.id).items.push({
-        name: `Top up for ${transferName}`, amount: shortfall, type: "add", date: new Date().toISOString()
-      });
-      saveData();
-      proceed();
+      if (confirm(() => {
+        if (getMainRemaining() < shortfall) return false;
+        ensureWalletData(wallet.id).items.push({
+          name: `Top up for ${transferName}`, amount: shortfall, type: "add", date: new Date().toISOString()
+        });
+        return proceed();
+      })) overspendCancel = null;
     });
     overspendOptions.appendChild(fromMain);
   }
@@ -2369,9 +2530,10 @@ function askWalletShortfall({ wallet, amount, available, transferName, proceed, 
       btn.innerHTML = `Move ${esc(cur())} ${fmt(shortfall)} from ${esc(source.name)}` +
         `<span class="transfer-dest-sub">Has ${esc(cur())} ${fmt(balance)}. Transfers straight into ${esc(wallet.name)}.</span>`;
       btn.addEventListener("click", () => {
-        closeOverspend();
-        executeTransfer(source, wallet.id, `Top up for ${transferName}`, shortfall, new Date().toISOString());
-        proceed();
+        if (confirm(() => {
+          if (!executeTransfer(source, wallet.id, `Top up for ${transferName}`, shortfall, new Date().toISOString())) return false;
+          return proceed();
+        })) overspendCancel = null;
       });
       overspendOptions.appendChild(btn);
     });
@@ -2586,14 +2748,14 @@ function readSecondChoiceForm() {
 // counts as income or is money coming back to you.
 function addSecondChoice(type, newMoney) {
   const form = readSecondChoiceForm();
-  if (!form) return;
+  if (!form) return false;
   const { name, category, amount, fields } = form;
 
   const backdated = !!scDate.value;
   const entry = { name, category, amount, type, date: resolveDate(scDate.value) };
   if (type === "add") entry.newMoney = newMoney !== false;
   data.secondChoice.push(entry);
-  saveData();
+  if (!saveData()) { data.secondChoice.pop(); return false; }
 
   scName.value = "";
   scCategory.selectedIndex = 0;
@@ -3464,15 +3626,21 @@ if (monthStartSelect) {
     const chosen = Number(monthStartSelect.value);
     const effective = startDayTakesEffect(chosen);
 
-    settings.monthStartDay = chosen;
-    saveSettings();
-
     /* The cycle on screen keeps the start date it was created with; only the
        date it ends on moves. That is the whole reason cycleStart is stored
        rather than recomputed - the month being looked at can never be
        re-cut underneath the user. */
+    const nextSettings = { ...settings, monthStartDay: chosen };
+    const nextData = { ...data, cycleNext: effective };
+    const result = commitStateChanges({ [SETTINGS_KEY]: nextSettings, [STORAGE_KEY]: nextData });
+    if (!result.ok) {
+      monthStartSelect.value = String(settings.monthStartDay);
+      alert(result.message);
+      return;
+    }
+    settings.monthStartDay = chosen;
     data.cycleNext = effective;
-    saveData();
+    saveSnapshot();
 
     renderMonthLabel();
     renderMonthStartNote();
@@ -4020,22 +4188,15 @@ cancelDeleteWalletBtn.addEventListener("click", () => {
 
 confirmDeleteWalletBtn.addEventListener("click", () => {
   if (!walletPendingDelete) return;
-  const wallet = walletPendingDelete;
+  const wallet = settings.wallets.find(w => w.id === walletPendingDelete.id);
+  if (!wallet || wallet.deleted) return;
 
-  // Return whatever is left to the main balance as a real transfer, so the
-  // money is accounted for rather than just vanishing with the wallet.
-  const leftover = getWalletBalance(wallet.id);
-  if (leftover > 0) {
-    executeTransfer(wallet, "main", `${wallet.name} closed`, leftover, new Date().toISOString());
-  }
-
-  // Soft delete: the record and its transactions stay in the books so any
-  // spending already made from this wallet is not silently un-spent. Closed
-  // wallets are dropped for good at the next month rollover.
-  wallet.deleted = true;
-
-  saveSettings();
-  saveData();
+  if (!runMoneyAction(() => {
+    const leftover = getWalletBalance(wallet.id);
+    if (leftover > 0 && !executeTransfer(wallet, "main", `${wallet.name} closed`, leftover, new Date().toISOString())) return false;
+    // Keep this month's history; rollover purges the closed wallet later.
+    wallet.deleted = true;
+  })) return;
   concealSurface(deleteWalletModal);
   walletPendingDelete = null;
   renderWallets();
@@ -4075,7 +4236,6 @@ document.getElementById("add-recurring").addEventListener("click", () => {
 });
 
 const backupStatus = document.getElementById("backup-status");
-const RECOVERY_KEY = "monthly-money-tracker-recovery-backup";
 const dataControlFeedback = document.getElementById("data-control-feedback");
 function setDataControlError(element, message = "") {
   element.textContent = message;
@@ -4162,7 +4322,6 @@ let importReadId = 0;
  * normalised by carryOverOf/carryInOf, and a missing cycleStart is filled in
  * by the migration, so none of those need to be present. */
 const MONTH_KEY_RE = /^\d{4}-([1-9]|1[0-2])$/;
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -4466,34 +4625,9 @@ function renderBackupPreview(element, backup) {
 }
 
 function commitStoredChanges(changes, reason) {
-  const previous = new Map();
-  const written = [];
-  try {
-    const recovery = { savedAt: new Date().toISOString(), reason, data, settings, archive,
-      priorityBackup: load(BACKUP_PRIORITY_KEY, null) || [] };
-    const replacements = [[RECOVERY_KEY, JSON.stringify(recovery)], ...Object.entries(changes).map(([key, value]) =>
-      [key, value === undefined ? null : JSON.stringify(value)])];
-    replacements.forEach(([key]) => previous.set(key, localStorage.getItem(key)));
-    for (const [key, value] of replacements) {
-      if (value === null) localStorage.removeItem(key);
-      else localStorage.setItem(key, value);
-      written.push(key);
-    }
-    return { ok: true };
-  } catch (error) {
-    let rolledBack = true;
-    for (const key of written.reverse()) {
-      if (key === RECOVERY_KEY && !rolledBack) continue;
-      try {
-        const value = previous.get(key);
-        if (value === null) localStorage.removeItem(key);
-        else localStorage.setItem(key, value);
-      } catch (_) { rolledBack = false; }
-    }
-    return { ok: false, message: rolledBack
-      ? "Couldn't save this change. Your existing data is unchanged. Free some browser storage and try again."
-      : "Couldn't finish saving. Keep this app open and export your current data before trying again. A recovery copy is still on this device." };
-  }
+  const recovery = { savedAt: new Date().toISOString(), reason, data, settings, archive,
+    priorityBackup: load(BACKUP_PRIORITY_KEY, null) || [] };
+  return commitStateChanges({ [RECOVERY_KEY]: recovery, ...changes });
 }
 
 function replaceBackupData(backup, reason) {
@@ -5214,8 +5348,8 @@ cancelArchiveDeleteBtn.addEventListener("click", () => {
 });
 
 confirmArchiveDeleteBtn.addEventListener("click", () => {
+  if (!save(ARCHIVE_KEY, {})) return;
   archive = {};
-  localStorage.removeItem(ARCHIVE_KEY);
   concealSurface(archiveModal);
   renderHistory();
 });
@@ -5446,9 +5580,11 @@ function dismissOpenPrompts() {
 /* Rolls the app forward if the cycle has ended since it was last checked.
    Returns true when a rollover actually happened. */
 function checkCycleRollover() {
-  if (!data || !data.cycleNext) return false;
+  if (checkingCycle || !storageIsCurrent() || !data || !data.cycleNext) return false;
   const today = todayString();
   if (today < data.cycleNext) return false;
+  checkingCycle = true;
+  try {
 
   /* Abandon any half-finished edit first. Its target belongs to the month
      being archived, and saving afterwards would write into an object that is
@@ -5461,10 +5597,13 @@ function checkCycleRollover() {
      NEW month, where they mean nothing. Dismissing is the only safe move -
      nothing has been written yet, so the user simply re-enters it. */
   dismissOpenPrompts();
+  incomeInput.classList.add("hidden");
+  incomeInput.value = "";
 
   const closedLabel = monthLabel(data.month);
-  performRollover(today);
+  if (!performRollover(today)) return false;
   currentMonthKey = data.month;
+  backupPriority = load(BACKUP_PRIORITY_KEY, null);
 
   // Everything on screen belongs to the month that just closed.
   renderMonthLabel();
@@ -5481,6 +5620,7 @@ function checkCycleRollover() {
 
   showNotice(`${closedLabel} closed - new month started`);
   return true;
+  } finally { checkingCycle = false; }
 }
 
 /* Foreground transitions only. There is deliberately no timer: a phone
@@ -5492,6 +5632,25 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pageshow", () => { checkCycleRollover(); });
 window.addEventListener("focus", () => { checkCycleRollover(); });
+
+// Check before an action, not only on foreground: midnight can arrive while
+// the app is being used. The triggering action is stopped so it cannot land
+// in a different cycle than the form or confirmation the user saw.
+["click", "change", "keydown", "blur", "submit", "pointerup", "pointerdown"].forEach(type => {
+  document.addEventListener(type, event => {
+    if (event.target.closest?.("#session-blocker")) return;
+    if (!storageIsCurrent()) {
+      event.preventDefault(); event.stopImmediatePropagation(); return;
+    }
+    // Recovery/export remains reachable when rollover cannot finish.
+    if (event.target.closest?.("#settings-toggle, #settings-panel > .settings-panel-card > .settings-modal-head, #close-settings, #export-data-btn") ||
+        (type === "keydown" && ["Tab", "Escape"].includes(event.key))) return;
+    if (todayString() >= data.cycleNext) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      checkCycleRollover();
+    }
+  }, true);
+});
 
 document.addEventListener("mony:before-update", (event) => {
   const draft = Array.from(document.querySelectorAll(".second-form input, .wallet-form input"))

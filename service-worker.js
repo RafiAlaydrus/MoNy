@@ -11,7 +11,7 @@
    their browser never has a reason to look at the network again.
 ========================= */
 
-const CACHE_NAME = "mmt-v67";
+const CACHE_NAME = "mmt-v68";
 
 /* Everything needed to cold-start the app offline. "./" is listed separately
    from "./index.html" because that is the URL the browser actually requests
@@ -26,6 +26,7 @@ const ASSETS = [
   "./style.css",
   "./money.js",
   "./ui-helpers.js",
+  "./session.js",
   "./app.js",
   "./pwa.js",
   "./manifest.json",

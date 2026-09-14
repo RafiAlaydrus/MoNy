@@ -81,6 +81,15 @@
 </head>
 <body>
 
+  <div id="session-blocker" class="modal hidden session-blocker" role="alertdialog" aria-modal="true" aria-labelledby="session-title" aria-describedby="session-message">
+    <div class="modal-card">
+      <span class="section-eyebrow">Your records are protected</span>
+      <h3 id="session-title">Editing paused</h3>
+      <p id="session-message"></p>
+      <div class="modal-actions"><button id="session-reload" type="button">Reload</button></div>
+    </div>
+  </div>
+
   <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
     <div>
       <strong>MoNy is ready to update</strong>
@@ -191,7 +200,7 @@
               <p class="setting-note">Clears this month's income, bills, spending, and balances. Your settings and archived months stay.</p>
             </section>
             </div>
-            <div class="setting-version">v1.39.0</div>
+            <div class="setting-version">v1.40.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -889,11 +898,11 @@
        at parse time. ui-helpers.js then exposes the shared motion helpers
        app.js uses. Swapping these lines breaks the app instantly.
 
-       Neither is deferred, so both run before the service worker registers
-       below - which is also why app.js can assume the DOM above it exists. -->
+       session.js loads app.js only after acquiring this tab's editing lock,
+       before any records are loaded or migrated. -->
   <script src="money.js"></script>
   <script src="ui-helpers.js"></script>
-  <script src="app.js"></script>
+  <script src="session.js"></script>
   <script src="pwa.js"></script>
 
 </body>

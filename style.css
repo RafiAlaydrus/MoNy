@@ -512,6 +512,7 @@ select:focus-visible {
 }
 
 .settings-modal { align-items:center; justify-content:center; padding:20px; }
+.session-blocker { --modal-layer:20000; }
 .modal-card.settings-panel-card { width:min(100%, 440px); max-width:440px; max-height:min(100%, 720px); overflow:auto; padding:20px; }
 .settings-modal-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
 .settings-modal-head h3 { margin:4px 0 0; font-size:24px; }
