@@ -443,3 +443,34 @@ test('a bill-payment confirmation still targets the original bill after a failed
   assert.equal(w.__app.data.walletData.w0.items.length, 1);
   assert.equal(run(w, 'getMainRemaining()'), 0);
 });
+
+test('an exact decimal balance is enough and never renders as a negative zero', t => {
+  const w = open(t);
+  run(w, `
+    data.income = 0.3;
+    data.priority = [];
+    data.secondChoice = [{ name: "Small spend", category: "Others", amount: 0.1, type: "take", date: new Date().toISOString() }];
+    data.walletData = { w0: { budget: 0, items: [] }, w1: { budget: 0, items: [] } };
+    saveData(); renderWallets(); calculateRemaining();
+  `);
+
+  const section = w.document.querySelector('[data-wallet-id="w0"]');
+  section.querySelector('[data-role="item-name"]').value = 'Exact amount';
+  section.querySelector('[data-role="item-amount"]').value = '0.2';
+  section.querySelector('[data-role="add-btn"]').click();
+
+  assert.equal(w.__app.data.walletData.w0.items.length, 1);
+  assert.equal(run(w, 'moneyCents(getMainRemaining())'), 0);
+  assert.equal(w.document.getElementById('overspend-modal').classList.contains('hidden'), true);
+
+  run(w, `
+    data.income = 0.3;
+    data.priority = [{ name: "Exact bill", category: "Bills", amount: 0.3, paid: false }];
+    data.secondChoice = [];
+    data.walletData = { w0: { budget: 0, items: [] }, w1: { budget: 0, items: [] } };
+    calculateRemaining();
+  `);
+  assert.doesNotMatch(w.document.getElementById('projection-line').textContent, /overspent by RM 0\.00/);
+  assert.equal(w.document.getElementById('insight-projected').textContent, 'RM 0.00');
+  assert.equal(run(w, 'fmt(-0.00000001)'), '0.00');
+});

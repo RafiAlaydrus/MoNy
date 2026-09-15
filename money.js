@@ -32,6 +32,16 @@
     return Number.isFinite(n) && n > 0;
   }
 
+  // Comparisons must use the value the app can actually display and store:
+  // cents. This avoids treating an exact decimal amount as insufficient due
+  // to binary floating-point residue.
+  function moneyCents(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    const cents = Math.round(n * 100);
+    return cents === 0 ? 0 : cents;
+  }
+
   // Wallets that could cover a shortfall on their own, richest first. Only
   // wallets that cover it in full are offered, so choosing one always lands
   // the main balance back at zero rather than a smaller overspend.
@@ -39,7 +49,7 @@
     return (wallets || [])
       .filter(w => !w.deleted)
       .map(w => ({ wallet: w, balance: walletBalanceOf((d.walletData || {})[w.id]) }))
-      .filter(x => x.balance >= shortfall - 1e-9)
+      .filter(x => moneyCents(x.balance) >= moneyCents(shortfall))
       .sort((a, b) => b.balance - a.balance);
   }
 

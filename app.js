@@ -883,8 +883,24 @@ function walletColor(index) {
 // Returns the current currency symbol
 function cur() { return settings.currency; }
 
+// Monetary decisions are made in whole cents. JavaScript stores decimals such
+// as 0.3 - 0.1 as 0.19999999999999998, which must not turn an exact payment
+// into a shortfall or surface as "-0.00".
+function moneyCents(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  const cents = Math.round(number * 100);
+  return cents === 0 ? 0 : cents;
+}
+
+function moneyValue(value) { return moneyCents(value) / 100; }
+
+function hasEnough(available, amount) {
+  return moneyCents(available) >= moneyCents(amount);
+}
+
 // Formats a number with 2 decimals
-function fmt(n) { return Number(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmt(n) { return moneyValue(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 // Rounds to a whole number, for compact summaries where cents would be noise
 function fmtWhole(n) { return Math.round(Number(n)).toLocaleString("en"); }
@@ -1355,7 +1371,7 @@ function buildPriorityItem(bill) {
     // just like a Second choice take
     if (e.target.checked) {
       const available = getMainRemaining();
-      if (Number(bill.amount) > available) {
+      if (!hasEnough(available, bill.amount)) {
         askOverspend({
           amount: Number(bill.amount),
           available,
@@ -2021,7 +2037,7 @@ function buildWalletSection(wallet) {
 
     // Cannot budget more than the main balance can cover
     const available = getMainRemaining() + oldBudget;
-    if (value > available) {
+    if (!hasEnough(available, value)) {
       budgetInput.classList.add("input-error");
       budgetHint.textContent = `Only ${cur()} ${fmt(available)} available to budget.`;
       budgetHint.classList.remove("hidden");
@@ -2112,7 +2128,7 @@ function buildWalletSection(wallet) {
     /* Taking more than the wallet holds would push its balance negative, which
        the books cannot represent. Rather than a bare red border, offer the
        ways to make it legal - top up from main, or from another wallet. */
-    if (type === "take" && amount > getWalletBalance(wallet.id)) {
+    if (type === "take" && !hasEnough(getWalletBalance(wallet.id), amount)) {
       askWalletShortfall({
         wallet,
         amount,
@@ -2127,7 +2143,7 @@ function buildWalletSection(wallet) {
     }
 
     // Moving money into a wallet can outrun the main balance
-    if (type === "add" && amount > getMainRemaining()) {
+    if (type === "add" && !hasEnough(getMainRemaining(), amount)) {
       askOverspend({
         amount,
         available: getMainRemaining(),
@@ -2179,7 +2195,7 @@ function buildWalletSection(wallet) {
            and an unchanged edit would be rejected. */
         if (item.type === "take") {
           const balanceExcludingThis = getWalletBalance(wallet.id) + Number(item.amount);
-          if (amount > balanceExcludingThis) {
+          if (!hasEnough(balanceExcludingThis, amount)) {
             amountInput.classList.add("input-error");
             return false;
           }
@@ -2226,7 +2242,7 @@ function buildWalletSection(wallet) {
     if (hasError) return;
 
     // A transfer credits the destination, so it cannot exceed what this wallet holds
-    if (amount > getWalletBalance(wallet.id)) {
+    if (!hasEnough(getWalletBalance(wallet.id), amount)) {
       amountInput.classList.add("input-error");
       return;
     }
@@ -2359,7 +2375,7 @@ function executeTransfer(sourceWallet, destId, name, amount, date) {
   const source = activeWallets().find(w => w.id === sourceWallet.id);
   const destinationExists = destId === "main" || activeWallets().some(w => w.id === destId);
   if (!source || !destinationExists || destId === source.id || !isValidAmount(amount) ||
-      Number(amount) > getWalletBalance(source.id) + 1e-9) {
+      !hasEnough(getWalletBalance(source.id), amount)) {
     alert("This transfer is no longer available. Check the wallets and their balances, then try again.");
     return false;
   }
@@ -2436,10 +2452,12 @@ let overspendCancel = null;
 // shortfall from a wallet that can fully absorb it, record it anyway and let
 // Remaining go negative, or cancel. `proceed` performs the original action.
 function askOverspend({ amount, available, label, transferName, proceed, onCancel, excludeWalletId }) {
+  const shortfall = moneyValue(Number(amount) - Number(available));
+  // A caller can be handed a tiny floating-point residue. It is not an
+  // overspend, so keep the action direct instead of offering a RM 0.00 fix.
+  if (shortfall <= 0) return proceed();
+
   const confirm = moneyConfirmation(overspendModal);
-  // Round to cents so the covering transfer stores a clean figure rather than
-  // float dust like 943.8299999999999
-  const shortfall = Math.round((amount - available) * 100) / 100;
 
   overspendSummary.textContent =
     `${label} is ${cur()} ${fmt(shortfall)} more than the ${cur()} ${fmt(available)} you have left.`;
@@ -2469,7 +2487,7 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
   anyway.className = "transfer-dest-btn";
   anyway.setAttribute("aria-label", "Record it anyway and go overspent");
   anyway.innerHTML = `Record it anyway` +
-    `<span class="transfer-dest-sub">Remaining goes to ${esc(cur())} ${fmt(available - amount)}.</span>`;
+    `<span class="transfer-dest-sub">Remaining goes to ${esc(cur())} ${fmt(moneyValue(available - amount))}.</span>`;
   anyway.addEventListener("click", () => { if (confirm(proceed)) overspendCancel = null; });
   overspendOptions.appendChild(anyway);
 
@@ -2490,8 +2508,10 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
  * route forward was to work out for yourself that the budget had to be raised.
  */
 function askWalletShortfall({ wallet, amount, available, transferName, proceed, onCancel }) {
+  const shortfall = moneyValue(Number(amount) - Number(available));
+  if (shortfall <= 0) return proceed();
+
   const confirm = moneyConfirmation(overspendModal);
-  const shortfall = Math.round((amount - available) * 100) / 100;
 
   overspendSummary.textContent =
     `Taking ${cur()} ${fmt(amount)} is ${cur()} ${fmt(shortfall)} more than the ${cur()} ${fmt(available)} in ${wallet.name}. Top it up first:`;
@@ -2500,7 +2520,7 @@ function askWalletShortfall({ wallet, amount, available, transferName, proceed, 
   // Straight from main, as a wallet `add` - the same thing the + Add button
   // writes, so it is deducted from Remaining exactly once.
   const mainAvailable = getMainRemaining();
-  if (mainAvailable >= shortfall) {
+  if (hasEnough(mainAvailable, shortfall)) {
     const fromMain = document.createElement("button");
     fromMain.className = "transfer-dest-btn";
     fromMain.setAttribute("aria-label", "Top up from the main balance");
@@ -2508,7 +2528,7 @@ function askWalletShortfall({ wallet, amount, available, transferName, proceed, 
       `<span class="transfer-dest-sub">You have ${esc(cur())} ${fmt(mainAvailable)} left. Remaining drops to ${esc(cur())} ${fmt(mainAvailable - shortfall)}.</span>`;
     fromMain.addEventListener("click", () => {
       if (confirm(() => {
-        if (getMainRemaining() < shortfall) return false;
+        if (!hasEnough(getMainRemaining(), shortfall)) return false;
         ensureWalletData(wallet.id).items.push({
           name: `Top up for ${transferName}`, amount: shortfall, type: "add", date: new Date().toISOString()
         });
@@ -2875,7 +2895,7 @@ takeMoneyBtn.addEventListener("click", () => {
   if (!form) return;
 
   const available = getMainRemaining();
-  if (form.amount > available) {
+  if (!hasEnough(available, form.amount)) {
     askOverspend({
       amount: form.amount,
       available,
@@ -2980,9 +3000,9 @@ function renderInsights() {
     return;
   }
 
-  const remaining = getMainRemaining();
+  const remaining = moneyValue(getMainRemaining());
   const days = daysRemainingInCycle();
-  const projected = projectedRemainingOf(data, allWallets());
+  const projected = moneyValue(projectedRemainingOf(data, allWallets()));
   dailyEl.textContent = `${cur()} ${fmt(Math.max(remaining, 0) / days)}`;
   dailyNote.textContent = `${days} ${days === 1 ? "day" : "days"} remaining`;
   projectedEl.textContent = projected < 0 ? `−${cur()} ${fmt(-projected)}` : `${cur()} ${fmt(projected)}`;
@@ -3176,15 +3196,15 @@ function renderProjection() {
   const bar = document.getElementById("spend-bar-projected");
   if (!line || !bar) return;
 
-  const owed = unpaidPriorityOf(data);
+  const owed = moneyValue(unpaidPriorityOf(data));
   if (monthIsUnset(data) || owed <= 0) {
     line.classList.add("hidden");
     bar.classList.add("hidden");
     return;
   }
 
-  const remaining = getMainRemaining();
-  const projected = projectedRemainingOf(data, allWallets());
+  const remaining = moneyValue(getMainRemaining());
+  const projected = moneyValue(projectedRemainingOf(data, allWallets()));
 
   line.innerHTML =
     `<span class="projection-part">Balance ${esc(cur())} ${fmt(remaining)}</span>` +
@@ -3226,12 +3246,12 @@ function calculateRemaining(skipChart = false) {
     return;
   }
 
-  let remaining = getMainRemaining();
+  let remaining = moneyValue(getMainRemaining());
 
   updateRemainingDisplay(remaining);
 
-  const income = totalIncomeOf(data, allWallets());
-  const spent = income - remaining;
+  const income = moneyValue(totalIncomeOf(data, allWallets()));
+  const spent = moneyValue(income - remaining);
   const pct = Math.min(Math.max((spent / income) * 100, 0), 100);
   const fill = document.getElementById("spend-bar-fill");
   const label = document.getElementById("spend-bar-label");
@@ -3382,7 +3402,7 @@ function renderChart() {
   /* rawRemaining keeps its sign for the overspend check; `remaining` is the
      clamped version used for the segment, since a negative width would make
      the bar's proportions meaningless. */
-  const rawRemaining = getMainRemaining();
+  const rawRemaining = moneyValue(getMainRemaining());
   const remaining = Math.max(rawRemaining, 0);
 
   // Biggest first, so the bar reads left to right in order of size and the

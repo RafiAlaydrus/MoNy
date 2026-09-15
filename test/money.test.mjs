@@ -72,6 +72,15 @@ test("income only", () => {
   assertReconciles("income only", d, []);
 });
 
+test("a wallet covering an exact decimal shortfall is offered", () => {
+  const wallets = W("Grocery");
+  const d = {
+    income: 0.3, priority: [], secondChoice: [],
+    walletData: { w0: { budget: 0.3, items: [{ name: "Small spend", amount: 0.1, type: "take" }] } }
+  };
+  assert.equal(M.walletsCovering(d, wallets, 0.2).length, 1);
+});
+
 /* A bill is a plan until it is ticked. Listing what you owe must not move any
    money - only `paid: true` spends. */
 test("paid bills count as spending, unpaid do not", () => {
