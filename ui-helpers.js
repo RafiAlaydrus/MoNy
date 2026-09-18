@@ -23,6 +23,8 @@
 
   function revealSurface(el) {
     if (!el) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !el.contains(active)) el._focusReturn = active;
     clearTimeout(el._motionHideTimer);
     el._motionHideTimer = null;
     /* Settings is moved to the document root for Safari tap handling. That
@@ -38,15 +40,28 @@
     }
     el.classList.remove("hidden", "is-closing");
     el.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => {
+      if (el.classList.contains("hidden") || el.classList.contains("is-closing")) return;
+      const initial = el.querySelector("[data-modal-initial-focus]") || el.querySelector(
+        "input:not([type='hidden']):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])"
+      );
+      (initial || el.querySelector(".modal-card"))?.focus();
+    });
   }
 
   function concealSurface(el, immediate = false, duration = 120) {
     if (!el || el.classList.contains("hidden")) return;
+    const returnFocus = el._focusReturn;
+    el._focusReturn = null;
+    const restoreFocus = () => {
+      if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === "function") returnFocus.focus();
+    };
     clearTimeout(el._motionHideTimer);
     if (immediate || prefersReducedMotion()) {
       el.classList.add("hidden");
       el.classList.remove("is-closing");
       el.setAttribute("aria-hidden", "true");
+      restoreFocus();
       return;
     }
     el.classList.add("is-closing");
@@ -55,6 +70,7 @@
       el.classList.add("hidden");
       el.classList.remove("is-closing");
       el._motionHideTimer = null;
+      restoreFocus();
     }, duration);
   }
 

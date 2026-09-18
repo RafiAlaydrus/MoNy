@@ -164,7 +164,7 @@ function load(key, fallback) {
 }
 
 let settings = load(SETTINGS_KEY, null) || {
-  showChart: false,
+  showChart: true,
   currency: "RM",
   sortOrder: "newest",
   budgetLimit: null,
@@ -173,6 +173,7 @@ let settings = load(SETTINGS_KEY, null) || {
 // Default missing settings
 if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "oldest";
+if (settings.showChart === undefined) settings.showChart = true;
 if (settings.budgetLimit === undefined) settings.budgetLimit = null;
 if (!settings.collapsed) settings.collapsed = {};
 /* Which bottom tab was open when the app was last closed. Remembered so a
@@ -632,6 +633,14 @@ const incomeCard = document.getElementById("income-card");
 const incomeDisplay = document.getElementById("total-income-display");
 const incomeInput = document.getElementById("total-income-input");
 const remainingMoneyEl = document.getElementById("remaining-money");
+const setupMonth = document.getElementById("setup-month");
+const setupIncomeBtn = document.getElementById("setup-income-btn");
+const homeSummary = document.getElementById("home-summary");
+const walletReservedContext = document.getElementById("wallet-reserved-context");
+const cycleSummary = document.getElementById("cycle-summary");
+const recentSection = document.getElementById("recent-section");
+const recentActivity = document.getElementById("recent-activity");
+const recentViewAll = document.getElementById("recent-view-all");
 
 const priorityList = document.getElementById("priority-list");
 const addPriorityBtn = document.getElementById("add-priority");
@@ -667,6 +676,7 @@ const activityClose = document.getElementById("activity-close");
 const chartBar = document.getElementById("chart-bar");
 const chartTotal = document.getElementById("chart-total");
 const chartLegend = document.getElementById("chart-legend");
+const chartSection = document.getElementById("chart-section");
 
 /* =========================
    NATIVE FAST MOTION
@@ -1077,7 +1087,7 @@ function showTopUndo() {
   undoBar.style.transition = "none";
   undoBar.style.width = "100%";
   requestAnimationFrame(() => {
-    undoBar.style.transition = "width 3s linear";
+    undoBar.style.transition = "width 5s linear";
     undoBar.style.width = "0%";
   });
 
@@ -1089,7 +1099,7 @@ function showTopUndo() {
       undoTimeout = null;
       flushUndoStack();
     }, MOTION_FAST_MS);
-  }, 3000);
+  }, 5000);
 }
 
 /* Registers an undoable action and shows the toast.
@@ -1144,19 +1154,13 @@ function cycleLabel(startDate, endDate) {
   const s = new Date(startDate + "T00:00:00");
   const e = new Date(endDate + "T00:00:00");
 
-  const isCalendarMonth = s.getDate() === 1 &&
-    s.getFullYear() === e.getFullYear() &&
-    s.getMonth() === e.getMonth() &&
-    e.getDate() === daysInMonth(e.getFullYear(), e.getMonth() + 1);
-  if (isCalendarMonth) {
-    return s.toLocaleString("default", { month: "long", year: "numeric" });
-  }
-
   const sameYear = s.getFullYear() === e.getFullYear();
   const from = s.toLocaleString("default",
-    sameYear ? { day: "numeric", month: "short" }
+    sameYear ? { month: "short", day: "numeric" }
              : { day: "numeric", month: "short", year: "numeric" });
-  const to = e.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" });
+  const to = e.toLocaleString("default", sameYear
+    ? { month: "short", day: "numeric" }
+    : { day: "numeric", month: "short", year: "numeric" });
   return `${from} – ${to}`;
 }
 
@@ -1245,11 +1249,15 @@ function renderIncome() {
   incomeDisplay.textContent = total !== null ? `${cur()} ${fmt(total)}` : `${cur()} 0`;
 }
 
-incomeCard.addEventListener("click", () => {
+function startIncomeEdit() {
+  homeSummary.classList.remove("hidden");
   incomeInput.classList.remove("hidden");
   incomeInput.value = data.income ?? "";
   incomeInput.focus();
-});
+}
+
+incomeCard.addEventListener("click", startIncomeEdit);
+setupIncomeBtn.addEventListener("click", startIncomeEdit);
 
 // Saves the income input
 function saveIncome() {
@@ -1257,6 +1265,7 @@ function saveIncome() {
 
   if (!isValidAmount(value)) {
     incomeInput.classList.add("hidden");
+    calculateRemaining();
     return;
   }
 
@@ -1495,7 +1504,7 @@ function renderPriority() {
   priorityList.innerHTML = "";
 
   if (data.priority.length === 0) {
-    priorityList.innerHTML = '<li class="empty-state-rich"><strong>No priority bills yet</strong><p>Add rent, subscriptions, or anything that must be paid this cycle.</p></li>';
+    priorityList.innerHTML = '<li class="empty-state-rich"><strong>No bills yet</strong><p>Add rent, subscriptions, or anything you need to pay this cycle.</p></li>';
     return;
   }
 
@@ -1515,12 +1524,15 @@ function renderPriority() {
 function updatePriorityLockUI() {
   const form = document.getElementById("priority-form");
   const lockBadge = document.getElementById("priority-lock-badge");
+  const lockNote = document.getElementById("bills-lock-note");
   if (data.priorityLocked) {
     if (form) form.style.display = "none";
     if (lockBadge) lockBadge.classList.remove("hidden");
+    if (lockNote) lockNote.classList.remove("hidden");
   } else {
     if (form) form.style.display = "";
     if (lockBadge) lockBadge.classList.add("hidden");
+    if (lockNote) lockNote.classList.add("hidden");
   }
 }
 
@@ -1534,15 +1546,15 @@ const priorityLockBadge = document.getElementById("priority-lock-badge");
 function openPriorityModal(intent) {
   priorityLockIntent = intent;
   if (intent === "unlock") {
-    priorityModalTitle.textContent = "Unlock Priority Bills?";
+    priorityModalTitle.textContent = "Unlock bills?";
     priorityModalText.textContent =
       "You'll be able to add, edit and delete bills again. Nothing already recorded changes, and you can lock the list again afterwards.";
     confirmPriorityBtn.textContent = "Yes, Unlock";
   } else {
-    priorityModalTitle.textContent = "Save Priority Bills?";
+    priorityModalTitle.textContent = "Finish bill setup?";
     priorityModalText.textContent =
       "Are you sure? Once saved, the list is locked so it cannot be changed by accident.";
-    confirmPriorityBtn.textContent = "Yes, Save";
+    confirmPriorityBtn.textContent = "Finish setup";
   }
   revealSurface(priorityModal);
 }
@@ -1759,7 +1771,7 @@ function buildCarriedRow(amount, columnCount) {
     <td>Brought forward</td>
     ${spacer}
     <td class="date-stamp">last month</td>
-    <td>+ ${esc(cur())} ${fmt(amount)}</td>
+    <td class="amount-in">+ ${esc(cur())} ${fmt(amount)}</td>
   `;
   return row;
 }
@@ -1777,7 +1789,7 @@ function buildWalletItemRow(item, wallet, tbody, section) {
   row.innerHTML = `
     <td>${label}</td>
     ${dateCellHtml(item.date)}
-    <td>${isWalletInflow(item) ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
+    <td class="${isWalletInflow(item) ? "amount-in" : "amount-out"}">${isWalletInflow(item) ? "+" : "−"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
 
   if (wallet) {
@@ -2414,7 +2426,7 @@ function openTransferModal(wallet, name, amount, date, onDone) {
   transferDestinations.innerHTML = "";
 
   const destinations = [
-    { id: "main", name: "Main wallet", sub: "Shows in Second choice" },
+    { id: "main", name: "Main balance", sub: "Shows in Spending" },
     ...activeWallets()
       .filter(w => w.id !== wallet.id)
       .map(w => ({ id: w.id, name: w.name, sub: `Balance ${cur()} ${fmt(getWalletBalance(w.id))}` }))
@@ -2487,7 +2499,7 @@ function askOverspend({ amount, available, label, transferName, proceed, onCance
   anyway.className = "transfer-dest-btn";
   anyway.setAttribute("aria-label", "Record it anyway and go overspent");
   anyway.innerHTML = `Record it anyway` +
-    `<span class="transfer-dest-sub">Remaining goes to ${esc(cur())} ${fmt(moneyValue(available - amount))}.</span>`;
+    `<span class="transfer-dest-sub">Available goes to ${esc(cur())} ${fmt(moneyValue(available - amount))}.</span>`;
   anyway.addEventListener("click", () => { if (confirm(proceed)) overspendCancel = null; });
   overspendOptions.appendChild(anyway);
 
@@ -2525,7 +2537,7 @@ function askWalletShortfall({ wallet, amount, available, transferName, proceed, 
     fromMain.className = "transfer-dest-btn";
     fromMain.setAttribute("aria-label", "Top up from the main balance");
     fromMain.innerHTML = `Add ${esc(cur())} ${fmt(shortfall)} from main balance` +
-      `<span class="transfer-dest-sub">You have ${esc(cur())} ${fmt(mainAvailable)} left. Remaining drops to ${esc(cur())} ${fmt(mainAvailable - shortfall)}.</span>`;
+      `<span class="transfer-dest-sub">You have ${esc(cur())} ${fmt(mainAvailable)} available. It drops to ${esc(cur())} ${fmt(mainAvailable - shortfall)}.</span>`;
     fromMain.addEventListener("click", () => {
       if (confirm(() => {
         if (!hasEnough(getMainRemaining(), shortfall)) return false;
@@ -2641,7 +2653,7 @@ function buildSecondChoiceRow(item) {
     <td>${esc(item.name)}${mark}</td>
     <td>${esc(item.category)}</td>
     ${dateCellHtml(item.date)}
-    <td>${item.type === "add" ? "+" : "-"} ${esc(cur())} ${fmt(item.amount)}</td>
+    <td class="${item.type === "add" ? "amount-in" : "amount-out"}">${item.type === "add" ? "+" : "−"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
   makeRowDeletable(row, () => deleteSecondChoiceItem(item));
   makeRowEditable(row, item, () => editSecondChoice(item));
@@ -2659,7 +2671,7 @@ function renderSecondChoice() {
 
   if (data.secondChoice.length === 0) {
     if (carried <= 0) {
-      scTable.innerHTML = '<tr><td colspan="4"><div class="empty-state-rich"><strong>No everyday activity yet</strong><p>Add money coming in or record your first expense above.</p></div></td></tr>';
+      scTable.innerHTML = '<tr><td colspan="4"><div class="empty-state-rich"><strong>No spending activity yet</strong><p>Use Money In or Expense above to record your first transaction.</p></div></td></tr>';
     }
     return;
   }
@@ -2989,14 +3001,13 @@ function renderInsights() {
   const comparisonNote = document.getElementById("insight-comparison-note");
   const paceEl = document.getElementById("insight-pace");
   const paceNote = document.getElementById("insight-pace-note");
+  const section = document.querySelector(".insights-section");
+  const card = name => document.querySelector(`[data-insight="${name}"]`);
+  const show = (name, visible) => card(name)?.classList.toggle("hidden", !visible);
 
-  if (monthIsUnset(data)) {
-    dailyEl.textContent = projectedEl.textContent = categoryEl.textContent = comparisonEl.textContent = paceEl.textContent = "—";
-    dailyNote.textContent = "Set income to calculate";
-    projectedNote.textContent = "After unpaid bills";
-    categoryNote.textContent = "No spending yet";
-    comparisonNote.textContent = "No completed cycle yet";
-    paceNote.textContent = "Set income to calculate";
+  const insightIncome = totalIncomeOf(data, allWallets());
+  if (insightIncome === null || moneyCents(insightIncome) <= 0) {
+    section?.classList.add("hidden");
     return;
   }
 
@@ -3041,6 +3052,13 @@ function renderInsights() {
       ? `${cur()} ${fmt(spent - settings.budgetLimit)} over your limit`
       : `${cur()} ${fmt(settings.budgetLimit - spent)} still available`;
   }
+
+  show("daily", true);
+  show("projected", true);
+  show("category", !!top);
+  show("comparison", !!previousKey);
+  show("pace", !!settings.budgetLimit);
+  section?.classList.remove("hidden");
 }
 
 function activityIndex() {
@@ -3049,7 +3067,7 @@ function activityIndex() {
     name: item.name, category: item.category || "Others", amount: Number(item.amount) || 0,
     date: item.date, source: "main", sourceLabel: "Main balance",
     type: isTransferEntry(item) ? "transfer" : item.type === "add" ? "income" : "expense",
-    direction: item.type === "add" ? 1 : -1
+    direction: item.type === "add" ? 1 : -1, txId: item.txId
   }));
 
   allWallets().forEach(wallet => {
@@ -3059,7 +3077,7 @@ function activityIndex() {
       date: item.date, source: wallet.id, sourceLabel: wallet.name,
       type: isTransferEntry(item) || item.type === "in" || item.type === "out" ? "transfer" :
         isWalletInflow(item) ? "income" : "expense",
-      direction: isWalletInflow(item) ? 1 : -1
+      direction: isWalletInflow(item) ? 1 : -1, txId: item.txId
     }));
   });
 
@@ -3068,6 +3086,43 @@ function activityIndex() {
     date: bill.date, source: "main", sourceLabel: "Main balance", type: "bill", direction: -1
   }));
   return records.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+}
+
+function recentDateLabel(value) {
+  if (!value) return "This cycle";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "This cycle";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const then = new Date(date);
+  then.setHours(0, 0, 0, 0);
+  const days = Math.round((today - then) / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return entryDateLabel(value).text || "This cycle";
+}
+
+function renderRecentActivity() {
+  if (!recentActivity) return;
+  const seenTransfers = new Set();
+  const records = activityIndex().filter(record => {
+    if (!record.txId) return true;
+    if (seenTransfers.has(record.txId)) return false;
+    seenTransfers.add(record.txId);
+    return true;
+  }).slice(0, 5);
+  if (!records.length) {
+    recentActivity.innerHTML = '<div class="empty-state-rich"><strong>No transactions yet</strong><p>Open Spending to record money in or your first expense.</p><button class="empty-action" type="button">Go to Spending</button></div>';
+    recentActivity.querySelector("button").addEventListener("click", () => showTab("spending"));
+    recentViewAll.classList.add("hidden");
+    return;
+  }
+  recentViewAll.classList.remove("hidden");
+  recentActivity.innerHTML = records.map(record => `
+    <div class="recent-row">
+      <div class="recent-main"><strong>${esc(record.name)}</strong><span>${esc(record.category)} · ${esc(record.type === "bill" ? "Paid bill" : record.type)}</span></div>
+      <div class="recent-side"><strong class="${record.direction > 0 ? "amount-in" : "amount-out"}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</strong><span>${esc(recentDateLabel(record.date))}</span></div>
+    </div>`).join("");
 }
 
 function activityDateValue(date) {
@@ -3092,7 +3147,7 @@ function renderActivityFinder() {
   activityCategory.value = categories.includes(categoryValue) ? categoryValue : "all";
 
   const query = activityQuery.value.trim().toLowerCase();
-  const active = !!query || activityType.value !== "all" || activitySource.value !== "all" ||
+  const active = activityShowAll || !!query || activityType.value !== "all" || activitySource.value !== "all" ||
     activityCategory.value !== "all" || !!activityFrom.value || !!activityTo.value;
   activityClear.classList.toggle("hidden", !active);
   const invalidDates = !!activityFrom.value && !!activityTo.value && activityFrom.value > activityTo.value;
@@ -3141,40 +3196,40 @@ function renderActivityFinder() {
         <div class="activity-result-name">${esc(record.name)}</div>
         <div class="activity-result-meta">${esc(record.category)} · ${esc(record.sourceLabel)}</div>
       </div>
-      <div class="activity-result-amount">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</div>
+      <div class="activity-result-amount ${record.direction > 0 ? "amount-in" : "amount-out"}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</div>
       <div class="activity-result-meta">${esc(record.type === "bill" ? "Paid bill" : record.type)}</div>
       <div class="activity-result-date">${esc(entryDateLabel(record.date).text)}</div>`;
     return result;
   }, 0, scope);
 }
 
+let activityShowAll = false;
+
 if (activityResults) {
   [activityQuery, activityType, activitySource, activityCategory, activityFrom, activityTo].forEach(control => {
     control.addEventListener(control === activityQuery ? "input" : "change", renderActivityFinder);
   });
   activityClear.addEventListener("click", () => {
+    activityShowAll = false;
     activityQuery.value = ""; activityType.value = "all"; activitySource.value = "all";
     activityCategory.value = "all"; activityFrom.value = ""; activityTo.value = "";
     renderActivityFinder(); activityQuery.focus();
   });
 
-  activityToggle.addEventListener("click", () => {
+  function openActivityFinder(showAll = false) {
+    activityShowAll = showAll;
     renderActivityFinder();
     revealSurface(activityModal);
     requestAnimationFrame(() => activityQuery.focus());
-  });
+  }
+  activityToggle.addEventListener("click", () => openActivityFinder(false));
+  recentViewAll.addEventListener("click", () => openActivityFinder(true));
   activityClose.addEventListener("click", () => {
     concealSurface(activityModal);
     activityToggle.focus();
   });
   activityModal.addEventListener("click", event => {
     if (event.target === activityModal) {
-      concealSurface(activityModal);
-      activityToggle.focus();
-    }
-  });
-  document.addEventListener("keydown", event => {
-    if (event.key === "Escape" && !activityModal.classList.contains("hidden")) {
       concealSurface(activityModal);
       activityToggle.focus();
     }
@@ -3235,14 +3290,23 @@ function calculateRemaining(skipChart = false) {
   renderProjection();
   renderInsights();
   renderActivityFinder();
+  renderRecentActivity();
+
+  const incomeTotal = totalIncomeOf(data, allWallets());
+  const hasIncome = incomeTotal !== null && moneyCents(incomeTotal) > 0;
+  setupMonth.classList.toggle("hidden", hasIncome);
+  homeSummary.classList.toggle("hidden", !hasIncome && incomeInput.classList.contains("hidden"));
+  cycleSummary.classList.toggle("hidden", !hasIncome);
+  recentSection.classList.toggle("hidden", !hasIncome);
 
   /* monthIsUnset rather than a bare income check: on the 1st, income is null
      while carry-over is not, and that month has a real balance to show. A
      plain `income === null` test here would blank the card and make the
      carried money look like it had vanished all over again. */
-  if (monthIsUnset(data)) {
+  if (!hasIncome) {
     remainingMoneyEl._shownValue = 0;
     remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
+    chartSection?.classList.add("hidden");
     return;
   }
 
@@ -3252,6 +3316,14 @@ function calculateRemaining(skipChart = false) {
 
   const income = moneyValue(totalIncomeOf(data, allWallets()));
   const spent = moneyValue(income - remaining);
+  const breakdown = spendingBreakdownOf(data, allWallets());
+  const reserved = moneyValue(Math.max(breakdown.inWallets, 0));
+  walletReservedContext.textContent = `${cur()} ${fmt(reserved)} reserved in wallets`;
+  walletReservedContext.classList.toggle("hidden", reserved <= 0);
+  document.getElementById("summary-income").textContent = `${cur()} ${fmt(income)}`;
+  document.getElementById("summary-spent").textContent = `${cur()} ${fmt(breakdown.spent)}`;
+  document.getElementById("summary-bills").textContent = `${cur()} ${fmt(unpaidPriorityOf(data))}`;
+  document.getElementById("summary-wallets").textContent = `${cur()} ${fmt(reserved)}`;
   const pct = Math.min(Math.max((spent / income) * 100, 0), 100);
   const fill = document.getElementById("spend-bar-fill");
   const label = document.getElementById("spend-bar-label");
@@ -3285,13 +3357,15 @@ function calculateRemaining(skipChart = false) {
       warningEl.textContent = `Overspent by ${cur()} ${fmt(-remaining)}`;
       warningEl.classList.remove("hidden");
     } else if (settings.budgetLimit && remaining <= settings.budgetLimit) {
-      warningEl.textContent = `Warning: Remaining is below ${cur()} ${fmt(settings.budgetLimit)}`;
+      warningEl.textContent = `Warning: Available is below ${cur()} ${fmt(settings.budgetLimit)}`;
       warningEl.classList.remove("hidden");
     } else {
       warningEl.classList.add("hidden");
     }
   }
-  if (!skipChart) renderChart();
+  const showChart = settings.showChart && breakdown.spent > 0;
+  chartSection.classList.toggle("hidden", !showChart);
+  if (!skipChart && showChart) renderChart();
 }
 
 
@@ -3423,7 +3497,7 @@ function renderChart() {
   }
 
   if (remaining > 0) {
-    segments.push({ label: "Remaining", amount: remaining, color: CHART_REMAINING_COLOR });
+    segments.push({ label: "Available", amount: remaining, color: CHART_REMAINING_COLOR });
   }
 
   /* An overspend gets no segment - it is not a share of income - but the rows
@@ -3434,7 +3508,7 @@ function renderChart() {
   // Income set but nothing moved yet: one full Remaining segment, rather than
   // dividing by a total of zero below.
   if (segments.length === 0) {
-    segments.push({ label: "Remaining", amount: income, color: CHART_REMAINING_COLOR });
+    segments.push({ label: "Available", amount: income, color: CHART_REMAINING_COLOR });
   }
 
   /* Widths are shares of the segments' own sum, NOT of income. The two are
@@ -3543,32 +3617,15 @@ settingsCloseControls.forEach(control => {
   control.addEventListener("pointerup", closeSettings);
 });
 settingsPanel.addEventListener("pointerdown", event => { if (event.target === settingsPanel) closeSettings(event); });
-document.addEventListener("keydown", event => {
-  if (event.key === "Escape" && !settingsPanel.classList.contains("hidden")) closeSettings();
-});
 
 const chartToggle = document.getElementById("chart-toggle");
-const chartSection = document.getElementById("chart-section");
 
 chartToggle.checked = settings.showChart;
-if (settings.showChart) {
-  chartSection.classList.remove("hidden");
-  /* calculateRemaining() above already called renderChart(), but the section
-     was hidden then. It costs nothing to build the rows again now that it is
-     not, and it keeps this independent of that call's ordering. */
-  renderChart();
-}
 
 chartToggle.addEventListener("change", () => {
   settings.showChart = chartToggle.checked;
   saveSettings();
-
-  if (settings.showChart) {
-    chartSection.classList.remove("hidden");
-    renderChart();
-  } else {
-    chartSection.classList.add("hidden");
-  }
+  calculateRemaining();
 });
 
 /* =========================
@@ -3909,7 +3966,7 @@ cancelAddWalletBtn.addEventListener("click", () => concealSurface(addWalletModal
    read as invented jargon next to a screen labelled Priority and Second
    choice - and "Bills" was worse than vague, since it is also the name of a
    category INSIDE that list. */
-const CATEGORY_LIST_LABELS = { priority: "Priority", secondChoice: "Second choice" };
+const CATEGORY_LIST_LABELS = { priority: "Bills", secondChoice: "Spending" };
 
 const addCategoryModal = document.getElementById("add-category-modal");
 const addCategoryTitle = document.getElementById("add-category-title");
@@ -4270,9 +4327,8 @@ function renderBackupStatus() {
   const validStamp = snapshot && Number.isFinite(Date.parse(snapshot.savedAt));
   backupStatus.textContent = validStamp
     ? `${snapshot.reason ? `Before ${snapshot.reason} · ` : "Saved "}${new Date(snapshot.savedAt).toLocaleDateString("default", { day: "numeric", month: "short" })}`
-    : "Not backed up yet";
-  document.getElementById("restore-backup-btn").textContent = snapshot && snapshot.reason
-    ? "Restore recovery backup" : "Restore latest backup";
+    : "Not saved yet";
+  document.getElementById("restore-backup-btn").textContent = "Restore browser recovery";
 }
 const restoreBackupModal = document.getElementById("restore-backup-modal");
 const restoreBackupError = document.getElementById("restore-backup-error");
@@ -4282,7 +4338,7 @@ document.getElementById("restore-backup-btn").addEventListener("click", () => {
   setDataControlError(dataControlFeedback);
   const snapshot = latestRecoveryBackup();
   if (!snapshot) {
-    setDataControlError(dataControlFeedback, "There is no local backup yet. You can import an exported backup file instead.");
+    setDataControlError(dataControlFeedback, "There is no browser recovery copy yet. You can import an external backup file instead.");
     return;
   }
   const problem = validateImport(snapshot);
@@ -4388,7 +4444,7 @@ function validateBillList(list, scope) {
 }
 
 function validateSecondChoiceList(list, scope) {
-  if (!Array.isArray(list)) return `${scope} is missing the Second choice list.`;
+  if (!Array.isArray(list)) return `${scope} is missing the spending list.`;
   const bad = list.find(item =>
     !isRecord(item) || !isNonEmptyString(item.name) ||
     !isNonEmptyString(item.category) || !isFiniteAmount(item.amount) ||
@@ -4398,7 +4454,7 @@ function validateSecondChoiceList(list, scope) {
     (item.txId !== undefined && !isNonEmptyString(item.txId)) ||
     !isValidStoredDate(item.date)
   );
-  return bad === undefined ? null : `${scope}'s Second choice list contains a malformed entry.`;
+  return bad === undefined ? null : `${scope}'s spending list contains a malformed entry.`;
 }
 
 function validateWalletItems(items, scope) {
@@ -4633,11 +4689,11 @@ function renderBackupPreview(element, backup) {
   const rows = [
     ["Current month", monthLabel(month.month)],
     ["Cycle", month.cycleStart && month.cycleNext ? `${month.cycleStart} to ${month.cycleNext} (next cycle starts)` : "Calendar month"],
-    ["Priority bills", month.priority.length],
+    ["Bills", month.priority.length],
     ["Spending / income entries", month.secondChoice.length],
     ["Wallets / wallet entries", `${wallets} / ${walletEntries}`],
     ["Archived months", Object.keys(backup.archive || {}).length],
-    ["Saved priority bills", (backup.priorityBackup || []).length]
+    ["Saved bills", (backup.priorityBackup || []).length]
   ];
   element.innerHTML = rows.map(([label, value]) =>
     `<div class="setting-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
@@ -5139,7 +5195,7 @@ function buildHistoryRow(key) {
     <div class="legend-item">
       <div class="legend-left">
         <span class="legend-dot" style="background:${CHART_REMAINING_COLOR}"></span>
-        <span>Remaining</span>
+        <span>Available</span>
       </div>
       <span class="legend-amount">${esc(c)} ${fmt(s.remaining)}</span>
     </div>
@@ -5305,8 +5361,14 @@ document.querySelectorAll(".modal").forEach((modal) => {
   }
 });
 
+function topVisibleModal() {
+  return Array.from(document.querySelectorAll(".modal:not(.hidden):not(.is-closing)"))
+    .sort((a, b) => (Number(b.style.getPropertyValue("--modal-layer")) || 9999) -
+      (Number(a.style.getPropertyValue("--modal-layer")) || 9999))[0] || null;
+}
+
 document.addEventListener("keydown", (event) => {
-  const modal = document.querySelector(".modal:not(.hidden):not(.is-closing)");
+  const modal = topVisibleModal();
 
   if (event.key === "Escape") {
     if (modal) {
@@ -5328,7 +5390,7 @@ document.addEventListener("keydown", (event) => {
 
   if (event.key !== "Tab" || !modal) return;
   const focusable = Array.from(modal.querySelectorAll(dialogFocusable)).filter((el) => {
-    return !el.classList.contains("hidden") && el.getAttribute("aria-hidden") !== "true";
+    return !el.closest(".hidden") && el.getAttribute("aria-hidden") !== "true";
   });
   if (!focusable.length) {
     event.preventDefault();

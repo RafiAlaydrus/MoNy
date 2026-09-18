@@ -127,7 +127,7 @@
     <!-- HEADER + SETTINGS -->
     <header>
       <div class="header-row">
-        <h1 id="secret-reset">MONTHLY SPENT</h1>
+        <h1 id="secret-reset">MoNy</h1>
         <section class="settings-bar">
           <button id="activity-toggle" class="settings-btn" aria-label="Find activity">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -170,7 +170,7 @@
             </section>
             <section class="settings-group" aria-labelledby="settings-display-title">
               <h4 id="settings-display-title">Display</h4>
-              <div class="setting-row"><span>Show monthly chart</span><label class="toggle"><input type="checkbox" id="chart-toggle" /><span class="toggle-slider"></span></label></div>
+              <div class="setting-row"><span>Show spending chart</span><label class="toggle"><input type="checkbox" id="chart-toggle" /><span class="toggle-slider"></span></label></div>
               <div class="setting-row"><span>Appearance</span><select id="theme-select" class="setting-select"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
               <div class="setting-row"><span>Sort transactions</span><select id="sort-select" class="setting-select"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div>
             </section>
@@ -184,23 +184,23 @@
               <button id="open-recurring-panel-btn" class="setting-btn-action">Recurring transactions</button>
             </section>
             <section class="settings-group" aria-labelledby="settings-data-title">
-              <h4 id="settings-data-title">Data &amp; backup</h4>
-              <p class="setting-note">Save a file you can keep outside this browser. Import lets you review a backup before replacing your data.</p>
+              <h4 id="settings-data-title">External backup</h4>
+              <p class="setting-note">Export your data to a file you can keep outside this browser. Import always shows a preview before replacing anything.</p>
               <button id="export-data-btn" class="setting-btn-action">Export backup file</button>
               <button id="import-data-btn" class="setting-btn-action">Import backup file</button>
               <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
               <p id="data-control-feedback" class="modal-error hidden" role="status" aria-live="polite"></p>
             </section>
             <section class="settings-group" aria-labelledby="settings-recovery-title">
-              <h4 id="settings-recovery-title">Recovery &amp; reset</h4>
-              <div class="setting-row backup-row"><span>On this device</span><span id="backup-status" class="wallets-count">Not backed up yet</span></div>
-              <button id="restore-backup-btn" class="setting-btn-action">Restore latest backup</button>
-              <p class="setting-note">A recovery copy is kept before an import, restore, or reset. Clearing browser data also removes local backups.</p>
+              <h4 id="settings-recovery-title">Device recovery</h4>
+              <div class="setting-row backup-row"><span>Stored in this browser</span><span id="backup-status" class="wallets-count">Not saved yet</span></div>
+              <button id="restore-backup-btn" class="setting-btn-action">Restore browser recovery</button>
+              <p class="setting-note">MoNy keeps a local recovery copy automatically. It is not an external backup and disappears if this browser's data is cleared.</p>
               <button id="reset-month-btn" class="setting-btn-action danger">Reset current month</button>
               <p class="setting-note">Clears this month's income, bills, spending, and balances. Your settings and archived months stay.</p>
             </section>
             </div>
-            <div class="setting-version">v1.40.1</div>
+            <div class="setting-version">v1.41.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -217,6 +217,13 @@
 
     <!-- HOME - the figures, and the chart when it is switched on. -->
     <div class="tab-panel" id="tab-home" data-tab="home">
+
+    <section id="setup-month" class="setup-month hidden" aria-labelledby="setup-month-title">
+      <span class="section-eyebrow">Start this cycle</span>
+      <h2 id="setup-month-title">Set up this month</h2>
+      <p>Add your income to get started. Your existing settings, bills, and wallets stay exactly as they are.</p>
+      <button id="setup-income-btn" type="button">Set income</button>
+    </section>
 
     <!-- SPENDING BREAKDOWN
          Off by default and toggled from settings.
@@ -253,27 +260,14 @@
     </section>
 
     <!-- SUMMARY - the two headline figures -->
-    <section class="summary">
+    <section class="summary" id="home-summary">
 
       <!-- TOTAL INCOME
            The display and its editor are the same card: tapping the figure
            reveals the input and hides the <h2>. The value shown is not the
            number typed here - it is totalIncomeOf(), which adds genuinely new
            Second choice income on top. -->
-      <div class="card" id="income-card">
-        <span>Total Income</span>
-        <h2 id="total-income-display">RM 0</h2>
-
-        <input
-          type="number"
-          inputmode="decimal"
-          id="total-income-input"
-          placeholder="Enter income (RM)"
-          class="hidden"
-        />
-      </div>
-
-      <!-- REMAINING
+      <!-- AVAILABLE
            What is left in MAIN - not net worth. Money sitting in a wallet has
            already left this figure.
 
@@ -281,9 +275,10 @@
            spent, and an absolutely-positioned tick marking the optional budget
            limit. The warning below shows either "Overspent by X" or the
            budget-limit message, with overspend taking precedence. -->
-      <div class="card">
-        <span>Remaining</span>
+      <div class="card available-card">
+        <span>Available</span>
         <h2 id="remaining-money">RM 0</h2>
+        <p id="wallet-reserved-context" class="balance-context hidden"></p>
         <div class="spend-bar-wrapper">
           <div class="spend-bar-track">
             <!-- Projected fill sits BEHIND the real one and reaches further
@@ -302,6 +297,34 @@
         <p id="budget-warning" class="budget-warning hidden"></p>
       </div>
 
+      <div class="card income-card" id="income-card">
+        <span>Total income</span>
+        <h2 id="total-income-display">RM 0</h2>
+
+        <input
+          type="number"
+          inputmode="decimal"
+          id="total-income-input"
+          placeholder="Enter income (RM)"
+          class="hidden"
+        />
+      </div>
+
+    </section>
+
+    <section id="cycle-summary" class="cycle-summary" aria-label="Current cycle summary">
+      <div><span>Income</span><strong id="summary-income">RM 0.00</strong></div>
+      <div><span>Spent</span><strong id="summary-spent">RM 0.00</strong></div>
+      <div><span>Bills remaining</span><strong id="summary-bills">RM 0.00</strong></div>
+      <div><span>In wallets</span><strong id="summary-wallets">RM 0.00</strong></div>
+    </section>
+
+    <section id="recent-section" class="recent-section" aria-labelledby="recent-title">
+      <div class="section-heading-row">
+        <div><span class="section-eyebrow">Latest</span><h3 id="recent-title">Recent Activity</h3></div>
+        <button id="recent-view-all" class="text-button" type="button">View all</button>
+      </div>
+      <div id="recent-activity" class="recent-activity" aria-live="polite"></div>
     </section>
 
     <section class="insights-section" aria-labelledby="insights-title">
@@ -312,27 +335,27 @@
         </div>
       </div>
       <div id="insights-grid" class="insights-grid" aria-live="polite">
-        <article class="insight-card">
+        <article class="insight-card" data-insight="daily">
           <span>Daily allowance</span>
           <strong id="insight-daily">&mdash;</strong>
           <small id="insight-daily-note">Set income to calculate</small>
         </article>
-        <article class="insight-card">
+        <article class="insight-card" data-insight="projected">
           <span>Projected balance</span>
           <strong id="insight-projected">&mdash;</strong>
           <small id="insight-projected-note">After unpaid bills</small>
         </article>
-        <article class="insight-card">
+        <article class="insight-card" data-insight="category">
           <span>Top spending</span>
           <strong id="insight-category">&mdash;</strong>
           <small id="insight-category-note">No spending yet</small>
         </article>
-        <article class="insight-card">
+        <article class="insight-card" data-insight="comparison">
           <span>Vs last cycle</span>
           <strong id="insight-comparison">&mdash;</strong>
           <small id="insight-comparison-note">No completed cycle yet</small>
         </article>
-        <article class="insight-card">
+        <article class="insight-card" data-insight="pace">
           <span>Budget pace</span>
           <strong id="insight-pace">&mdash;</strong>
           <small id="insight-pace-note">Set a budget limit to compare</small>
@@ -354,12 +377,13 @@
       <div style="display:flex;align-items:baseline;gap:8px;">
         <!-- Shown once the list is locked for the month. The lock is one-way -
              there is no unlock, and the secret reset is the only escape. -->
-        <h3>Priority</h3>
+        <h3>Bills</h3>
         <!-- A button, not a label: it is the way back out of the lock. The
              lock exists to stop accidental edits, not to be permanent for the
              month - the only escape used to be the hidden full reset. -->
-        <button id="priority-lock-badge" class="lock-badge hidden" aria-label="Priority list locked - tap to unlock">Locked</button>
+        <button id="priority-lock-badge" class="lock-badge hidden" aria-label="Bills locked - tap to unlock">Bills locked</button>
       </div>
+      <p id="bills-lock-note" class="section-note hidden">Prevents accidental changes. You can unlock them anytime.</p>
 
       <!-- PRIORITY FORM - hidden entirely once locked.
            These three category values are fixed rather than free text because
@@ -381,13 +405,13 @@
              NEW entry is hidden so one cannot be added mid-edit, and Cancel
              appears. -->
         <div class="actions">
-          <button id="add-priority" data-edit="primary" aria-label="Add priority bill">Add Priority Bill</button>
-          <button id="save-priority" data-edit="hide-while-editing" aria-label="Save and lock priority bills">Save Priority</button>
+          <button id="add-priority" data-edit="primary" aria-label="Add bill">Add Bill</button>
+          <button id="save-priority" data-edit="hide-while-editing" aria-label="Finish and lock bill setup">Finish bill setup</button>
           <button id="cancel-priority-edit" data-edit="cancel" class="hidden" aria-label="Cancel editing this bill">Cancel</button>
         </div>
         <!-- Only shown when a backup from last month exists, the list is
              empty, and it is not locked - see updateCopyLastBtn(). -->
-        <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy priority bills from last month">Copy Last Priority</button>
+        <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy bills from last cycle">Copy last cycle's bills</button>
       </div>
 
       <!-- Built by renderPriority(); each row is a swipe-to-delete wrapper. -->
@@ -404,7 +428,7 @@
          credit is income or a repayment changes the whole month's totals and
          cannot be inferred from the amount. -->
     <section>
-      <h3>Second choice</h3>
+      <h3>Spending</h3>
 
       <div class="second-form" id="second-choice-form">
         <input id="sc-name" placeholder="Name" />
@@ -427,8 +451,8 @@
         </div>
 
         <div class="actions">
-          <button id="add-money" data-edit="primary" aria-label="Add to second choice">+ Add</button>
-          <button id="take-money" data-edit="hide-while-editing" aria-label="Take from second choice">- Take</button>
+          <button id="add-money" data-edit="primary" aria-label="Record money in">Money In</button>
+          <button id="take-money" data-edit="hide-while-editing" aria-label="Record an expense">Expense</button>
           <button id="cancel-sc-edit" data-edit="cancel" class="hidden" aria-label="Cancel editing this entry">Cancel</button>
         </div>
       </div>
@@ -653,20 +677,20 @@
 
       <div class="category-group">
         <div class="category-group-head">
-          <span>Priority</span>
+          <span>Bills</span>
           <span id="cat-priority-count" class="wallets-count">0</span>
         </div>
         <div id="cat-priority-list" class="wallets-settings-list"></div>
-        <button id="add-cat-priority-btn" class="setting-btn-action" data-list="priority">+ Add Priority Category</button>
+        <button id="add-cat-priority-btn" class="setting-btn-action" data-list="priority">+ Add Bill Category</button>
       </div>
 
       <div class="category-group">
         <div class="category-group-head">
-          <span>Second choice</span>
+          <span>Spending</span>
           <span id="cat-secondChoice-count" class="wallets-count">0</span>
         </div>
         <div id="cat-secondChoice-list" class="wallets-settings-list"></div>
-        <button id="add-cat-secondChoice-btn" class="setting-btn-action" data-list="secondChoice">+ Add Second Choice Category</button>
+        <button id="add-cat-secondChoice-btn" class="setting-btn-action" data-list="secondChoice">+ Add Spending Category</button>
       </div>
 
       <div class="modal-actions">
@@ -871,7 +895,7 @@
        there is only one copy of this markup to keep in step. -->
   <div id="priority-modal" class="modal hidden">
     <div class="modal-card">
-      <h3 id="priority-modal-title">Save Priority Bills?</h3>
+      <h3 id="priority-modal-title">Finish bill setup?</h3>
       <p id="priority-modal-text">
         Are you sure? Once saved, the list is locked for this month.
       </p>
@@ -885,7 +909,7 @@
 
   <!-- UNDO TOAST - shared by every deletion in the app.
        The deletion is only staged when it appears: the change is committed to
-       storage when the 3-second bar drains, or reverted if Undo is tapped.
+       storage when the 5-second bar drains, or reverted if Undo is tapped.
        There is a single slot, so only the most recent action is undoable. -->
   <div id="undo-toast" class="undo-toast hidden">
     <span id="undo-text">Bill deleted</span>

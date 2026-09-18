@@ -270,7 +270,7 @@ test("an already-passed candidate is deferred instead of cutting this cycle shor
   assert.equal(w.__app.run("checkCycleRollover()"), false, "the new boundary is still in the future");
   assert.match(w.__app.run("dayRangeLabel(data.cycleStart, data.cycleNext)"), /38 days/,
     "the stored range, including the deferred month, is the one displayed");
-  assert.match(w.document.getElementById("current-month").textContent, /(Aug.*31.*2026|31.*Aug.*2026)/,
+  assert.match(w.document.getElementById("current-month").textContent, /(Aug.*31|31.*Aug)/,
     "the month header ends the cycle on 31 Aug in either locale order");
   assert.match(w.document.getElementById("month-start-note").textContent, /(Sep.*1.*2026|1.*Sep.*2026)/,
     "the note names the real deferred boundary in either locale order");
@@ -999,7 +999,7 @@ test("REGRESSION: malformed nested imports are rejected before they can blank th
 
   const badSecondChoice = validFile();
   badSecondChoice.data.secondChoice = [null];
-  assert.match(check(badSecondChoice), /Second choice.*malformed entry/i);
+  assert.match(check(badSecondChoice), /spending.*malformed entry/i);
 
   const badCategories = validFile();
   badCategories.settings = {
@@ -1529,7 +1529,7 @@ test("locking still works, and the shared modal says which way it is going", () 
   });
 
   w.document.getElementById("save-priority").click();
-  assert.match(w.document.getElementById("priority-modal-title").textContent, /Save/);
+  assert.match(w.document.getElementById("priority-modal-title").textContent, /Finish bill setup/i);
   w.document.getElementById("confirm-priority").click();
   assert.equal(w.__app.data.priorityLocked, true);
 
@@ -2097,12 +2097,12 @@ test("only spending is coloured; unspent money stays greyscale", () => {
 
   const series = w.__app.run("CHART_SERIES");
   const rows = [...w.document.querySelectorAll("#chart-legend .legend-item")];
-  const remaining = rows.find(r => r.textContent.includes("Remaining"));
-  assert.ok(remaining, "Remaining is listed");
+  const remaining = rows.find(r => r.textContent.includes("Available"));
+  assert.ok(remaining, "Available is listed");
 
   const dot = remaining.querySelector(".legend-dot").style.background;
   assert.ok(!series.some(hex => dot.includes(hex)),
-    "Remaining does not wear a category colour");
+    "Available does not wear a category colour");
 });
 
 /* ---------------------------------------------------------------------------
@@ -2190,11 +2190,14 @@ test("reduced motion makes money updates immediate", () => {
 
 test("the stylesheet has compact shared motion tokens and no section stagger", () => {
   const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   assert.match(css, /--motion-fast:\s*120ms/);
   assert.match(css, /--motion-standard:\s*180ms/);
   assert.match(css, /--motion-emphasis:\s*220ms/);
   assert.doesNotMatch(css, /\.tab-panel\s*>\s*\*\s*\{[^}]*animation/s,
     "switching tabs never animates every child one after another");
+  assert.match(app, /undoBar\.style\.transition = "width 5s linear"/);
+  assert.match(app, /\}, 5000\);/);
 });
 
 /* ---------------------------------------------------------------------------
@@ -2224,6 +2227,65 @@ test("dashboard insights reuse live and archived accounting totals", () => {
   assert.match(w.document.getElementById("insight-category-note").textContent, /500\.00 spent/);
   assert.equal(w.document.getElementById("insight-comparison").textContent, "+50%");
   assert.match(w.document.getElementById("insight-daily-note").textContent, /17 days remaining/);
+});
+
+test("a fresh cycle leads with income setup, then reveals the normal dashboard", () => {
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month({ income: null }) },
+    today: "2026-08-15"
+  });
+  const setup = w.document.getElementById("setup-month");
+  const summary = w.document.getElementById("home-summary");
+  assert.ok(!setup.classList.contains("hidden"));
+  assert.ok(summary.classList.contains("hidden"));
+
+  w.document.getElementById("setup-income-btn").click();
+  const input = w.document.getElementById("total-income-input");
+  assert.equal(w.document.activeElement, input);
+  input.value = "2400";
+  input.blur();
+
+  assert.equal(w.__app.data.income, 2400);
+  assert.ok(setup.classList.contains("hidden"));
+  assert.ok(!summary.classList.contains("hidden"));
+  assert.match(w.document.getElementById("summary-income").textContent, /2,400\.00/);
+});
+
+test("Home recent activity shows five unique transactions and View all opens the full finder", () => {
+  const entries = Array.from({ length: 6 }, (_, index) => ({
+    name: `Entry ${index + 1}`, category: "Others", amount: index + 1, type: "take",
+    date: `2026-08-${String(index + 2).padStart(2, "0")}T10:00:00.000Z`
+  }));
+  const w = bootApp({
+    storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month({ secondChoice: entries }) },
+    today: "2026-08-15"
+  });
+  assert.equal(w.document.querySelectorAll("#recent-activity .recent-row").length, 5);
+  assert.match(w.document.getElementById("recent-activity").textContent, /Entry 6/);
+
+  w.document.getElementById("recent-view-all").click();
+  assert.ok(!w.document.getElementById("activity-modal").classList.contains("hidden"));
+  assert.equal(w.document.querySelectorAll("#activity-results .activity-result").length, 6);
+});
+
+test("At a glance hides cards until their data is meaningful", () => {
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() }, today: "2026-08-15" });
+  assert.ok(!w.document.querySelector('[data-insight="daily"]').classList.contains("hidden"));
+  assert.ok(!w.document.querySelector('[data-insight="projected"]').classList.contains("hidden"));
+  assert.ok(w.document.querySelector('[data-insight="category"]').classList.contains("hidden"));
+  assert.ok(w.document.querySelector('[data-insight="comparison"]').classList.contains("hidden"));
+  assert.ok(w.document.querySelector('[data-insight="pace"]').classList.contains("hidden"));
+});
+
+test("new installs reveal the spending chart automatically once spending exists", () => {
+  const w = bootApp({
+    storage: { [KEYS.data]: month({ secondChoice: [
+      { name: "Lunch", category: "Others", amount: 10, type: "take", date: "2026-08-02T10:00:00.000Z" }
+    ] }) },
+    today: "2026-08-15"
+  });
+  assert.equal(w.__app.settings.showChart, true);
+  assert.ok(!w.document.getElementById("chart-section").classList.contains("hidden"));
 });
 
 test("activity finder filters across main, wallet, transfer, and bill records", () => {
@@ -2296,11 +2358,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.40.1");
+  assert.equal(pkg.version, "1.41.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v69"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v70"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2351,6 +2413,7 @@ test("a dialog opened from Settings is layered above the Settings sheet", () => 
   const settings = w.document.getElementById("settings-panel");
   const addWallet = w.document.getElementById("add-wallet-modal");
 
+  w.document.getElementById("settings-toggle").focus();
   w.document.getElementById("settings-toggle").click();
   w.document.getElementById("add-wallet-btn").click();
 
@@ -2360,6 +2423,45 @@ test("a dialog opened from Settings is layered above the Settings sheet", () => 
     Number(settings.style.getPropertyValue("--modal-layer")),
   "the dialog must sit above the sheet that opened it");
   assert.equal(w.document.activeElement.id, "add-wallet-name");
+});
+
+test("Escape closes only the top dialog before closing Settings", async () => {
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() } });
+  const settings = w.document.getElementById("settings-panel");
+  const addWallet = w.document.getElementById("add-wallet-modal");
+
+  w.document.getElementById("settings-toggle").focus();
+  w.document.getElementById("settings-toggle").click();
+  w.document.getElementById("add-wallet-btn").click();
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 150));
+
+  assert.ok(addWallet.classList.contains("hidden"), "the top dialog closes first");
+  assert.ok(!settings.classList.contains("hidden"), "Settings remains open behind it");
+
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.ok(settings.classList.contains("hidden"), "a second Escape closes Settings");
+  assert.equal(w.document.activeElement.id, "settings-toggle");
+});
+
+test("modals focus the first control, trap Tab, and restore their opener", async () => {
+  const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month() } });
+  w.document.getElementById("settings-toggle").click();
+  const opener = w.document.getElementById("add-wallet-btn");
+  opener.focus();
+  opener.click();
+
+  const input = w.document.getElementById("add-wallet-name");
+  const last = w.document.getElementById("confirm-add-wallet");
+  assert.equal(w.document.activeElement, input);
+  last.focus();
+  w.document.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  assert.equal(w.document.activeElement, input, "Tab from the last control wraps inside the top modal");
+
+  w.document.getElementById("cancel-add-wallet").click();
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(w.document.activeElement, opener, "closing restores the element that opened the modal");
 });
 
 test("the PWA exposes updates instead of silently replacing an open session", () => {
@@ -2413,7 +2515,7 @@ test("empty and loading states explain what happens next", () => {
   assert.match(html, /id="app-loading"/);
   const w = bootApp({ storage: { [KEYS.settings]: SETTINGS, [KEYS.data]: month({ income: null }) } });
   assert.match(w.document.getElementById("priority-list").textContent, /Add rent, subscriptions/);
-  assert.match(w.document.getElementById("sc-table").textContent, /record your first expense/);
+  assert.match(w.document.getElementById("sc-table").textContent, /record your first transaction/);
   w.__app.run("renderHistory()");
   assert.match(w.document.getElementById("history-list").textContent, /appear here automatically/);
 });
