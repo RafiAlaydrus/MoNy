@@ -5391,7 +5391,9 @@ const TUTORIAL_STEPS = [
     title: "Bills",
     description: "Keep regular or required payments here so you know what still needs to be paid.",
     tab: "bills",
-    target: () => addPriorityBtn
+    target: () => elementIsShown(addPriorityBtn) ? addPriorityBtn :
+      elementIsShown(priorityLockBadge) ? priorityLockBadge :
+      document.getElementById("priority-list")
   },
   {
     title: "Spending",
@@ -5449,7 +5451,16 @@ function writeOnboardingState(status, step) {
 }
 
 function elementIsShown(element) {
-  return !!element && !element.classList.contains("hidden") && !element.closest(".hidden");
+  if (!element || element.classList.contains("hidden") || element.closest(".hidden, [hidden]")) return false;
+
+  let current = element;
+  while (current && current !== document.documentElement) {
+    const style = window.getComputedStyle?.(current);
+    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+    current = current.parentElement;
+  }
+
+  return true;
 }
 
 function setTutorialInert(on) {

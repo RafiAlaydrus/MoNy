@@ -87,6 +87,24 @@ test("completion clears saved progress", async () => {
   assert.equal(w.document.getElementById("tutorial-overlay").classList.contains("hidden"), true);
 });
 
+test("Bills tutorial targets the visible lock control when Add Bill is hidden", async () => {
+  const lockedMonth = month({
+    priorityLocked: true,
+    priority: [{ name: "Electricity", category: "Bills", amount: 200, paid: false }]
+  });
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: lockedMonth,
+      [KEYS.onboarding]: { version: 1, status: "in_progress", step: 3 }
+    },
+    today: "2026-08-15"
+  });
+  await waitForUi();
+  assert.equal(w.__app.run("tutorialTarget.id"), "priority-lock-badge");
+  assert.equal(w.document.getElementById("priority-lock-badge").classList.contains("hidden"), false);
+});
+
 test("Welcome Skip and walkthrough Exit both clear saved progress", async () => {
   const fresh = bootApp({ storage: {}, today: "2026-08-15" });
   await waitForUi();
@@ -195,4 +213,5 @@ test("destructive reset and locked-bill controls use their dedicated visual trea
   assert.match(css, /\.setting-btn-action\.danger\s*\{[^}]*background:\s*#7f1d1d/s);
   assert.match(html, /<div class="bills-heading-row">[\s\S]*?id="priority-lock-badge"/);
   assert.match(css, /\.bills-heading-row\s*\{[^}]*align-items:\s*center/s);
+  assert.match(css, /#priority-list li\.empty-state-rich\s*\{[^}]*display:\s*block/s);
 });

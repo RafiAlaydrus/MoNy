@@ -983,6 +983,20 @@ h3 {
   border-bottom: none;
 }
 
+/* A normal bill row is horizontal, but the empty message is prose. Keep its
+   heading and explanation centred and stacked instead of inheriting the row's
+   space-between layout and squeezing the heading into two lines. */
+#priority-list li.empty-state-rich {
+  display: block;
+  width: 100%;
+  padding: 22px 16px;
+  text-align: center;
+}
+
+#priority-list li.empty-state-rich strong {
+  white-space: nowrap;
+}
+
 /* =====================
    Second Choice Form
 ===================== */
