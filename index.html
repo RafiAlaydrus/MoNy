@@ -199,8 +199,13 @@
               <button id="reset-month-btn" class="setting-btn-action danger">Reset current month</button>
               <p class="setting-note">Clears this month's income, bills, spending, and balances. Your settings and archived months stay.</p>
             </section>
+            <section class="settings-group" aria-labelledby="settings-help-title">
+              <h4 id="settings-help-title">Help</h4>
+              <p class="setting-note">Review the main parts of MoNy without changing your money or setup.</p>
+              <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
+            </section>
             </div>
-            <div class="setting-version">v1.41.1</div>
+            <div class="setting-version">v1.42.1</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -379,7 +384,7 @@
          Section order on this page is Priority -> Second choice -> Wallets,
          which is deliberate: bills first because they are non-negotiable. -->
     <section>
-      <div style="display:flex;align-items:baseline;gap:8px;">
+      <div class="bills-heading-row">
         <!-- Shown once the list is locked for the month. The lock is one-way -
              there is no unlock, and the secret reset is the only escape. -->
         <h3>Bills</h3>
@@ -887,6 +892,47 @@
       <div class="modal-actions">
         <button id="cancel-reset" aria-label="Cancel reset">Cancel</button>
         <button id="confirm-reset" class="danger" aria-label="Confirm reset current month">Reset month</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- First-run offer. Its decision is kept separately from every financial
+       record, so skipping or completing the guide can never change a balance. -->
+  <div id="onboarding-welcome" class="modal onboarding-welcome hidden" aria-hidden="true">
+    <div class="modal-card onboarding-welcome-card" role="dialog" aria-modal="true" aria-labelledby="onboarding-welcome-title" aria-describedby="onboarding-welcome-text">
+      <span class="section-eyebrow">Get started</span>
+      <h3 id="onboarding-welcome-title">Welcome to MoNy</h3>
+      <p id="onboarding-welcome-text">Want a quick walkthrough? It takes about a minute.</p>
+      <div class="modal-actions">
+        <button id="onboarding-skip" type="button">Skip</button>
+        <button id="onboarding-start" class="primary" type="button" data-modal-initial-focus>Show me around</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The spotlight is visual only. The overlay remains above the real UI and
+       blocks financial controls while each real target stays visible beneath. -->
+  <div id="tutorial-overlay" class="modal tutorial-overlay hidden" aria-hidden="true">
+    <div id="tutorial-spotlight" class="tutorial-spotlight" aria-hidden="true"></div>
+    <div id="tutorial-card" class="modal-card tutorial-card" role="dialog" aria-modal="true" aria-labelledby="tutorial-title" aria-describedby="tutorial-description">
+      <span id="tutorial-progress" class="section-eyebrow">1 of 6</span>
+      <h3 id="tutorial-title">Your income</h3>
+      <p id="tutorial-description">Start each cycle by adding the money you have available.</p>
+      <div class="tutorial-actions">
+        <button id="tutorial-back" type="button">Back</button>
+        <button id="tutorial-next" class="primary" type="button" data-modal-initial-focus>Next</button>
+      </div>
+      <button id="tutorial-skip" class="text-button tutorial-skip" type="button">Skip walkthrough</button>
+    </div>
+  </div>
+
+  <div id="tutorial-exit" class="modal tutorial-exit hidden" aria-hidden="true">
+    <div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="tutorial-exit-title">
+      <h3 id="tutorial-exit-title">Exit walkthrough?</h3>
+      <p>You can replay it later from Settings under Help.</p>
+      <div class="modal-actions">
+        <button id="tutorial-continue" type="button" data-modal-initial-focus>Continue tutorial</button>
+        <button id="tutorial-confirm-exit" class="danger" type="button">Exit</button>
       </div>
     </div>
   </div>

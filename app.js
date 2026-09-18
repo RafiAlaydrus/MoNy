@@ -9,7 +9,17 @@ const ARCHIVE_KEY = "monthly-money-tracker-archive";
 const SNAPSHOT_KEY = "monthly-money-tracker-latest-backup";
 const JOURNAL_KEY = "monthly-money-tracker-pending-write";
 const RECOVERY_KEY = "monthly-money-tracker-recovery-backup";
+const ONBOARDING_KEY = "monthly-money-tracker-onboarding";
+const ONBOARDING_TRIGGER_KEY = "monthly-money-tracker-onboarding-trigger";
 const STATE_KEYS = [STORAGE_KEY, SETTINGS_KEY, ARCHIVE_KEY, BACKUP_PRIORITY_KEY];
+const TRANSACTION_KEYS = [...STATE_KEYS, RECOVERY_KEY, ONBOARDING_KEY, ONBOARDING_TRIGGER_KEY];
+/* This must be captured before migrations create current-month/settings keys.
+   Onboarding itself is excluded: an interrupted first run is decided by its
+   own explicit state, while any pre-existing MoNy record means the person is
+   an established user who must not be surprised by an automatic tutorial. */
+const hadMoNyStorageAtBoot = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+  .some(key => key && key.startsWith("monthly-money-tracker") &&
+    key !== ONBOARDING_KEY && key !== ONBOARDING_TRIGGER_KEY);
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 let storageConflict = false;
 let moneyBatch = false;
@@ -20,7 +30,7 @@ function recoverPendingWrite() {
   if (!raw) return;
   const previous = JSON.parse(raw);
   if (!Array.isArray(previous) || previous.some(pair => !Array.isArray(pair) ||
-      ![...STATE_KEYS, RECOVERY_KEY].includes(pair[0]) ||
+      !TRANSACTION_KEYS.includes(pair[0]) ||
       (pair[1] !== null && typeof pair[1] !== "string"))) {
     throw new Error("The pending save needs recovery. Stored records have not been replaced.");
   }
@@ -5343,6 +5353,311 @@ if (routeName() === "history") openHistory(false);
 else writeRoute(initialTabRoute, true);
 
 /* =========================
+   FIRST-RUN WALKTHROUGH
+========================= */
+
+const ONBOARDING_VERSION = 1;
+const onboardingWelcome = document.getElementById("onboarding-welcome");
+const onboardingStart = document.getElementById("onboarding-start");
+const onboardingSkip = document.getElementById("onboarding-skip");
+const tutorialOverlay = document.getElementById("tutorial-overlay");
+const tutorialCard = document.getElementById("tutorial-card");
+const tutorialProgress = document.getElementById("tutorial-progress");
+const tutorialTitle = document.getElementById("tutorial-title");
+const tutorialDescription = document.getElementById("tutorial-description");
+const tutorialBack = document.getElementById("tutorial-back");
+const tutorialNext = document.getElementById("tutorial-next");
+const tutorialSkip = document.getElementById("tutorial-skip");
+const tutorialExit = document.getElementById("tutorial-exit");
+const tutorialContinue = document.getElementById("tutorial-continue");
+const tutorialConfirmExit = document.getElementById("tutorial-confirm-exit");
+const replayTutorialBtn = document.getElementById("replay-tutorial-btn");
+
+const TUTORIAL_STEPS = [
+  {
+    title: "Your income",
+    description: "Start each cycle by adding the money you have available.",
+    tab: "home",
+    target: () => elementIsShown(setupIncomeBtn) ? setupIncomeBtn : incomeCard
+  },
+  {
+    title: "Available",
+    description: "This is the money you can still use. Money reserved in wallets is kept separate.",
+    tab: "home",
+    target: () => document.querySelector(".available-card"),
+    revealSummary: true
+  },
+  {
+    title: "Bills",
+    description: "Keep regular or required payments here so you know what still needs to be paid.",
+    tab: "bills",
+    target: () => addPriorityBtn
+  },
+  {
+    title: "Spending",
+    description: "Use Expense when you spend money and Money In when money comes back in.",
+    tab: "spending",
+    target: () => document.getElementById("second-choice-form")
+  },
+  {
+    title: "Wallets",
+    description: "Wallets reserve money for specific purposes. Moving money into a wallet is not spending.",
+    tab: "wallets",
+    target: () => document.querySelector("#wallets-container .wallet-section") ||
+      document.getElementById("wallets-empty-add") ||
+      document.querySelector(".tab-btn[data-tab='wallets']")
+  },
+  {
+    title: "Protect your data",
+    description: "MoNy saves locally on this device. Export a backup occasionally so you have a copy outside your browser.",
+    settings: true,
+    target: () => document.getElementById("export-data-btn")
+  }
+];
+
+let tutorialSession = null;
+let tutorialTarget = null;
+let tutorialSummaryWasHidden = false;
+const inertBeforeTutorial = new Map();
+
+function readOnboardingState() {
+  const raw = localStorage.getItem(ONBOARDING_KEY);
+  if (!raw) return null;
+  try {
+    const state = JSON.parse(raw);
+    if (!state || state.version !== ONBOARDING_VERSION ||
+        !["in_progress", "completed", "skipped"].includes(state.status)) return null;
+    if (state.status === "in_progress") {
+      const step = Number.isInteger(state.step) && state.step >= 1 && state.step <= TUTORIAL_STEPS.length
+        ? state.step : 1;
+      return { version: ONBOARDING_VERSION, status: "in_progress", step };
+    }
+    return { version: ONBOARDING_VERSION, status: state.status };
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeOnboardingState(status, step) {
+  const state = { version: ONBOARDING_VERSION, status };
+  if (status === "in_progress") state.step = step;
+  const changes = { [ONBOARDING_KEY]: state };
+  if (status === "completed" || status === "skipped") changes[ONBOARDING_TRIGGER_KEY] = undefined;
+  const result = commitStateChanges(changes);
+  if (!result.ok) console.error("Onboarding progress could not be saved", result.message);
+  return result.ok;
+}
+
+function elementIsShown(element) {
+  return !!element && !element.classList.contains("hidden") && !element.closest(".hidden");
+}
+
+function setTutorialInert(on) {
+  const allowed = new Set([onboardingWelcome, tutorialOverlay, tutorialExit]);
+  Array.from(document.body.children).forEach(child => {
+    if (allowed.has(child)) return;
+    if (on) {
+      if (!inertBeforeTutorial.has(child)) {
+        inertBeforeTutorial.set(child, {
+          inert: child.inert,
+          ariaHidden: child.getAttribute("aria-hidden")
+        });
+      }
+      child.inert = true;
+      child.setAttribute("aria-hidden", "true");
+    } else if (inertBeforeTutorial.has(child)) {
+      const previous = inertBeforeTutorial.get(child);
+      child.inert = previous.inert;
+      if (previous.ariaHidden === null) child.removeAttribute("aria-hidden");
+      else child.setAttribute("aria-hidden", previous.ariaHidden);
+    }
+  });
+  if (!on) inertBeforeTutorial.clear();
+  document.body.classList.toggle("tutorial-active", on);
+}
+
+function hideSettingsForTutorial() {
+  settingsPanel.classList.add("hidden");
+  settingsPanel.classList.remove("is-closing");
+  settingsPanel.setAttribute("aria-hidden", "true");
+}
+
+function showSettingsForTutorial() {
+  settingsPanel.style.setProperty("--modal-layer", "19998");
+  settingsPanel.classList.remove("hidden", "is-closing");
+  // The real Settings surface is a visual target only while the tutorial's
+  // dialog owns focus and narration.
+  settingsPanel.setAttribute("aria-hidden", "true");
+  const exportButton = document.getElementById("export-data-btn");
+  exportButton?.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
+function clearTutorialPresentation() {
+  tutorialTarget = null;
+  if (tutorialSummaryWasHidden) {
+    homeSummary.classList.add("hidden");
+    tutorialSummaryWasHidden = false;
+  }
+}
+
+function placeTutorial() {
+  if (!tutorialSession || !tutorialTarget || tutorialOverlay.classList.contains("hidden")) return;
+  const rect = tutorialTarget.getBoundingClientRect();
+  const pad = 7;
+  const left = Math.max(8, rect.left - pad);
+  const top = Math.max(8, rect.top - pad);
+  const width = Math.max(44, Math.min(window.innerWidth - left - 8, rect.width + pad * 2));
+  const height = Math.max(44, Math.min(window.innerHeight - top - 8, rect.height + pad * 2));
+  tutorialOverlay.style.setProperty("--spotlight-left", `${Math.round(left)}px`);
+  tutorialOverlay.style.setProperty("--spotlight-top", `${Math.round(top)}px`);
+  tutorialOverlay.style.setProperty("--spotlight-width", `${Math.round(width)}px`);
+  tutorialOverlay.style.setProperty("--spotlight-height", `${Math.round(height)}px`);
+
+  if (window.innerWidth > 680 && window.innerHeight > 650) {
+    const cardWidth = Math.min(360, window.innerWidth - 32);
+    const cardHeight = tutorialCard.offsetHeight || 260;
+    let cardLeft = rect.right + 18;
+    if (cardLeft + cardWidth > window.innerWidth - 16) cardLeft = rect.left - cardWidth - 18;
+    cardLeft = Math.max(16, Math.min(cardLeft, window.innerWidth - cardWidth - 16));
+    let cardTop = rect.top;
+    if (cardTop + cardHeight > window.innerHeight - 16) cardTop = window.innerHeight - cardHeight - 16;
+    tutorialOverlay.style.setProperty("--tutorial-left", `${Math.round(cardLeft)}px`);
+    tutorialOverlay.style.setProperty("--tutorial-top", `${Math.round(Math.max(16, cardTop))}px`);
+  }
+}
+
+function navigateTutorialStep(stepNumber) {
+  clearTutorialPresentation();
+  const step = TUTORIAL_STEPS[stepNumber - 1];
+  if (step.settings) {
+    if (!historyView.classList.contains("hidden")) closeHistory(false);
+    showSettingsForTutorial();
+  } else {
+    hideSettingsForTutorial();
+    if (!historyView.classList.contains("hidden")) closeHistory(false);
+    showTab(step.tab, false, false);
+    if (step.revealSummary && homeSummary.classList.contains("hidden")) {
+      tutorialSummaryWasHidden = true;
+      homeSummary.classList.remove("hidden");
+    }
+  }
+
+  tutorialProgress.textContent = `${stepNumber} of ${TUTORIAL_STEPS.length}`;
+  tutorialTitle.textContent = step.title;
+  tutorialDescription.textContent = step.description;
+  tutorialBack.disabled = stepNumber === 1;
+  tutorialNext.textContent = stepNumber === TUTORIAL_STEPS.length ? "Start using MoNy" : "Next";
+  tutorialTarget = step.target();
+  tutorialTarget?.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  requestAnimationFrame(() => {
+    placeTutorial();
+    tutorialNext.focus();
+    if (!prefersReducedMotion()) setTimeout(placeTutorial, 220);
+  });
+}
+
+function showTutorialStep(stepNumber) {
+  if (!tutorialSession) return;
+  const safeStep = Number.isInteger(stepNumber) && stepNumber >= 1 && stepNumber <= TUTORIAL_STEPS.length
+    ? stepNumber : 1;
+  tutorialSession.step = safeStep;
+  if (!tutorialSession.manual) writeOnboardingState("in_progress", safeStep);
+  navigateTutorialStep(safeStep);
+}
+
+function beginTutorial({ manual = false, step = 1 } = {}) {
+  if (tutorialSession) return;
+  const returnFocus = document.activeElement;
+  tutorialSession = {
+    manual,
+    step,
+    originalTab: settings.activeTab || "home",
+    settingsWasOpen: !settingsPanel.classList.contains("hidden"),
+    scrollY: window.scrollY,
+    returnFocus
+  };
+  concealSurface(onboardingWelcome, true);
+  hideSettingsForTutorial();
+  setTutorialInert(true);
+  revealSurface(tutorialOverlay);
+  tutorialOverlay.style.setProperty("--modal-layer", "20000");
+  showTutorialStep(step);
+}
+
+function finishTutorial(status) {
+  if (!tutorialSession) return;
+  const session = tutorialSession;
+  if (!session.manual) writeOnboardingState(status);
+  tutorialSession = null;
+  clearTutorialPresentation();
+  concealSurface(tutorialExit, true);
+  concealSurface(tutorialOverlay, true);
+  setTutorialInert(false);
+
+  if (session.manual) {
+    showTab(session.originalTab, false, false);
+    if (session.settingsWasOpen) {
+      settingsPanel.style.removeProperty("--modal-layer");
+      settingsPanel.classList.remove("hidden", "is-closing");
+      settingsPanel.setAttribute("aria-hidden", "false");
+    } else hideSettingsForTutorial();
+    window.scrollTo(0, session.scrollY);
+  } else {
+    hideSettingsForTutorial();
+    showTab("home", false, true);
+    window.scrollTo(0, 0);
+  }
+  requestAnimationFrame(() => {
+    const focus = session.manual && session.returnFocus?.isConnected ? session.returnFocus :
+      document.querySelector(".tab-btn[data-tab='home']");
+    focus?.focus();
+  });
+}
+
+function showWelcomeOffer() {
+  setTutorialInert(true);
+  revealSurface(onboardingWelcome);
+}
+
+onboardingStart.addEventListener("click", () => beginTutorial({ step: 1 }));
+onboardingSkip.addEventListener("click", () => {
+  writeOnboardingState("skipped");
+  concealSurface(onboardingWelcome, true);
+  setTutorialInert(false);
+  document.querySelector(".tab-btn[data-tab='home']")?.focus();
+});
+tutorialBack.addEventListener("click", () => showTutorialStep(tutorialSession.step - 1));
+tutorialNext.addEventListener("click", () => {
+  if (tutorialSession.step === TUTORIAL_STEPS.length) finishTutorial("completed");
+  else showTutorialStep(tutorialSession.step + 1);
+});
+tutorialSkip.addEventListener("click", () => finishTutorial("skipped"));
+tutorialContinue.addEventListener("click", () => {
+  concealSurface(tutorialExit, true);
+  tutorialNext.focus();
+});
+tutorialConfirmExit.addEventListener("click", () => finishTutorial("skipped"));
+replayTutorialBtn.addEventListener("click", () => beginTutorial({ manual: true, step: 1 }));
+
+function initializeOnboarding() {
+  const state = readOnboardingState();
+  const resetRequested = localStorage.getItem(ONBOARDING_TRIGGER_KEY) !== null;
+  if (state?.status === "in_progress") {
+    beginTutorial({ step: state.step });
+  } else if (resetRequested || (!state && !hadMoNyStorageAtBoot)) {
+    showWelcomeOffer();
+  } else if (!state) {
+    // Existing installations are opted out silently; no financial key moves.
+    writeOnboardingState("completed");
+  }
+}
+
+window.addEventListener("resize", placeTutorial, { passive: true });
+window.addEventListener("scroll", placeTutorial, { passive: true });
+settingsPanel.querySelector(".settings-panel-card")?.addEventListener("scroll", placeTutorial, { passive: true });
+requestAnimationFrame(initializeOnboarding);
+
+/* =========================
    KEYBOARD + DIALOG ACCESS
 ========================= */
 
@@ -5371,6 +5686,21 @@ document.addEventListener("keydown", (event) => {
   const modal = topVisibleModal();
 
   if (event.key === "Escape") {
+    if (modal === onboardingWelcome) {
+      event.preventDefault();
+      onboardingSkip.click();
+      return;
+    }
+    if (modal === tutorialExit) {
+      event.preventDefault();
+      tutorialContinue.click();
+      return;
+    }
+    if (modal === tutorialOverlay && tutorialSession) {
+      event.preventDefault();
+      revealSurface(tutorialExit);
+      return;
+    }
     if (modal) {
       event.preventDefault();
       const close = modal.querySelector(
@@ -5468,18 +5798,34 @@ const resetModal = document.getElementById("reset-modal");
 const confirmResetBtn = document.getElementById("confirm-reset");
 const cancelResetBtn = document.getElementById("cancel-reset");
 const resetError = document.getElementById("reset-error");
+let resetLaunchSource = null;
 
-function openResetMonth() {
+function openResetMonth(source = "settings") {
+  resetLaunchSource = source;
   setDataControlError(resetError);
   document.getElementById("reset-modal-text").textContent =
     `Clear income, bills, spending, and wallet balances for ${monthLabel(data.month)}? Your settings, archived months, and cycle dates stay. A recovery copy is saved first.`;
   revealSurface(resetModal);
 }
-secretReset.addEventListener("dblclick", openResetMonth);
-document.getElementById("reset-month-btn").addEventListener("click", openResetMonth);
+/* Mobile Safari does not reliably emit dblclick for a heading. Detect two
+   ordinary taps instead; the first remains a no-op and the second opens the
+   same confirmation as desktop double-clicking. */
+const SECRET_RESET_TAP_WINDOW_MS = 450;
+let lastSecretResetTap = null;
+secretReset.addEventListener("click", () => {
+  const tappedAt = performance.now();
+  if (lastSecretResetTap !== null && tappedAt - lastSecretResetTap <= SECRET_RESET_TAP_WINDOW_MS) {
+    lastSecretResetTap = null;
+    openResetMonth("brand");
+    return;
+  }
+  lastSecretResetTap = tappedAt;
+});
+document.getElementById("reset-month-btn").addEventListener("click", () => openResetMonth("settings"));
 
 // Cancels the reset
 cancelResetBtn.addEventListener("click", () => {
+  resetLaunchSource = null;
   concealSurface(resetModal);
 });
 
@@ -5489,6 +5835,10 @@ confirmResetBtn.addEventListener("click", () => {
   resetData(nextData);
   const changes = { [STORAGE_KEY]: nextData };
   if (data.priority.length > 0) changes[BACKUP_PRIORITY_KEY] = data.priority;
+  if (resetLaunchSource === "brand") {
+    changes[ONBOARDING_KEY] = undefined;
+    changes[ONBOARDING_TRIGGER_KEY] = { version: ONBOARDING_VERSION, reason: "brand_reset" };
+  }
   const result = commitStoredChanges(changes, "reset");
   if (!result.ok) { setDataControlError(resetError, result.message); return; }
   Object.assign(data, nextData);
@@ -5652,7 +6002,10 @@ function showNotice(message) {
  * could correctly belong to.
  */
 function dismissOpenPrompts() {
-  document.querySelectorAll(".modal").forEach(m => concealSurface(m, true));
+  document.querySelectorAll(".modal").forEach(m => {
+    if ([onboardingWelcome, tutorialOverlay, tutorialExit].includes(m)) return;
+    concealSurface(m, true);
+  });
   overspendCancel = null;
   walletPendingDelete = null;
   categoryPendingDelete = null;
@@ -5699,6 +6052,10 @@ function checkCycleRollover() {
 
   // The history view, if it happens to be open, has gained a month.
   if (!historyView.classList.contains("hidden")) renderHistory();
+
+  // Rollover may rebuild a wallet target while a read-only walkthrough is
+  // visible. Re-resolve that real element without changing tutorial status.
+  if (tutorialSession) navigateTutorialStep(tutorialSession.step);
 
   showNotice(`${closedLabel} closed - new month started`);
   return true;

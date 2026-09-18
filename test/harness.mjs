@@ -122,7 +122,9 @@ export const KEYS = {
   data: "monthly-money-tracker",
   settings: "monthly-money-tracker-settings",
   archive: "monthly-money-tracker-archive",
-  backup: "monthly-money-tracker-priority-backup"
+  backup: "monthly-money-tracker-priority-backup",
+  onboarding: "monthly-money-tracker-onboarding",
+  onboardingTrigger: "monthly-money-tracker-onboarding-trigger"
 };
 
 // Parse a stored key back out of a booted window.
