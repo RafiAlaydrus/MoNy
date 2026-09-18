@@ -11,7 +11,7 @@
    their browser never has a reason to look at the network again.
 ========================= */
 
-const CACHE_NAME = "mmt-v74";
+const CACHE_NAME = "mmt-v76";
 
 /* Everything needed to cold-start the app offline. "./" is listed separately
    from "./index.html" because that is the URL the browser actually requests
@@ -72,9 +72,10 @@ const LAUNCH_IMAGES = [
    The launch images that follow are deliberately NOT held to it; see the
    note on LAUNCH_IMAGES.
 
-   The worker deliberately waits after installation. The page detects that
-   waiting state and offers a visible Refresh action, so an update never
-   interrupts a form or silently swaps code underneath an open session. */
+   Once the complete cache is ready, the worker activates immediately. pwa.js
+   controls the page reload separately and waits until no money-entry draft is
+   open, so existing installations migrate without requiring the old Refresh
+   button while unfinished input remains protected. */
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
@@ -84,7 +85,7 @@ self.addEventListener("install", (event) => {
            LAUNCH_IMAGES for why these must not be able to fail the install. */
         Promise.all(LAUNCH_IMAGES.map((url) =>
           cache.add(new Request(new URL(url, self.registration.scope), { cache: "reload" })).catch(() => {})
-        ))
+        )).then(() => self.skipWaiting())
       )
     )
   );

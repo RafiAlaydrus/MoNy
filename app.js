@@ -5391,9 +5391,9 @@ const TUTORIAL_STEPS = [
     title: "Bills",
     description: "Keep regular or required payments here so you know what still needs to be paid.",
     tab: "bills",
-    target: () => elementIsShown(addPriorityBtn) ? addPriorityBtn :
-      elementIsShown(priorityLockBadge) ? priorityLockBadge :
-      document.getElementById("priority-list")
+    target: () => elementIsShown(document.getElementById("priority-form"))
+      ? document.getElementById("priority-form")
+      : document.getElementById("priority-list")
   },
   {
     title: "Spending",
@@ -5410,8 +5410,8 @@ const TUTORIAL_STEPS = [
       document.querySelector(".tab-btn[data-tab='wallets']")
   },
   {
-    title: "Protect your data",
-    description: "MoNy saves locally on this device. Export a backup occasionally so you have a copy outside your browser.",
+    title: "Backup & recovery",
+    description: "MoNy automatically keeps a recovery copy in this browser. Exporting is optional and creates a separate file you can keep elsewhere.",
     settings: true,
     target: () => document.getElementById("export-data-btn")
   }

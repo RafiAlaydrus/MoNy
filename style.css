@@ -1367,6 +1367,24 @@ td {
   color: var(--text-on-action);
 }
 
+/* Resetting a cycle is more destructive than routine modal confirmation, so
+   it repeats the dedicated red treatment used by the Settings reset control. */
+.modal-actions #confirm-reset {
+  background: #7f1d1d;
+  border: 1px solid #b83a3a;
+  color: #fff;
+}
+
+.modal-actions #confirm-reset:active {
+  background: #991f1f;
+}
+
+:root[data-theme="light"] .modal-actions #confirm-reset {
+  background: #b42323;
+  border-color: #951b1b;
+  color: #fff;
+}
+
 .modal-actions button:not(.danger) {
   background: var(--surface-field);
   border: 1px solid var(--border-strong);

@@ -53,7 +53,7 @@ test("Show me around immediately saves in_progress and each current step", async
 for (const [step, title, tab] of [
   [1, "Your income", "home"],
   [3, "Bills", "bills"],
-  [6, "Protect your data", null]
+  [6, "Backup & recovery", null]
 ]) {
   test(`an interrupted walkthrough resumes directly at step ${step}`, async () => {
     const w = bootApp({
@@ -87,7 +87,18 @@ test("completion clears saved progress", async () => {
   assert.equal(w.document.getElementById("tutorial-overlay").classList.contains("hidden"), true);
 });
 
-test("Bills tutorial targets the visible lock control when Add Bill is hidden", async () => {
+test("Bills tutorial targets the complete setup card and falls back to the list when locked", async () => {
+  const unlocked = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month(),
+      [KEYS.onboarding]: { version: 1, status: "in_progress", step: 3 }
+    },
+    today: "2026-08-15"
+  });
+  await waitForUi();
+  assert.equal(unlocked.__app.run("tutorialTarget.id"), "priority-form");
+
   const lockedMonth = month({
     priorityLocked: true,
     priority: [{ name: "Electricity", category: "Bills", amount: 200, paid: false }]
@@ -101,7 +112,7 @@ test("Bills tutorial targets the visible lock control when Add Bill is hidden", 
     today: "2026-08-15"
   });
   await waitForUi();
-  assert.equal(w.__app.run("tutorialTarget.id"), "priority-lock-badge");
+  assert.equal(w.__app.run("tutorialTarget.id"), "priority-list");
   assert.equal(w.document.getElementById("priority-lock-badge").classList.contains("hidden"), false);
 });
 
@@ -146,7 +157,7 @@ test("the walkthrough navigates real targets without mutating financial data", a
   await waitForUi();
   const before = w.localStorage.getItem(KEYS.data);
   for (let step = 1; step < 6; step++) w.document.getElementById("tutorial-next").click();
-  assert.equal(w.document.getElementById("tutorial-title").textContent, "Protect your data");
+  assert.equal(w.document.getElementById("tutorial-title").textContent, "Backup & recovery");
   assert.equal(w.document.getElementById("settings-panel").classList.contains("hidden"), false);
   assert.equal(w.localStorage.getItem(KEYS.data), before);
 });
@@ -211,6 +222,8 @@ test("destructive reset and locked-bill controls use their dedicated visual trea
   const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
   assert.match(html, /class="setting-btn-action danger">Reset current month/);
   assert.match(css, /\.setting-btn-action\.danger\s*\{[^}]*background:\s*#7f1d1d/s);
+  assert.match(css, /\.modal-actions #confirm-reset\s*\{[^}]*background:\s*#7f1d1d/s);
+  assert.match(html, /id="confirm-reset" class="danger"/);
   assert.match(html, /<div class="bills-heading-row">[\s\S]*?id="priority-lock-badge"/);
   assert.match(css, /\.bills-heading-row\s*\{[^}]*align-items:\s*center/s);
   assert.match(css, /#priority-list li\.empty-state-rich\s*\{[^}]*display:\s*block/s);

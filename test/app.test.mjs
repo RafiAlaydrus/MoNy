@@ -2395,11 +2395,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.42.2");
+  assert.equal(pkg.version, "1.42.4");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v74"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v76"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {
@@ -2501,7 +2501,7 @@ test("modals focus the first control, trap Tab, and restore their opener", async
   assert.equal(w.document.activeElement, opener, "closing restores the element that opened the modal");
 });
 
-test("the PWA exposes updates instead of silently replacing an open session", () => {
+test("the PWA checks daily and installs updates automatically without losing a draft", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const pwa = readFileSync(new URL("../pwa.js", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
@@ -2510,6 +2510,11 @@ test("the PWA exposes updates instead of silently replacing an open session", ()
   assert.match(pwa, /registration\.waiting/);
   assert.match(pwa, /postMessage\(\{ type: "SKIP_WAITING" \}\)/);
   assert.match(pwa, /mony:before-update/);
+  assert.match(pwa, /DAILY_UPDATE_CHECK_MS = 24 \* 60 \* 60 \* 1000/);
+  assert.match(pwa, /setInterval\(\(\) => checkForUpdate\(\), 60 \* 60 \* 1000\)/);
+  assert.match(pwa, /function applyAvailableUpdate\(\)/);
+  assert.match(pwa, /MoNy will update automatically when it is safe/);
+  assert.match(sw, /Promise\.all\(LAUNCH_IMAGES[\s\S]*?\.then\(\(\) => self\.skipWaiting\(\)\)/);
   assert.match(sw, /cacheable = navigation/);
   assert.match(sw, /event\.data\.type === "SKIP_WAITING"/);
 });
