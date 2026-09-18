@@ -2248,7 +2248,44 @@ test("a fresh cycle leads with income setup, then reveals the normal dashboard",
   assert.equal(w.__app.data.income, 2400);
   assert.ok(setup.classList.contains("hidden"));
   assert.ok(!summary.classList.contains("hidden"));
+  assert.ok(!w.document.getElementById("cycle-summary").classList.contains("hidden"));
+  assert.ok(!w.document.getElementById("recent-section").classList.contains("hidden"));
   assert.match(w.document.getElementById("summary-income").textContent, /2,400\.00/);
+});
+
+test("new Home enhancements stay hidden if an older cached runtime loads the markup", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /id="cycle-summary" class="cycle-summary hidden"/);
+  assert.match(html, /id="recent-section" class="recent-section hidden"/);
+});
+
+test("Home summary adapts to each user's current bills, spending, income, and wallets", () => {
+  const w = bootApp({
+    storage: {
+      [KEYS.settings]: SETTINGS,
+      [KEYS.data]: month({
+        priority: [
+          { name: "Paid bill", category: "Bills", amount: 200, paid: true, date: "2026-08-02T10:00:00.000Z" },
+          { name: "Upcoming bill", category: "Bills", amount: 500, paid: false, date: "2026-08-20T10:00:00.000Z" }
+        ],
+        secondChoice: [
+          { name: "Expense", category: "Others", amount: 300, type: "take", date: "2026-08-03T10:00:00.000Z" },
+          { name: "Extra income", category: "Others", amount: 100, type: "add", date: "2026-08-04T10:00:00.000Z" }
+        ],
+        walletData: { w0: { budget: 400, items: [
+          { name: "Groceries", amount: 100, type: "take", date: "2026-08-05T10:00:00.000Z" }
+        ] } }
+      })
+    },
+    today: "2026-08-15"
+  });
+
+  assert.equal(w.document.getElementById("summary-income").textContent, "RM 3,100.00");
+  assert.equal(w.document.getElementById("summary-spent").textContent, "RM 600.00");
+  assert.equal(w.document.getElementById("summary-bills").textContent, "RM 500.00");
+  assert.equal(w.document.getElementById("summary-wallets").textContent, "RM 300.00");
+  assert.match(w.document.getElementById("wallet-reserved-context").textContent, /300\.00 reserved in wallets/);
+  assert.ok(w.document.querySelectorAll("#recent-activity .recent-row").length >= 4);
 });
 
 test("Home recent activity shows five unique transactions and View all opens the full finder", () => {
@@ -2358,11 +2395,11 @@ test("release version is consistent across package, lockfile, UI, and cache", ()
   const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const sw = readFileSync(new URL("../service-worker.js", import.meta.url), "utf8");
-  assert.equal(pkg.version, "1.41.0");
+  assert.equal(pkg.version, "1.41.1");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.match(html, new RegExp(`setting-version[^>]*>v${pkg.version.replaceAll(".", "\\.")}`));
-  assert.match(sw, /CACHE_NAME = "mmt-v70"/);
+  assert.match(sw, /CACHE_NAME = "mmt-v71"/);
 });
 
 test("the cosmetic system stays shared across cards, navigation, and modals", () => {

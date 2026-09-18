@@ -200,7 +200,7 @@
               <p class="setting-note">Clears this month's income, bills, spending, and balances. Your settings and archived months stay.</p>
             </section>
             </div>
-            <div class="setting-version">v1.41.0</div>
+            <div class="setting-version">v1.41.1</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -312,14 +312,19 @@
 
     </section>
 
-    <section id="cycle-summary" class="cycle-summary" aria-label="Current cycle summary">
+    <!-- Hidden in the HTML on purpose. Only the matching app.js release may
+         populate and reveal this progressive enhancement. This prevents an
+         older active service worker from pairing its cached script with new
+         markup and showing believable-but-false zero totals while an update
+         is waiting. -->
+    <section id="cycle-summary" class="cycle-summary hidden" aria-label="Current cycle summary">
       <div><span>Income</span><strong id="summary-income">RM 0.00</strong></div>
       <div><span>Spent</span><strong id="summary-spent">RM 0.00</strong></div>
       <div><span>Bills remaining</span><strong id="summary-bills">RM 0.00</strong></div>
       <div><span>In wallets</span><strong id="summary-wallets">RM 0.00</strong></div>
     </section>
 
-    <section id="recent-section" class="recent-section" aria-labelledby="recent-title">
+    <section id="recent-section" class="recent-section hidden" aria-labelledby="recent-title">
       <div class="section-heading-row">
         <div><span class="section-eyebrow">Latest</span><h3 id="recent-title">Recent Activity</h3></div>
         <button id="recent-view-all" class="text-button" type="button">View all</button>
