@@ -19,7 +19,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="description" content="A simple offline-first personal finance tracker for monthly income, bills, and spending." />
+  <meta name="description" content="An offline-first personal finance tracker for bills, spending, wallets, and optional monthly cycles." />
   <!-- theme-color paints the status bar and browser chrome to match the app's
        black; color-scheme tells the browser to render form controls and
        scrollbars dark rather than defaulting to light ones. -->
@@ -162,11 +162,13 @@
             <div class="settings-groups">
             <section class="settings-group" aria-labelledby="settings-budget-title">
               <h4 id="settings-budget-title">Budget &amp; cycle</h4>
-              <div class="setting-row"><span>Month starts</span><select id="month-start-select" class="setting-select"></select></div>
+              <div class="setting-row"><span>Monthly cycle</span><label class="toggle"><input type="checkbox" id="cycle-enabled-toggle" aria-label="Monthly cycle" /><span class="toggle-slider"></span></label></div>
+              <p class="setting-note">Turn off for one continuous ledger without monthly rollover or statements.</p>
+              <div id="monthly-start-row" class="setting-row"><span>Month starts</span><select id="month-start-select" class="setting-select"></select></div>
               <p id="month-start-note" class="setting-note hidden"></p>
-              <div class="setting-row"><span>Carry balance forward</span><label class="toggle"><input type="checkbox" id="carry-over-toggle" /><span class="toggle-slider"></span></label></div>
+              <div id="carry-over-row" class="setting-row"><span>Carry balance forward</span><label class="toggle"><input type="checkbox" id="carry-over-toggle" /><span class="toggle-slider"></span></label></div>
               <div class="setting-row"><span>Currency</span><select id="currency-select" class="setting-select"><option value="RM">RM</option><option value="$">USD ($)</option><option value="S$">SGD (S$)</option><option value="€">EUR (€)</option><option value="£">GBP (£)</option><option value="¥">JPY (¥)</option><option value="₩">KRW (₩)</option><option value="Rp">IDR (Rp)</option></select></div>
-              <div class="setting-row"><span>Budget limit</span><input type="number" inputmode="decimal" id="budget-limit-input" class="setting-input" placeholder="Off" /></div>
+              <div id="budget-limit-row" class="setting-row"><span>Budget limit</span><input type="number" inputmode="decimal" id="budget-limit-input" class="setting-input" placeholder="Off" /></div>
             </section>
             <section class="settings-group" aria-labelledby="settings-display-title">
               <h4 id="settings-display-title">Display</h4>
@@ -197,7 +199,7 @@
               <button id="restore-backup-btn" class="setting-btn-action">Restore browser recovery</button>
               <p class="setting-note">MoNy keeps a local recovery copy automatically. It is not an external backup and disappears if this browser's data is cleared.</p>
               <button id="reset-month-btn" class="setting-btn-action danger">Reset current month</button>
-              <p class="setting-note">Clears this month's income, bills, spending, and balances. Your settings and archived months stay.</p>
+              <p id="reset-month-note" class="setting-note">Clears this month's income, bills, spending, and balances. Your settings and archived months stay.</p>
             </section>
             <section class="settings-group" aria-labelledby="settings-help-title">
               <h4 id="settings-help-title">Help</h4>
@@ -205,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.42.4</div>
+            <div class="setting-version">v1.43.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -576,12 +578,9 @@
       </div>
     </section>
 
-    <!-- One expandable row per month, newest first, each showing a category
-         breakdown and its size in storage. The storage line at the bottom is
-         the running total across all four localStorage keys - the early
-         warning for the quota this app can genuinely hit. -->
+    <!-- Archived monthly cycles and read-only endless periods. -->
     <section>
-      <h3>Months</h3>
+      <h3>Past records</h3>
       <div id="history-list"></div>
       <button id="delete-archive-btn" class="delete-all-btn hidden" aria-label="Delete all archived history">Delete All History</button>
       <p id="storage-line" class="storage-line"></p>
@@ -651,6 +650,18 @@
       <div class="modal-actions">
         <button id="cancel-archive-delete" aria-label="Cancel deleting history">Cancel</button>
         <button id="confirm-archive-delete" class="danger" aria-label="Confirm delete all history">Yes, Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cycle-mode-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cycle-mode-title">
+    <div class="modal-card">
+      <h3 id="cycle-mode-title">Change tracking mode?</h3>
+      <p id="cycle-mode-description"></p>
+      <p id="cycle-mode-error" class="modal-error hidden" role="alert"></p>
+      <div class="modal-actions">
+        <button id="cancel-cycle-mode" type="button">Cancel</button>
+        <button id="confirm-cycle-mode" type="button">Confirm</button>
       </div>
     </div>
   </div>

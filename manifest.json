@@ -1,7 +1,7 @@
 {
   "name": "Monthly Money Tracker",
   "short_name": "Money",
-  "description": "A simple offline-first personal finance tracker for monthly income, bills, and spending.",
+  "description": "An offline-first personal finance tracker for bills, spending, wallets, and optional monthly cycles.",
   "id": "/monthly-money-tracker/",
   "start_url": "./",
   "scope": "./",

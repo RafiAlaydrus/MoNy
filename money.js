@@ -79,7 +79,7 @@
       const v = Number(c.wallets[id]);
       if (Number.isFinite(v) && v > 0) wallets[id] = v;
     });
-    return { main: Number.isFinite(main) && main > 0 ? main : 0, wallets };
+    return { main: Number.isFinite(main) && (main > 0 || d?.signedCarry === true) ? main : 0, wallets };
   }
 
   // Bills listed but not yet ticked off - what is still owed this month.
@@ -208,7 +208,7 @@
   function carryOverOf(d) {
     if (!d) return 0;
     const n = Number(d.carryOver);
-    return Number.isFinite(n) && n > 0 ? n : 0;
+    return Number.isFinite(n) && (n > 0 || d.signedCarry === true) ? n : 0;
   }
 
   // A month with no income typed and nothing brought forward has not been
@@ -216,6 +216,8 @@
   // to make a month real - the first of the month with money still in hand is
   // not an empty month.
   function monthIsUnset(d) {
+    if (d && d.signedCarry === true && d.carryIn && ((Number(d.carryIn.main) || 0) !== 0 ||
+        Object.values(d.carryIn.wallets || {}).some(value => Number(value) !== 0))) return false;
     return (!d || d.income === null || d.income === undefined) && carryOverOf(d) === 0;
   }
 

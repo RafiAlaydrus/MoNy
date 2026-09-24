@@ -6,12 +6,13 @@ const STORAGE_KEY = "monthly-money-tracker";
 const SETTINGS_KEY = "monthly-money-tracker-settings";
 const BACKUP_PRIORITY_KEY = "monthly-money-tracker-priority-backup";
 const ARCHIVE_KEY = "monthly-money-tracker-archive";
+const ENDLESS_ARCHIVE_KEY = "monthly-money-tracker-endless-archive";
 const SNAPSHOT_KEY = "monthly-money-tracker-latest-backup";
 const JOURNAL_KEY = "monthly-money-tracker-pending-write";
 const RECOVERY_KEY = "monthly-money-tracker-recovery-backup";
 const ONBOARDING_KEY = "monthly-money-tracker-onboarding";
 const ONBOARDING_TRIGGER_KEY = "monthly-money-tracker-onboarding-trigger";
-const STATE_KEYS = [STORAGE_KEY, SETTINGS_KEY, ARCHIVE_KEY, BACKUP_PRIORITY_KEY];
+const STATE_KEYS = [STORAGE_KEY, SETTINGS_KEY, ARCHIVE_KEY, ENDLESS_ARCHIVE_KEY, BACKUP_PRIORITY_KEY];
 const TRANSACTION_KEYS = [...STATE_KEYS, RECOVERY_KEY, ONBOARDING_KEY, ONBOARDING_TRIGGER_KEY];
 /* This must be captured before migrations create current-month/settings keys.
    Onboarding itself is excluded: an interrupted first run is decided by its
@@ -194,6 +195,7 @@ if (!settings.activeTab) settings.activeTab = "home";
    on the 1st - which is what it did before this existed. Set to false for a
    clean slate each month. */
 if (settings.carryOver === undefined) settings.carryOver = true;
+if (settings.cycleEnabled === undefined) settings.cycleEnabled = true;
 /* The day a budget cycle begins. 1 is the calendar month and the default;
    someone paid on the 25th sets 25 and their month runs 25th to 24th. Days
    longer than a short month clamp to its last day, so 31 starts February on
@@ -331,8 +333,10 @@ function freshMonthData(carry, cycleStart) {
        rollover would then try to recreate a month that exists. */
     cycleStart: start,
     cycleNext: nextCycleStartOf(start, settings.monthStartDay),
+    endless: false,
     income: null,
     carryOver: carry ? carry.total : 0,
+    signedCarry: !!(carry && carry.main < 0),
     /* The same money as carryOver, split by where it landed. carryOver stays
        the figure every calculation uses; this exists only so each history can
        show the part that arrived there. Kept as a record of what WAS carried,
@@ -363,7 +367,7 @@ function monthHasContent(d) {
      holding money brought forward is still a real month, and skipping it here
      would leave a hole in the history for a month that genuinely happened. */
   return d.income !== null ||
-    carryOverOf(d) > 0 ||
+    carryOverOf(d) !== 0 ||
     (d.priority || []).length > 0 ||
     walletItemsCount(d) > 0 ||
     hasBudgets ||
@@ -371,6 +375,10 @@ function monthHasContent(d) {
 }
 
 let data = load(STORAGE_KEY, null);
+if (data?.endless === true && settings.cycleEnabled !== false) {
+  settings.cycleEnabled = false;
+  saveSettings();
+}
 
 // Migrate the old single Second Wallet into the wallets list
 if (!settings.wallets) {
@@ -422,7 +430,7 @@ if (!data) {
      the fresh month now settles the state, and the copy under `-corrupt`
      remains the recovery path. */
   saveData();
-} else if (todayStr >= data.cycleNext) {
+} else if (settings.cycleEnabled !== false && todayStr >= data.cycleNext) {
   performRollover(todayStr);
 }
 
@@ -435,7 +443,7 @@ if (!data) {
  * nodes already exist, and swapping the object out from under them would
  * leave them writing into a month that is no longer on screen. */
 function performRollover(today) {
-  if (!storageIsCurrent() || today < data.cycleNext) return false;
+  if (settings.cycleEnabled === false || !storageIsCurrent() || today < data.cycleNext) return false;
   if (!isValidYmd(data.cycleStart) || !isValidYmd(data.cycleNext) || data.cycleNext <= data.cycleStart) {
     alert("This cycle has invalid dates. Export a backup before correcting it.");
     return false;
@@ -511,6 +519,8 @@ function performRollover(today) {
    reload, and everything keyed by this (the export filename, the trend
    chart's live bar, resetData) has to follow it. */
 let currentMonthKey = data.month;
+let endlessArchive = load(ENDLESS_ARCHIVE_KEY, []);
+if (!Array.isArray(endlessArchive)) endlessArchive = [];
 let checkingCycle = false;
 
 /* A single local recovery copy is updated after successful writes. It never
@@ -519,7 +529,7 @@ let checkingCycle = false;
 function saveSnapshot() {
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
-      savedAt: new Date().toISOString(), data, settings, archive,
+      savedAt: new Date().toISOString(), data, settings, archive, endlessArchive,
       priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
     }));
     renderBackupStatus();
@@ -978,11 +988,11 @@ function entryDateLabel(iso) {
   if (Number.isNaN(d.getTime())) return { text: "", outside: false };
 
   const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const outside = !!(data.cycleStart && data.cycleNext)
+  const outside = settings.cycleEnabled !== false && !!(data.cycleStart && data.cycleNext)
     && (day < data.cycleStart || day >= data.cycleNext);
 
   return {
-    text: d.toLocaleDateString("en-GB", outside
+    text: d.toLocaleDateString("en-GB", outside || settings.cycleEnabled === false
       ? { day: "numeric", month: "short", year: "numeric" }
       : { day: "numeric", month: "short" }),
     outside
@@ -1193,6 +1203,10 @@ function dayRangeLabel(cycleStart, cycleNext) {
 }
 
 function renderMonthLabel() {
+  if (settings.cycleEnabled === false) {
+    monthText.textContent = "Endless tracking";
+    return;
+  }
   /* Use the boundary stored on the month itself. Usually this is the next
      occurrence of settings.monthStartDay, but when the user chooses a day
      whose occurrence has already passed, startDayTakesEffect deliberately
@@ -1649,7 +1663,7 @@ let backupPriority = load(BACKUP_PRIORITY_KEY, null);
 
 // Shows or hides the "Copy Last Priority" button
 function updateCopyLastBtn() {
-  if (backupPriority && backupPriority.length > 0 && data.priority.length === 0 && !data.priorityLocked) {
+  if (settings.cycleEnabled !== false && backupPriority && backupPriority.length > 0 && data.priority.length === 0 && !data.priorityLocked) {
     copyLastBtn.classList.remove("hidden");
   } else {
     copyLastBtn.classList.add("hidden");
@@ -1778,10 +1792,10 @@ function buildCarriedRow(amount, columnCount) {
   row.className = "carried-row";
   const spacer = columnCount === 4 ? "<td></td>" : "";
   row.innerHTML = `
-    <td>Brought forward</td>
+    <td>${settings.cycleEnabled === false ? "Opening balance" : "Brought forward"}</td>
     ${spacer}
-    <td class="date-stamp">last month</td>
-    <td class="amount-in">+ ${esc(cur())} ${fmt(amount)}</td>
+    <td class="date-stamp">${settings.cycleEnabled === false ? "earlier" : "last cycle"}</td>
+    <td class="${amount < 0 ? "amount-out" : "amount-in"}">${amount < 0 ? "−" : "+"} ${esc(cur())} ${fmt(Math.abs(amount))}</td>
   `;
   return row;
 }
@@ -2379,10 +2393,13 @@ function runMoneyAction(action) {
 function moneyConfirmation(modal) {
   const token = {};
   const cycle = data.cycleStart;
+  const cycleEnabled = settings.cycleEnabled !== false;
   modal._confirmation = token;
   return action => {
     if (token.used || modal._confirmation !== token || modal.classList.contains("hidden") ||
-        modal.classList.contains("is-closing") || cycle !== data.cycleStart || todayString() >= data.cycleNext) return false;
+        modal.classList.contains("is-closing") || cycle !== data.cycleStart ||
+        cycleEnabled !== (settings.cycleEnabled !== false) ||
+        (settings.cycleEnabled !== false && todayString() >= data.cycleNext)) return false;
     if (!runMoneyAction(action)) return false;
     token.used = true;
     concealSurface(modal);
@@ -2677,10 +2694,10 @@ function renderSecondChoice() {
   // Second choice is the main balance's history, so main's share of the
   // carried money opens it.
   const carried = carryInOf(data).main;
-  if (carried > 0) scTable.appendChild(buildCarriedRow(carried, 4));
+  if (carried !== 0) scTable.appendChild(buildCarriedRow(carried, 4));
 
   if (data.secondChoice.length === 0) {
-    if (carried <= 0) {
+    if (carried === 0) {
       scTable.innerHTML = '<tr><td colspan="4"><div class="empty-state-rich"><strong>No spending activity yet</strong><p>Use Money In or Expense above to record your first transaction.</p></div></td></tr>';
     }
     return;
@@ -3063,11 +3080,12 @@ function renderInsights() {
       : `${cur()} ${fmt(settings.budgetLimit - spent)} still available`;
   }
 
-  show("daily", true);
+  show("daily", settings.cycleEnabled !== false);
   show("projected", true);
   show("category", !!top);
-  show("comparison", !!previousKey);
-  show("pace", !!settings.budgetLimit);
+  show("comparison", settings.cycleEnabled !== false && !!previousKey);
+  show("pace", settings.cycleEnabled !== false && !!settings.budgetLimit);
+  document.getElementById("insights-title").textContent = settings.cycleEnabled === false ? "All time" : "This cycle";
   section?.classList.remove("hidden");
 }
 
@@ -3099,9 +3117,9 @@ function activityIndex() {
 }
 
 function recentDateLabel(value) {
-  if (!value) return "This cycle";
+  if (!value) return settings.cycleEnabled === false ? "All time" : "This cycle";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "This cycle";
+  if (Number.isNaN(date.getTime())) return settings.cycleEnabled === false ? "All time" : "This cycle";
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const then = new Date(date);
@@ -3109,7 +3127,7 @@ function recentDateLabel(value) {
   const days = Math.round((today - then) / 86400000);
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
-  return entryDateLabel(value).text || "This cycle";
+  return entryDateLabel(value).text || (settings.cycleEnabled === false ? "All time" : "This cycle");
 }
 
 function renderRecentActivity() {
@@ -3172,7 +3190,9 @@ function renderActivityFinder() {
   }
 
   if (!active) {
-    activitySummary.textContent = "Use search or a filter to find activity across this cycle.";
+    activitySummary.textContent = settings.cycleEnabled === false
+      ? "Use search or a filter to find activity across all time."
+      : "Use search or a filter to find activity across this cycle.";
     activityResults.innerHTML = records.length
       ? '<div class="empty-state-rich"><strong>Find your activity</strong><p>Search a name or choose a filter to find expenses, income, wallet transfers, and paid bills.</p></div>'
       : '<div class="empty-state-rich"><strong>Your activity starts here</strong><p>Record an expense, add money, or pay a bill. You can find it here whenever you need it.</p></div>';
@@ -3303,7 +3323,8 @@ function calculateRemaining(skipChart = false) {
   renderRecentActivity();
 
   const incomeTotal = totalIncomeOf(data, allWallets());
-  const hasIncome = incomeTotal !== null && moneyCents(incomeTotal) > 0;
+  const hasIncome = incomeTotal !== null &&
+    (moneyCents(incomeTotal) > 0 || settings.cycleEnabled === false || data.signedCarry === true);
   setupMonth.classList.toggle("hidden", hasIncome);
   homeSummary.classList.toggle("hidden", !hasIncome && incomeInput.classList.contains("hidden"));
   cycleSummary.classList.toggle("hidden", !hasIncome);
@@ -3334,7 +3355,7 @@ function calculateRemaining(skipChart = false) {
   document.getElementById("summary-spent").textContent = `${cur()} ${fmt(breakdown.spent)}`;
   document.getElementById("summary-bills").textContent = `${cur()} ${fmt(unpaidPriorityOf(data))}`;
   document.getElementById("summary-wallets").textContent = `${cur()} ${fmt(reserved)}`;
-  const pct = Math.min(Math.max((spent / income) * 100, 0), 100);
+  const pct = income > 0 ? Math.min(Math.max((spent / income) * 100, 0), 100) : 0;
   const fill = document.getElementById("spend-bar-fill");
   const label = document.getElementById("spend-bar-label");
   const limitMark = document.getElementById("spend-bar-limit");
@@ -3351,7 +3372,7 @@ function calculateRemaining(skipChart = false) {
   }
   label.style.color = pct >= 75 ? "#e8e8e8" : "";
 
-  if (settings.budgetLimit && income > 0) {
+  if (settings.cycleEnabled !== false && settings.budgetLimit && income > 0) {
     const limitSpendPct = ((income - settings.budgetLimit) / income) * 100;
     limitMark.style.left = `${Math.min(Math.max(limitSpendPct, 0), 100)}%`;
     limitMark.classList.remove("hidden");
@@ -3366,14 +3387,14 @@ function calculateRemaining(skipChart = false) {
     if (remaining < 0) {
       warningEl.textContent = `Overspent by ${cur()} ${fmt(-remaining)}`;
       warningEl.classList.remove("hidden");
-    } else if (settings.budgetLimit && remaining <= settings.budgetLimit) {
+    } else if (settings.cycleEnabled !== false && settings.budgetLimit && remaining <= settings.budgetLimit) {
       warningEl.textContent = `Warning: Available is below ${cur()} ${fmt(settings.budgetLimit)}`;
       warningEl.classList.remove("hidden");
     } else {
       warningEl.classList.add("hidden");
     }
   }
-  const showChart = settings.showChart && breakdown.spent > 0;
+  const showChart = settings.showChart && income > 0 && breakdown.spent > 0;
   chartSection.classList.toggle("hidden", !showChart);
   if (!skipChart && showChart) renderChart();
 }
@@ -3606,7 +3627,7 @@ document.body.appendChild(settingsPanel);
 settingsToggle.addEventListener("click", () => {
   if (settingsPanel.classList.contains("hidden") || settingsPanel.classList.contains("is-closing")) {
     revealSurface(settingsPanel);
-    requestAnimationFrame(() => document.getElementById("month-start-select").focus());
+    requestAnimationFrame(() => document.getElementById("cycle-enabled-toggle").focus());
   } else {
     concealSurface(settingsPanel);
   }
@@ -3680,6 +3701,7 @@ function startDayTakesEffect(chosenDay) {
 
 function renderMonthStartNote() {
   if (!monthStartNote || !data.cycleStart) return;
+  if (settings.cycleEnabled === false) { monthStartNote.classList.add("hidden"); return; }
   const { y, m, d } = (() => {
     const [yy, mm, dd] = data.cycleStart.split("-").map(Number);
     return { y: yy, m: mm, d: dd };
@@ -3693,8 +3715,8 @@ function renderMonthStartNote() {
 
   const from = new Date(data.cycleNext + "T00:00:00");
   monthStartNote.textContent =
-    `Applies from ${from.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" })}. ` +
-    `This month is unchanged.`;
+    `Next cycle begins ${from.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" })}. ` +
+    `The current cycle keeps its original start date.`;
   monthStartNote.classList.remove("hidden");
 }
 
@@ -3710,6 +3732,7 @@ if (monthStartSelect) {
   monthStartSelect.value = String(settings.monthStartDay);
 
   monthStartSelect.addEventListener("change", () => {
+    if (settings.cycleEnabled === false) { monthStartSelect.value = String(settings.monthStartDay); return; }
     const chosen = Number(monthStartSelect.value);
     const effective = startDayTakesEffect(chosen);
 
@@ -3741,6 +3764,7 @@ const carryOverToggle = document.getElementById("carry-over-toggle");
 if (carryOverToggle) {
   carryOverToggle.checked = settings.carryOver !== false;
   carryOverToggle.addEventListener("change", () => {
+    if (settings.cycleEnabled === false) { carryOverToggle.checked = settings.carryOver !== false; return; }
     settings.carryOver = carryOverToggle.checked;
     saveSettings();
   });
@@ -4310,7 +4334,10 @@ function renderRecurring() {
     saveSettings(); renderRecurring();
   }));
 }
-document.getElementById("open-recurring-panel-btn").addEventListener("click", () => { renderRecurring(); revealSurface(recurringModal); });
+document.getElementById("open-recurring-panel-btn").addEventListener("click", () => {
+  if (settings.cycleEnabled === false) return;
+  renderRecurring(); revealSurface(recurringModal);
+});
 document.getElementById("close-recurring").addEventListener("click", () => concealSurface(recurringModal));
 document.getElementById("add-recurring").addEventListener("click", () => {
   const name = document.getElementById("recurring-name");
@@ -4422,6 +4449,9 @@ function isFiniteAmount(value, allowZero = false) {
   const n = Number(value);
   return Number.isFinite(n) && (allowZero ? n >= 0 : n > 0);
 }
+function isSignedAmount(value) {
+  return value !== null && value !== "" && Number.isFinite(Number(value));
+}
 
 /* The regexp alone accepts impossible dates such as 2026-99-99. Rebuild the
    date in UTC and compare every part so an import cannot install a boundary
@@ -4515,7 +4545,7 @@ function validateWalletDefinitions(wallets, scope) {
 function validateCarryIn(carryIn, scope) {
   if (carryIn === undefined || carryIn === null) return null;
   if (!isRecord(carryIn)) return `${scope}'s carry-in breakdown is malformed.`;
-  if (carryIn.main !== undefined && !isFiniteAmount(carryIn.main, true)) {
+  if (carryIn.main !== undefined && !isSignedAmount(carryIn.main)) {
     return `${scope}'s carry-in main balance is invalid.`;
   }
   if (carryIn.wallets !== undefined) {
@@ -4562,9 +4592,13 @@ function validateMonthData(d, scope) {
   if (d.priorityLocked !== undefined && typeof d.priorityLocked !== "boolean") {
     return `${scope}'s priority lock is malformed.`;
   }
-  if (d.carryOver !== undefined && d.carryOver !== null && !isFiniteAmount(d.carryOver, true)) {
+  if (d.endless !== undefined && typeof d.endless !== "boolean") return `${scope}'s tracking mode is malformed.`;
+  if (d.carryOver !== undefined && d.carryOver !== null &&
+      !(d.signedCarry === true ? isSignedAmount(d.carryOver) : isFiniteAmount(d.carryOver, true))) {
     return `${scope}'s carried balance is invalid.`;
   }
+  if (d.signedCarry !== undefined && typeof d.signedCarry !== "boolean") return `${scope}'s carried balance marker is malformed.`;
+  if (d.carryIn?.main < 0 && d.signedCarry !== true) return `${scope}'s carry-in main balance is invalid.`;
   problem = validateCarryIn(d.carryIn, scope);
   if (problem) return problem;
 
@@ -4605,6 +4639,9 @@ function validateSettings(settings) {
     const day = Number(settings.monthStartDay);
     if (!Number.isInteger(day) || day < 1 || day > 31) return "That file's month start day is invalid.";
   }
+  if (settings.endlessStartedAt !== undefined && !isValidYmd(settings.endlessStartedAt)) {
+    return "That file's endless tracking start date is invalid.";
+  }
   if (settings.sortOrder !== undefined && !["oldest", "newest"].includes(settings.sortOrder)) {
     return "That file's transaction sort order is invalid.";
   }
@@ -4628,7 +4665,7 @@ function validateSettings(settings) {
       !isFiniteAmount(settings.budgetLimit)) {
     return "That file's budget limit is invalid.";
   }
-  for (const field of ["showChart", "carryOver", "dateOrderMigrated"]) {
+  for (const field of ["showChart", "carryOver", "cycleEnabled", "dateOrderMigrated"]) {
     if (settings[field] !== undefined && typeof settings[field] !== "boolean") {
       return `That file's ${field} setting is malformed.`;
     }
@@ -4641,7 +4678,7 @@ function validateImport(obj) {
   if (obj.app !== undefined && obj.app !== "monthly-money-tracker") {
     return "Choose a backup exported from MoNy.";
   }
-  if (obj.formatVersion !== undefined && obj.formatVersion !== 1) {
+  if (obj.formatVersion !== undefined && ![1, 2].includes(obj.formatVersion)) {
     return "This backup format is not supported by this version of MoNy.";
   }
 
@@ -4677,6 +4714,23 @@ function validateImport(obj) {
     }
   }
 
+  if (obj.endlessArchive !== undefined) {
+    if (!Array.isArray(obj.endlessArchive)) return "That file's endless periods are malformed.";
+    for (const [index, entry] of obj.endlessArchive.entries()) {
+      const scope = `That file's endless period ${index + 1}`;
+      if (!isRecord(entry) || !isRecord(entry.data)) return `${scope} is malformed.`;
+      problem = validateMonthData(entry.data, scope);
+      if (problem) return problem;
+      problem = validateWalletDefinitions(entry.wallets, `${scope} wallets`);
+      if (problem) return problem;
+      if (!isNonEmptyString(entry.currency) || typeof entry.startedAt !== "string" ||
+          !Number.isFinite(Date.parse(entry.startedAt)) || typeof entry.endedAt !== "string" ||
+          !Number.isFinite(Date.parse(entry.endedAt)) || entry.endedAt < entry.startedAt) {
+        return `${scope} has invalid dates or currency.`;
+      }
+    }
+  }
+
   if (obj.priorityBackup !== undefined && obj.priorityBackup !== null) {
     problem = validateBillList(obj.priorityBackup, "That file's saved priority bills");
     if (problem) return "That file's saved priority bills are malformed.";
@@ -4697,21 +4751,23 @@ function renderBackupPreview(element, backup) {
   const walletEntries = Object.values(month.walletData || {}).reduce((sum, wallet) => sum + wallet.items.length, 0)
     + (month.groceryItems || []).length;
   const rows = [
-    ["Current month", monthLabel(month.month)],
-    ["Cycle", month.cycleStart && month.cycleNext ? `${month.cycleStart} to ${month.cycleNext} (next cycle starts)` : "Calendar month"],
+    ["Current month", backup.settings?.cycleEnabled === false ? "Endless tracking" : monthLabel(month.month)],
+    ["Cycle", backup.settings?.cycleEnabled === false ? "No rollover" : month.cycleStart && month.cycleNext ? `${month.cycleStart} to ${month.cycleNext} (next cycle starts)` : "Calendar month"],
     ["Bills", month.priority.length],
     ["Spending / income entries", month.secondChoice.length],
     ["Wallets / wallet entries", `${wallets} / ${walletEntries}`],
     ["Archived months", Object.keys(backup.archive || {}).length],
     ["Saved bills", (backup.priorityBackup || []).length]
   ];
+  if (backup.settings?.cycleEnabled === false) rows.unshift(["Tracking mode", "Endless"]);
+  if ((backup.endlessArchive || []).length) rows.push(["Endless periods", backup.endlessArchive.length]);
   element.innerHTML = rows.map(([label, value]) =>
     `<div class="setting-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
   ).join("");
 }
 
 function commitStoredChanges(changes, reason) {
-  const recovery = { savedAt: new Date().toISOString(), reason, data, settings, archive,
+  const recovery = { savedAt: new Date().toISOString(), reason, data, settings, archive, endlessArchive,
     priorityBackup: load(BACKUP_PRIORITY_KEY, null) || [] };
   return commitStateChanges({ [RECOVERY_KEY]: recovery, ...changes });
 }
@@ -4721,6 +4777,7 @@ function replaceBackupData(backup, reason) {
     [STORAGE_KEY]: backup.data,
     [SETTINGS_KEY]: backup.settings || undefined,
     [ARCHIVE_KEY]: backup.archive && Object.keys(backup.archive).length ? backup.archive : undefined,
+    [ENDLESS_ARCHIVE_KEY]: Array.isArray(backup.endlessArchive) && backup.endlessArchive.length ? backup.endlessArchive : undefined,
     [BACKUP_PRIORITY_KEY]: Array.isArray(backup.priorityBackup) && backup.priorityBackup.length ? backup.priorityBackup : undefined
   }, reason);
 }
@@ -4801,18 +4858,21 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
   // priority backup is included too - it is what "Copy Last Priority" reads.
   const exportObj = {
     app: "monthly-money-tracker",
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: new Date().toISOString(),
     data,
     settings,
     archive,
+    endlessArchive,
     priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
   };
   const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `money-tracker-${currentMonthKey}.json`;
+  a.download = settings.cycleEnabled === false
+    ? `mony-endless-${todayString()}.json`
+    : `money-tracker-${currentMonthKey}.json`;
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -5131,7 +5191,9 @@ function renderTrends(keys) {
   drawTrendChart(entries);
 
   if (keys.length === 0) {
-    trendStats.innerHTML = '<p class="trend-empty">History appears after your first month ends. The dim bar is this month so far.</p>';
+    trendStats.innerHTML = endlessArchive.length
+      ? '<p class="trend-empty">Monthly trends appear after a cycle ends. Endless periods are listed below, separately from this chart.</p>'
+      : '<p class="trend-empty">History appears after your first month ends. The dim bar is this month so far.</p>';
     return;
   }
 
@@ -5280,31 +5342,73 @@ function deleteArchivedMonth(key) {
 // Total app storage across all keys
 function totalStorageBytes() {
   return bytesOfKey(STORAGE_KEY) + bytesOfKey(SETTINGS_KEY) +
-    bytesOfKey(BACKUP_PRIORITY_KEY) + bytesOfKey(ARCHIVE_KEY);
+    bytesOfKey(BACKUP_PRIORITY_KEY) + bytesOfKey(ARCHIVE_KEY) + bytesOfKey(ENDLESS_ARCHIVE_KEY);
+}
+
+function buildEndlessHistoryRow(entry, index) {
+  const s = summarizeEntry(entry);
+  const c = entry.currency || cur();
+  const row = document.createElement("div");
+  row.className = "history-row";
+  const started = new Date(entry.startedAt).toLocaleDateString("default", { day: "numeric", month: "short", year: "numeric" });
+  const ended = new Date(entry.endedAt).toLocaleDateString("default", { day: "numeric", month: "short", year: "numeric" });
+  const counts = `${entry.data.priority.length} bills · ${entry.data.secondChoice.length} transactions · ${Object.values(entry.data.walletData || {}).reduce((n, wd) => n + (wd.items || []).length, 0)} wallet items`;
+  row.innerHTML = `<div class="history-row-main" role="button" tabindex="0" aria-expanded="false" aria-label="Endless period from ${esc(started)} to ${esc(ended)}"><div><div class="history-month">Endless period</div><div class="history-sub">${esc(started)} – ${esc(ended)} · ${esc(c)} ${fmtWhole(s.spent)} spent</div></div><div class="history-right"><strong class="history-remaining">${esc(c)} ${fmtWhole(s.remaining)}</strong></div></div><div class="history-detail hidden"><span class="history-meta">${esc(counts)}</span><span class="history-meta">${esc(c)} ${fmt(s.inWallets)} in wallets · ${esc(c)} ${fmt(s.remaining)} in main</span><div class="endless-entry-list"></div></div>`;
+  const records = [
+    ...entry.data.priority.map(bill => ({ name: bill.name, type: bill.paid ? "Paid bill" : "Unpaid bill", amount: bill.amount, date: bill.date, direction: bill.paid ? -1 : 0 })),
+    ...entry.data.secondChoice.map(item => ({ name: item.name, type: isTransferEntry(item) ? "Transfer" : item.type === "add" ? "Money in" : "Expense", amount: item.amount, date: item.date, direction: item.type === "add" ? 1 : -1 })),
+    ...entry.wallets.flatMap(wallet => (entry.data.walletData?.[wallet.id]?.items || []).map(item => ({ name: item.name, type: wallet.name, amount: item.amount, date: item.date, direction: isWalletInflow(item) ? 1 : -1 })))
+  ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const head = row.querySelector(".history-row-main");
+  const detail = row.querySelector(".history-detail");
+  const open = () => {
+    const expanded = head.getAttribute("aria-expanded") !== "true";
+    head.setAttribute("aria-expanded", String(expanded));
+    detail.classList.toggle("hidden", !expanded);
+    if (expanded && !row._recordsBuilt) {
+      row._recordsBuilt = true;
+      const list = detail.querySelector(".endless-entry-list");
+      if (!records.length) { list.innerHTML = '<span class="history-meta">No entries recorded.</span>'; return; }
+      renderPagedRecords(list, `endless:${index}`, records, record => {
+        const item = document.createElement("div");
+        item.className = "legend-item";
+        const date = record.date && Number.isFinite(Date.parse(record.date))
+          ? new Date(record.date).toLocaleDateString("default", { day: "numeric", month: "short", year: "numeric" }) : "Undated";
+        item.innerHTML = `<div class="legend-left"><span>${esc(record.name)}</span><small class="history-sub">${esc(record.type)} · ${esc(date)}</small></div><span class="legend-amount">${record.direction < 0 ? "−" : record.direction > 0 ? "+" : ""} ${esc(c)} ${fmt(record.amount)}</span>`;
+        return item;
+      });
+    }
+  };
+  head.addEventListener("click", open);
+  head.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
+  return row;
 }
 
 // Renders the whole history view
 function renderHistory() {
   const keys = sortedArchiveKeys();
 
-  historyCount.textContent = keys.length === 1
-    ? "1 archived month"
-    : `${keys.length} archived months`;
+  historyCount.textContent = `${keys.length} archived ${keys.length === 1 ? "month" : "months"} · ${endlessArchive.length} endless ${endlessArchive.length === 1 ? "period" : "periods"}`;
 
   renderTrends(keys);
 
   historyList.innerHTML = "";
-  if (keys.length === 0) {
+  if (keys.length === 0 && endlessArchive.length === 0) {
     historyList.innerHTML = '<div class="empty-state-rich"><strong>No completed cycles yet</strong><p>Your first cycle will appear here automatically when its end date is reached.</p></div>';
   } else {
-    renderPagedRecords(historyList, "archive", [...keys].reverse(), buildHistoryRow);
+    [...endlessArchive].reverse().forEach((entry, index) => historyList.appendChild(buildEndlessHistoryRow(entry, index)));
+    if (keys.length) renderPagedRecords(historyList, "archive", [...keys].reverse(), buildHistoryRow);
   }
 
-  deleteArchiveBtn.classList.toggle("hidden", keys.length === 0);
+  deleteArchiveBtn.classList.toggle("hidden", keys.length === 0 && endlessArchive.length === 0);
   storageLine.textContent = `Storage used: ${fmtBytes(totalStorageBytes())} of ~5 MB`;
 }
 
 function openHistory(updateRoute = true) {
+  if (settings.cycleEnabled === false) {
+    if (updateRoute || routeName() === "history") writeRoute(settings.activeTab || "home", true);
+    return;
+  }
   /* Swap the views BEFORE rendering. Rendering first meant the trend chart
      was drawn while this view was still hidden, so its canvas measured zero
      and fitCanvas correctly declined - leaving History permanently chartless.
@@ -5330,7 +5434,7 @@ function closeHistory(updateRoute = true) {
 
 function syncRouteFromLocation() {
   const route = routeName();
-  if (route === "history") {
+  if (route === "history" && settings.cycleEnabled !== false) {
     openHistory(false);
     return;
   }
@@ -5349,8 +5453,125 @@ historyBack.addEventListener("click", () => {
 });
 
 window.addEventListener("popstate", syncRouteFromLocation);
-if (routeName() === "history") openHistory(false);
+if (routeName() === "history" && settings.cycleEnabled !== false) openHistory(false);
 else writeRoute(initialTabRoute, true);
+
+const cycleEnabledToggle = document.getElementById("cycle-enabled-toggle");
+const cycleModeModal = document.getElementById("cycle-mode-modal");
+const cycleModeError = document.getElementById("cycle-mode-error");
+let pendingCycleMode = null;
+
+function renderCycleModeUI() {
+  const monthly = settings.cycleEnabled !== false;
+  cycleEnabledToggle.checked = monthly;
+  historyToggle.classList.toggle("hidden", !monthly);
+  for (const id of ["monthly-start-row", "carry-over-row", "budget-limit-row", "open-recurring-panel-btn"]) {
+    document.getElementById(id).classList.toggle("hidden", !monthly);
+  }
+  renderMonthStartNote();
+  document.getElementById("reset-month-btn").textContent = monthly ? "Reset current month" : "Reset current tracking";
+  document.getElementById("reset-month-note").textContent = monthly
+    ? "Clears this month's income, bills, spending, and balances. Your settings and archived months stay."
+    : "Clears the current endless ledger and balances. Archived records and settings stay.";
+  document.querySelector("#setup-month .section-eyebrow").textContent = monthly ? "Start this cycle" : "Start tracking";
+  document.getElementById("setup-month-title").textContent = monthly ? "Set up this month" : "Set up your balance";
+  document.querySelector("#setup-month p").textContent = monthly
+    ? "Add your income to get started. Your existing settings, bills, and wallets stay exactly as they are."
+    : "Add the money you have available to begin continuous tracking.";
+  cycleSummary.setAttribute("aria-label", monthly ? "Current cycle summary" : "All-time summary");
+  renderMonthLabel();
+  updateCopyLastBtn();
+  if (routeName() === "history" && !monthly) {
+    syncRouteFromLocation();
+    writeRoute(settings.activeTab || "home", true);
+  }
+}
+
+function switchCycleMode(enable) {
+  if (enable === (settings.cycleEnabled !== false)) return { ok: true };
+  if (!enable) {
+    const nextSettings = { ...settings, cycleEnabled: false,
+      endlessStartedAt: settings.endlessStartedAt || data.cycleStart || todayString() };
+    const nextData = { ...data, endless: true, income: data.income === null ? 0 : data.income };
+    const result = commitStoredChanges({ [SETTINGS_KEY]: nextSettings, [STORAGE_KEY]: nextData }, "tracking mode change");
+    if (!result.ok) return result;
+    Object.assign(settings, nextSettings);
+    Object.assign(data, nextData);
+  } else {
+    const wallets = settings.wallets.filter(wallet => !wallet.deleted);
+    const balances = {};
+    for (const wallet of settings.wallets) {
+      const balance = moneyValue(walletBalanceOf(data.walletData?.[wallet.id]));
+      if (balance < 0) return { ok: false, message: `The ${wallet.name} wallet has a negative balance. Correct it before starting a new cycle.` };
+      if (wallet.deleted && balance !== 0) return { ok: false, message: `The closed ${wallet.name} wallet still has money. Restore or transfer it before starting a new cycle.` };
+      if (balance > 0) balances[wallet.id] = balance;
+    }
+    const main = moneyValue(mainRemainingOf(data, settings.wallets));
+    const carry = { main, wallets: balances,
+      total: moneyValue(main + Object.values(balances).reduce((sum, value) => sum + value, 0)) };
+    const start = todayString();
+    const fresh = freshMonthData(carry, start);
+    if (archive[fresh.month]) return { ok: false, message: "A monthly record for this period already exists in History. Export a backup before resolving the duplicate." };
+    const nextEndlessArchive = [...endlessArchive, {
+      data: JSON.parse(JSON.stringify(data)),
+      wallets: settings.wallets.map(wallet => ({ id: wallet.id, name: wallet.name })),
+      currency: settings.currency,
+      startedAt: settings.endlessStartedAt || data.cycleStart || start,
+      endedAt: new Date().toISOString()
+    }];
+    const nextSettings = { ...settings, cycleEnabled: true, wallets };
+    delete nextSettings.endlessStartedAt;
+    const result = commitStoredChanges({
+      [ENDLESS_ARCHIVE_KEY]: nextEndlessArchive,
+      [SETTINGS_KEY]: nextSettings,
+      [STORAGE_KEY]: fresh
+    }, "tracking mode change");
+    if (!result.ok) return result;
+    cancelEdit();
+    incomeInput.value = "";
+    incomeInput.classList.add("hidden");
+    endlessArchive = nextEndlessArchive;
+    Object.assign(settings, nextSettings);
+    delete settings.endlessStartedAt;
+    restoreInPlace(data, fresh);
+    currentMonthKey = fresh.month;
+  }
+  saveSnapshot();
+  renderCycleModeUI();
+  renderIncome(); renderPriority(); updatePriorityLockUI(); renderWallets(); renderSecondChoice(); calculateRemaining();
+  return { ok: true };
+}
+
+cycleEnabledToggle.addEventListener("change", () => {
+  pendingCycleMode = cycleEnabledToggle.checked;
+  cycleEnabledToggle.checked = settings.cycleEnabled !== false;
+  cycleModeError.textContent = "";
+  cycleModeError.classList.add("hidden");
+  document.getElementById("cycle-mode-title").textContent = pendingCycleMode ? "Turn monthly cycles back on?" : "Turn monthly cycles off?";
+  document.getElementById("cycle-mode-description").textContent = pendingCycleMode
+    ? `The endless ledger will become a read-only History record. A new cycle starts today with your exact main and wallet balances, without recording them as new income. Its first boundary is ${nextCycleStartOf(todayString(), settings.monthStartDay)} so no two cycles share one History month. Monthly controls will return.`
+    : "Your current records and balances will continue in one ledger. Monthly rollover, statements, History, carry-forward, recurring cycle entries, and monthly pace insights will pause. Previous archived months stay safe.";
+  document.getElementById("confirm-cycle-mode").textContent = pendingCycleMode ? "Start monthly cycle" : "Use endless tracking";
+  revealSurface(cycleModeModal);
+});
+document.getElementById("cancel-cycle-mode").addEventListener("click", () => {
+  pendingCycleMode = null;
+  concealSurface(cycleModeModal);
+  cycleEnabledToggle.focus();
+});
+document.getElementById("confirm-cycle-mode").addEventListener("click", () => {
+  if (pendingCycleMode === null) return;
+  const result = switchCycleMode(pendingCycleMode);
+  if (!result.ok) {
+    cycleModeError.textContent = result.message;
+    cycleModeError.classList.remove("hidden");
+    return;
+  }
+  pendingCycleMode = null;
+  concealSurface(cycleModeModal);
+  cycleEnabledToggle.focus();
+});
+renderCycleModeUI();
 
 /* =========================
    FIRST-RUN WALKTHROUGH
@@ -5555,7 +5776,9 @@ function navigateTutorialStep(stepNumber) {
 
   tutorialProgress.textContent = `${stepNumber} of ${TUTORIAL_STEPS.length}`;
   tutorialTitle.textContent = step.title;
-  tutorialDescription.textContent = step.description;
+  tutorialDescription.textContent = settings.cycleEnabled === false && stepNumber === 1
+    ? "Add the money you have available, then keep tracking without a monthly reset."
+    : step.description;
   tutorialBack.disabled = stepNumber === 1;
   tutorialNext.textContent = stepNumber === TUTORIAL_STEPS.length ? "Start using MoNy" : "Next";
   tutorialTarget = step.target();
@@ -5760,9 +5983,10 @@ const cancelArchiveDeleteBtn = document.getElementById("cancel-archive-delete");
 
 deleteArchiveBtn.addEventListener("click", () => {
   const n = Object.keys(archive).length;
-  const size = fmtBytes(bytesOfKey(ARCHIVE_KEY));
+  const endlessCount = endlessArchive.length;
+  const size = fmtBytes(bytesOfKey(ARCHIVE_KEY) + bytesOfKey(ENDLESS_ARCHIVE_KEY));
   archiveModalText.textContent =
-    `This will erase ${n === 1 ? "1 archived month" : `${n} archived months`} (${size}). This action cannot be undone.`;
+    `This will erase ${n === 1 ? "1 archived month" : `${n} archived months`} and ${endlessCount === 1 ? "1 endless period" : `${endlessCount} endless periods`} (${size}). This action cannot be undone.`;
   revealSurface(archiveModal);
 });
 
@@ -5771,8 +5995,11 @@ cancelArchiveDeleteBtn.addEventListener("click", () => {
 });
 
 confirmArchiveDeleteBtn.addEventListener("click", () => {
-  if (!save(ARCHIVE_KEY, {})) return;
+  const result = commitStoredChanges({ [ARCHIVE_KEY]: {}, [ENDLESS_ARCHIVE_KEY]: [] }, "history deletion");
+  if (!result.ok) { alert(result.message); return; }
   archive = {};
+  endlessArchive = [];
+  saveSnapshot();
   concealSurface(archiveModal);
   renderHistory();
 });
@@ -5797,6 +6024,7 @@ function resetData(target = data) {
   target.month = currentMonthKey;
   target.income = null;
   target.carryOver = 0;
+  target.signedCarry = false;
   target.carryIn = { main: 0, wallets: {} };
   target.priority = [];
   target.priorityLocked = false;
@@ -5814,8 +6042,10 @@ let resetLaunchSource = null;
 function openResetMonth(source = "settings") {
   resetLaunchSource = source;
   setDataControlError(resetError);
-  document.getElementById("reset-modal-text").textContent =
-    `Clear income, bills, spending, and wallet balances for ${monthLabel(data.month)}? Your settings, archived months, and cycle dates stay. A recovery copy is saved first.`;
+  confirmResetBtn.textContent = settings.cycleEnabled === false ? "Reset tracking" : "Reset month";
+  document.getElementById("reset-modal-text").textContent = settings.cycleEnabled === false
+    ? "Clear all income, bills, spending, and wallet balances in the current endless ledger? Archived records and settings stay. A recovery copy is saved first."
+    : `Clear income, bills, spending, and wallet balances for ${monthLabel(data.month)}? Your settings, archived months, and cycle dates stay. A recovery copy is saved first.`;
   revealSurface(resetModal);
 }
 /* Mobile Safari does not reliably emit dblclick for a heading. Detect two
@@ -5845,6 +6075,7 @@ confirmResetBtn.addEventListener("click", () => {
   const nextData = JSON.parse(JSON.stringify(data));
   resetData(nextData);
   const changes = { [STORAGE_KEY]: nextData };
+  if (settings.cycleEnabled === false) changes[SETTINGS_KEY] = { ...settings, endlessStartedAt: todayString() };
   if (data.priority.length > 0) changes[BACKUP_PRIORITY_KEY] = data.priority;
   if (resetLaunchSource === "brand") {
     changes[ONBOARDING_KEY] = undefined;
@@ -6026,7 +6257,7 @@ function dismissOpenPrompts() {
 /* Rolls the app forward if the cycle has ended since it was last checked.
    Returns true when a rollover actually happened. */
 function checkCycleRollover() {
-  if (checkingCycle || !storageIsCurrent() || !data || !data.cycleNext) return false;
+  if (settings.cycleEnabled === false || checkingCycle || !storageIsCurrent() || !data || !data.cycleNext) return false;
   const today = todayString();
   if (today < data.cycleNext) return false;
   checkingCycle = true;
@@ -6095,7 +6326,7 @@ window.addEventListener("focus", () => { checkCycleRollover(); });
     // Recovery/export remains reachable when rollover cannot finish.
     if (event.target.closest?.("#settings-toggle, #settings-panel > .settings-panel-card > .settings-modal-head, #close-settings, #export-data-btn") ||
         (type === "keydown" && ["Tab", "Escape"].includes(event.key))) return;
-    if (todayString() >= data.cycleNext) {
+    if (settings.cycleEnabled !== false && todayString() >= data.cycleNext) {
       event.preventDefault(); event.stopImmediatePropagation();
       checkCycleRollover();
     }

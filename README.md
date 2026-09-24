@@ -1,6 +1,6 @@
 # MoNy — Monthly Money Tracker
 
-A simple, private, offline-first money tracker for one month at a time.
+A simple, private, offline-first money tracker with optional monthly cycles.
 No account, no sign-up, no server, no ads. Everything you enter stays on
 your own phone.
 
@@ -24,18 +24,19 @@ your own phone.
 12. [The chart](#the-chart)
 13. [Budget cycles](#budget-cycles-not-everyone-gets-paid-on-the-1st)
 14. [Carrying money into a new month](#carrying-money-into-a-new-month)
-15. [Month history](#month-history)
-16. [Settings](#settings)
-17. [Backing up and moving your data](#backing-up-and-moving-your-data)
-18. [Privacy](#privacy)
-19. [Tips and things worth knowing](#tips-and-things-worth-knowing)
-20. [FAQ](#faq)
+15. [Endless tracking](#endless-tracking)
+16. [Month history](#month-history)
+17. [Settings](#settings)
+18. [Backing up and moving your data](#backing-up-and-moving-your-data)
+19. [Privacy](#privacy)
+20. [Tips and things worth knowing](#tips-and-things-worth-knowing)
+21. [FAQ](#faq)
 
 ---
 
 ## What this app does
 
-MoNy tracks one calendar month of money at a time. You:
+MoNy tracks your money in monthly cycles by default, or in one continuous ledger if you turn cycles off. You:
 
 - Set your income for the month
 - List the bills you have to pay ("Priority")
@@ -43,13 +44,13 @@ MoNy tracks one calendar month of money at a time. You:
   fuel
 - Log everyday spending and small extra income ("Second choice")
 
-When a new month starts, the finished month is automatically filed away in
+In monthly mode, when a new cycle starts, the finished one is automatically filed away in
 **History** and a fresh, empty month begins — you don't have to do anything
 to "close" a month.
 
 There's a live spending breakdown showing where your money went, a **Remaining**
 figure that updates instantly as you spend, and a history view with trends
-across every month you've tracked.
+across completed monthly cycles. Endless mode keeps the live ledger continuous.
 
 ---
 
@@ -151,6 +152,7 @@ still reached from the icons in the header, on any tab.
 - Set and edit your monthly income at any time
 - **Budget cycles** — choose the day your month starts (e.g. the 25th, if
   that's payday), not just the 1st
+- **Endless tracking** — turn monthly cycles off and keep one continuous ledger
 - **Carry your leftover balance forward** into the new month automatically,
   both your main balance and every wallet
 - **Projected balance** — see what you'll have left once every unpaid bill
@@ -516,6 +518,12 @@ start day takes effect — changing this never cuts your *current* cycle
 short, it only applies from the next one onward. Days that don't exist in a
 shorter month (like the 31st in April) automatically land on that month's
 last real day.
+
+### Endless tracking
+
+In **Settings → Budget & cycle**, turn **Monthly cycle** off and confirm. Your current bills, spending, income, wallet balances, and transaction dates remain in one live ledger. There is no automatic rollover, new monthly statement, carry-forward, recurring cycle entry, daily allowance, or comparison with last cycle. Month-start, carry-forward, monthly budget limit, recurring-cycle controls, and the History button are hidden while endless tracking is active. Past archived months remain stored, and external exports and browser recovery include your endless data.
+
+To turn cycles back on, use the same switch and confirm. MoNy files the endless ledger as a read-only **Endless period** in History, including its transactions, and starts a new monthly cycle with the exact main and wallet balances. Opening balances are not recorded as new income transactions. The first cycle begins on the day you switch back and ends on your chosen start day in the **next** calendar month; this prevents two cycles from claiming the same History month. Past monthly archives and recurring templates remain unchanged. If your main balance is negative, that debt carries into the first new cycle exactly.
 
 ---
 

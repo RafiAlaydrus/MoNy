@@ -2184,6 +2184,9 @@ body.tutorial-active {
   margin-top: 2px;
 }
 
+.endless-entry-list .legend-left { flex-direction:column; align-items:flex-start; gap:2px; }
+.endless-entry-list .legend-amount { white-space:nowrap; }
+
 .delete-all-btn {
   width: 100%;
   margin-top: 4px;
