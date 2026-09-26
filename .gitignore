@@ -16,3 +16,10 @@ server.mjs
 
 # Generated local code-analysis workspace; never part of the shipped PWA.
 graphify-out/
+
+# Development-only files, kept locally but not published.
+AGENTS.md
+MoNy logo.png
+package.json
+package-lock.json
+test/
