@@ -152,6 +152,11 @@
   }
 
   if (check) check.addEventListener("click", () => checkForUpdate(true));
+  // Pull-to-refresh asks for a fresh check instead of reloading the page.
+  document.addEventListener("mony:check-update", () => {
+    checkForUpdate(true);
+    applyAvailableUpdate();
+  });
   window.addEventListener("online", () => {
     checkForUpdate();
     applyAvailableUpdate();

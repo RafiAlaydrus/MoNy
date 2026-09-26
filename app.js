@@ -50,7 +50,7 @@ function storageIsCurrent() {
     storageConflict = true;
     const message = "Your records changed in another tab. Reload this tab before editing so newer records are not overwritten.";
     if (window.MoNySession) window.MoNySession.block(message);
-    else alert(message);
+    else appAlert(message);
     return false;
   }
   return true;
@@ -76,10 +76,11 @@ function save(key, value) {
   } catch (err) {
     if (!storageWarned) {
       storageWarned = true;
-      alert(
+      appAlert(
         "Couldn't save - storage for this app is full.\n\n" +
         "Export your data from Settings, then delete old months from History " +
-        "to free space. Changes since this message are not saved."
+        "to free space. Changes since this message are not saved.",
+        "Storage is full"
       );
     }
     console.error("localStorage write failed", err);
@@ -118,6 +119,57 @@ function commitStateChanges(changes) {
       return { ok: false, message };
     }
   }
+}
+
+/* =========================
+   APP DIALOG
+
+   The app's own replacement for alert() and confirm(), which render as the
+   browser's unstyled system box. Messages queue, so two problems reported in
+   the same tick are shown one after the other rather than one overwriting the
+   other. Everything is looked up lazily: this can be called during the boot
+   migrations, before the rest of the file has run.
+========================= */
+function showAppDialog({ title = "Couldn't finish that", message = "", confirmLabel = "OK", cancelLabel = null } = {}) {
+  return new Promise(resolve => {
+    const queue = showAppDialog.queue || (showAppDialog.queue = []);
+    queue.push({ title, message, confirmLabel, cancelLabel, resolve });
+    if (queue.length === 1) presentAppDialog();
+  });
+}
+
+function presentAppDialog() {
+  const next = (showAppDialog.queue || [])[0];
+  if (!next) return;
+  const modal = document.getElementById("app-dialog");
+  document.getElementById("app-dialog-title").textContent = next.title;
+  document.getElementById("app-dialog-message").textContent = next.message;
+  const cancel = document.getElementById("cancel-app-dialog");
+  cancel.textContent = next.cancelLabel || "Cancel";
+  cancel.classList.toggle("hidden", !next.cancelLabel);
+  document.getElementById("confirm-app-dialog").textContent = next.confirmLabel;
+  window.MoNyUI.revealSurface(modal);
+}
+
+function settleAppDialog(confirmed) {
+  const queue = showAppDialog.queue || [];
+  const current = queue.shift();
+  if (!current) return;
+  window.MoNyUI.concealSurface(document.getElementById("app-dialog"));
+  current.resolve(confirmed);
+  if (queue.length) setTimeout(presentAppDialog, 140);
+}
+
+document.getElementById("confirm-app-dialog").addEventListener("click", () => settleAppDialog(true));
+document.getElementById("cancel-app-dialog").addEventListener("click", () => settleAppDialog(false));
+
+function appAlert(message, title) {
+  showAppDialog({ title, message });
+}
+
+// Resolves true only when the user picks the confirm button.
+function appConfirm(message, { title = "Are you sure?", confirmLabel = "Confirm" } = {}) {
+  return showAppDialog({ title, message, confirmLabel, cancelLabel: "Cancel" });
 }
 
 const now = new Date();
@@ -445,13 +497,13 @@ if (!data) {
 function performRollover(today) {
   if (settings.cycleEnabled === false || !storageIsCurrent() || today < data.cycleNext) return false;
   if (!isValidYmd(data.cycleStart) || !isValidYmd(data.cycleNext) || data.cycleNext <= data.cycleStart) {
-    alert("This cycle has invalid dates. Export a backup before correcting it.");
+    appAlert("This cycle has invalid dates. Export a backup before correcting it.");
     return false;
   }
   const nextArchive = { ...archive };
   if (monthHasContent(data)) {
     if (archive[data.month]) {
-      alert("This cycle already exists in History. Rollover was stopped to protect it. Export a backup before resolving the duplicate cycle.");
+      appAlert("This cycle already exists in History. Rollover was stopped to protect it. Export a backup before resolving the duplicate cycle.");
       return false;
     }
     nextArchive[data.month] = {
@@ -495,14 +547,14 @@ function performRollover(today) {
 
   const fresh = freshMonthData(carry, nextStart);
   if (archive[fresh.month]) {
-    alert("The next cycle already exists in History. Rollover was stopped to protect your records.");
+    appAlert("The next cycle already exists in History. Rollover was stopped to protect your records.");
     return false;
   }
   applyRecurringTransactions(fresh);
   const changes = { [ARCHIVE_KEY]: nextArchive, [SETTINGS_KEY]: nextSettings, [STORAGE_KEY]: fresh };
   if ((data.priority || []).length > 0) changes[BACKUP_PRIORITY_KEY] = data.priority;
   const result = commitStateChanges(changes);
-  if (!result.ok) { alert(result.message); return false; }
+  if (!result.ok) { appAlert(result.message); return false; }
   Object.assign(archive, nextArchive);
   Object.assign(settings, nextSettings);
   Object.keys(data).forEach(k => { delete data[k]; });
@@ -656,7 +708,6 @@ const remainingMoneyEl = document.getElementById("remaining-money");
 const setupMonth = document.getElementById("setup-month");
 const setupIncomeBtn = document.getElementById("setup-income-btn");
 const homeSummary = document.getElementById("home-summary");
-const walletReservedContext = document.getElementById("wallet-reserved-context");
 const cycleSummary = document.getElementById("cycle-summary");
 const recentSection = document.getElementById("recent-section");
 const recentActivity = document.getElementById("recent-activity");
@@ -719,10 +770,175 @@ function playMotion(el, className, competing = []) {
    or classes when the user taps quickly. Every decorative effect comes through
    this helper, so reduced-motion users keep the exact same app behaviour. */
 function celebrateForm(form) {
+  haptic(12);
   playTransient(form, "form-success", 380);
   const action = form?.querySelector("[data-edit='primary'], #add-priority");
   playTransient(action, "action-success", 300);
+  // An entry sheet has done its job once the entry is saved.
+  if (form?.classList.contains("entry-sheet")) closeEntrySheet(form);
 }
+
+/* A short tap of vibration on phones that support it (Android). iOS Safari
+   has no vibration API, so this is silently a no-op there, and it is never
+   the only feedback - every call sits beside a visible change. */
+function haptic(pattern = 10) {
+  try {
+    if (typeof navigator.vibrate === "function") navigator.vibrate(pattern);
+  } catch (_) { /* optional feedback only */ }
+}
+
+/* =========================
+   ENTRY SHEETS
+
+   The bill, spending and wallet forms each live in a bottom sheet rather than
+   permanently above their list, so a tab opens on its money instead of on
+   blank fields. The form elements themselves never move or get rebuilt -
+   every handler that reads or clears them works exactly as before; the sheet
+   is only how they are presented.
+
+   One sheet is open at a time. It opens from its "+" trigger, or when an
+   entry is opened for editing (setFormEditing), and closes once the entry is
+   saved (celebrateForm), on Cancel, the backdrop, Escape, or a swipe down.
+   Closing without saving keeps whatever was typed, like a draft.
+========================= */
+
+const sheetBackdrop = document.getElementById("sheet-backdrop");
+let openSheet = null;
+
+function openEntrySheet(sheet, trigger) {
+  if (!sheet) return;
+  if (openSheet && openSheet !== sheet) dismissEntrySheet(openSheet, false);
+  if (trigger) sheet._sheetTrigger = trigger;
+  syncCategoryChips(sheet);
+  sheet.style.transform = "";
+  openSheet = sheet;
+  sheet.classList.add("is-open");
+  sheet.setAttribute("aria-hidden", "false");
+  sheetBackdrop.classList.add("is-visible");
+  document.body.classList.add("sheet-open");
+  /* Focused synchronously, inside the tap that opened the sheet - iOS only
+     raises the keyboard for a focus that happens during a user gesture. */
+  const first = sheet.querySelector(".amount-input") || sheet.querySelector("input");
+  first?.focus({ preventScroll: true });
+}
+
+function closeEntrySheet(sheet, restoreFocus = true) {
+  if (!sheet || !sheet.classList.contains("is-open")) return;
+  sheet.classList.remove("is-open");
+  sheet.setAttribute("aria-hidden", "true");
+  sheet.style.transform = "";
+  if (sheet.contains(document.activeElement)) document.activeElement.blur();
+  if (openSheet === sheet) forgetOpenSheet();
+  const trigger = sheet._sheetTrigger;
+  if (restoreFocus && trigger && trigger.isConnected) trigger.focus({ preventScroll: true });
+}
+
+function forgetOpenSheet() {
+  openSheet = null;
+  sheetBackdrop.classList.remove("is-visible");
+  document.body.classList.remove("sheet-open");
+}
+
+/* A wallet section is rebuilt from scratch by some money actions, which
+   detaches the sheet that was open inside it. Nothing is left to close, so
+   only the backdrop needs to go. */
+function forgetDetachedSheet() {
+  if (openSheet && !openSheet.isConnected) forgetOpenSheet();
+}
+
+// Closing without saving. An edit in progress is abandoned, as Cancel does.
+function dismissEntrySheet(sheet, restoreFocus = true) {
+  if (!sheet) return;
+  if (editing && editing.root === sheet) cancelEdit();
+  closeEntrySheet(sheet, restoreFocus);
+}
+
+document.addEventListener("click", (event) => {
+  const opener = event.target.closest("[data-open-sheet]");
+  if (opener) {
+    const sheet = opener.dataset.openSheet
+      ? document.getElementById(opener.dataset.openSheet)
+      : opener.closest(".wallet-section")?.querySelector(".entry-sheet");
+    openEntrySheet(sheet, opener);
+    return;
+  }
+  const closer = event.target.closest("[data-sheet-close]");
+  if (closer) dismissEntrySheet(closer.closest(".entry-sheet"));
+});
+sheetBackdrop.addEventListener("click", () => dismissEntrySheet(openSheet));
+
+/* Category chips. The <select> stays the single source of truth - every
+   handler reads select.value, and editing re-offers a removed category through
+   it - so the chips are rebuilt from its options and only ever write back into
+   it. */
+function syncCategoryChips(root) {
+  (root || document).querySelectorAll(".category-chips[data-chips-for]").forEach(group => {
+    const select = document.getElementById(group.dataset.chipsFor);
+    if (!select) return;
+    group.innerHTML = "";
+    Array.from(select.options).forEach(option => {
+      if (option.disabled || !option.value) return;
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "category-chip-btn";
+      chip.setAttribute("role", "radio");
+      chip.setAttribute("aria-checked", String(option.value === select.value));
+      chip.innerHTML = `<span class="category-chip" style="background:${categoryColor(option.value)}"></span>${esc(option.textContent)}`;
+      chip.addEventListener("click", () => {
+        select.value = option.value;
+        select.classList.remove("input-error");
+        group.querySelectorAll(".category-chip-btn").forEach(other =>
+          other.setAttribute("aria-checked", String(other === chip)));
+        haptic(6);
+      });
+      group.appendChild(chip);
+    });
+  });
+}
+
+/* Swipe down to close, shared by the entry sheets and the phone-sized modal
+   sheets. Only starts when the sheet is scrolled to its top, so scrolling a
+   long sheet still scrolls it, and never from inside a text field. */
+function attachSwipeDismiss(card, canStart, onDismiss) {
+  let startY = 0, startX = 0, dy = 0, tracking = false, dragging = false;
+  card.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1 || card.scrollTop > 0 || !canStart()) return;
+    if (e.target.closest("input, select, textarea")) return;
+    startY = e.touches[0].clientY;
+    startX = e.touches[0].clientX;
+    dy = 0; tracking = true; dragging = false;
+  }, { passive: true });
+  card.addEventListener("touchmove", (e) => {
+    if (!tracking) return;
+    const my = e.touches[0].clientY - startY;
+    const mx = e.touches[0].clientX - startX;
+    if (!dragging) {
+      if (my < -6 || Math.abs(mx) > Math.abs(my)) { tracking = false; return; }
+      if (my < 8) return;
+      dragging = true;
+      card.style.transition = "none";
+    }
+    dy = Math.max(my, 0);
+    card.style.transform = `translateY(${dy}px)`;
+    e.preventDefault();
+  }, { passive: false });
+  card.addEventListener("touchend", () => {
+    if (!tracking) return;
+    tracking = false;
+    if (!dragging) return;
+    dragging = false;
+    card.style.transition = "";
+    if (dy > 90) {
+      haptic(8);
+      onDismiss();
+    } else {
+      card.style.transform = "";
+    }
+  }, { passive: true });
+}
+
+document.querySelectorAll(".entry-sheet").forEach(sheet =>
+  attachSwipeDismiss(sheet, () => sheet.classList.contains("is-open"), () => dismissEntrySheet(sheet)));
 
 /* Modal/popover close animation with an immediate interaction cutoff. State
    changes happen when the user taps; only display:none waits for the final
@@ -880,6 +1096,7 @@ function renderCategoryOptions(select, list, keep) {
   }
   if (keep) select.value = keep;
   else select.selectedIndex = 0;
+  syncCategoryChips(select.parentElement);
 }
 
 // Rebuilds both category dropdowns from settings.
@@ -1148,6 +1365,7 @@ function hideUndo() {
 
 undoBtn.addEventListener("click", () => {
   if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
+  haptic(8);
 
   const entry = undoStack.pop();
   if (entry && typeof entry.onUndo === "function") entry.onUndo();
@@ -1239,11 +1457,12 @@ if (corruptKeys.length > 0) {
                  .replace(STORAGE_KEY, "this month"))
       .map(n => `  - ${n}`)
       .join("\n");
-    alert(
+    appAlert(
       "Some saved data could not be read and has been skipped:\n\n" + names +
       "\n\nThe app has started with the rest. The unreadable copy was kept, " +
       "not overwritten, so nothing is lost yet - export your data before " +
-      "making changes."
+      "making changes.",
+      "Some data couldn't be read"
     );
   }, 0);
 }
@@ -1396,6 +1615,7 @@ function buildPriorityItem(bill) {
   checkbox.addEventListener("change", (e) => {
     const commit = () => {
       bill.paid = e.target.checked;
+      haptic(bill.paid ? 12 : 6);
       saveData();
       calculateRemaining();
     };
@@ -1515,6 +1735,7 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
       wrapper.style.transition = "max-height 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease";
       wrapper.style.maxHeight = "0";
       wrapper.style.overflow = "hidden";
+      haptic(15);
       onDelete();
     } else {
       /* Not far enough - spring back. */
@@ -1547,9 +1768,12 @@ function renderPriority() {
  * door gets built by accident. */
 function updatePriorityLockUI() {
   const form = document.getElementById("priority-form");
+  const actions = document.getElementById("priority-actions");
   const lockBadge = document.getElementById("priority-lock-badge");
   const lockNote = document.getElementById("bills-lock-note");
+  if (actions) actions.classList.toggle("hidden", !!data.priorityLocked);
   if (data.priorityLocked) {
+    closeEntrySheet(form, false);
     if (form) form.style.display = "none";
     if (lockBadge) lockBadge.classList.remove("hidden");
     if (lockNote) lockNote.classList.remove("hidden");
@@ -1862,6 +2086,7 @@ function makeRowDeletable(row, onDelete) {
     if (dx < -70) {
       row.style.transform = "translateX(-100%)";
       row.style.opacity = "0";
+      haptic(15);
       onDelete();
     } else {
       row.style.transform = "translateX(0)";
@@ -1870,7 +2095,9 @@ function makeRowDeletable(row, onDelete) {
 
   // Desktop fallback, since there is no swipe with a mouse
   row.addEventListener("dblclick", () => {
-    if (confirm("Delete this entry?")) onDelete();
+    appConfirm("This entry will be removed. You can undo it for a few seconds afterwards.",
+      { title: "Delete entry?", confirmLabel: "Delete" })
+      .then(ok => { if (ok) onDelete(); });
   });
 }
 
@@ -2015,9 +2242,17 @@ function buildWalletSection(wallet) {
         <span class="spend-bar-label" data-role="bar-label">0% spent</span>
       </div>
     </div>
-    <div class="second-form wallet-form">
-      <input type="text" data-role="item-name" placeholder="Item name" />
-      <input type="number" inputmode="decimal" data-role="item-amount" placeholder="Amount (${esc(cur())})" />
+    <div class="entry-trigger-row">
+      <button type="button" class="entry-trigger" data-open-sheet="" aria-label="New entry in ${esc(wallet.name)}">+ New entry</button>
+    </div>
+    <div class="second-form wallet-form entry-sheet" role="dialog" aria-modal="true" aria-label="${esc(wallet.name)}" aria-hidden="true">
+      <div class="sheet-head">
+        <span class="sheet-grabber" aria-hidden="true"></span>
+        <h4 data-sheet-title data-new-title="${esc(wallet.name)}" data-edit-title="Edit entry">${esc(wallet.name)}</h4>
+        <button class="settings-btn sheet-close" type="button" data-sheet-close aria-label="Close">✕</button>
+      </div>
+      <input type="number" inputmode="decimal" class="amount-input" data-role="item-amount" placeholder="${esc(cur())} 0.00" aria-label="Amount" />
+      <input type="text" data-role="item-name" placeholder="Item name" aria-label="Item name" />
       <div class="date-field">
         <input type="date" data-role="item-date" class="is-empty" aria-label="Date, optional, defaults to today" />
         <span class="date-placeholder">Date (Optional)</span>
@@ -2044,6 +2279,8 @@ function buildWalletSection(wallet) {
   const tbody = section.querySelector("[data-role='table']");
 
   wireDateInput(dateInput);
+  const sheet = section.querySelector(".entry-sheet");
+  attachSwipeDismiss(sheet, () => sheet.classList.contains("is-open"), () => dismissEntrySheet(sheet));
 
   const tableEl = section.querySelector("table");
   tableEl.parentNode.insertBefore(buildTableToggle(wallet.id, tableEl), tableEl);
@@ -2288,6 +2525,9 @@ function buildWalletSection(wallet) {
       amountInput.value = "";
       dateInput.value = "";
       dateInput.classList.add("is-empty");
+      haptic(12);
+      closeEntrySheet(section.querySelector(".wallet-form"));
+      forgetDetachedSheet();
     });
   });
   [nameInput, amountInput].forEach(el => {
@@ -2307,6 +2547,7 @@ function renderWallets() {
   open.forEach(wallet => {
     walletsContainer.appendChild(buildWalletSection(wallet));
   });
+  forgetDetachedSheet();
   // Looked up each time rather than cached: renderWallets runs before the
   // element bindings further down the file exist.
   const empty = document.getElementById("wallets-empty");
@@ -2330,6 +2571,7 @@ function renderWallet(wallet) {
     return;
   }
   existing.replaceWith(buildWalletSection(wallet));
+  forgetDetachedSheet();
 }
 
 /* =========================
@@ -2369,7 +2611,7 @@ function runMoneyAction(action) {
       if (JSON.stringify(settings) !== JSON.stringify(beforeSettings)) {
         const result = commitStateChanges({ [STORAGE_KEY]: data, [SETTINGS_KEY]: settings });
         ok = result.ok;
-        if (!ok) alert(result.message);
+        if (!ok) appAlert(result.message);
       } else ok = save(STORAGE_KEY, data);
     }
   } finally {
@@ -2415,7 +2657,7 @@ function executeTransfer(sourceWallet, destId, name, amount, date) {
   const destinationExists = destId === "main" || activeWallets().some(w => w.id === destId);
   if (!source || !destinationExists || destId === source.id || !isValidAmount(amount) ||
       !hasEnough(getWalletBalance(source.id), amount)) {
-    alert("This transfer is no longer available. Check the wallets and their balances, then try again.");
+    appAlert("This transfer is no longer available. Check the wallets and their balances, then try again.");
     return false;
   }
   amount = Number(amount);
@@ -2764,6 +3006,10 @@ function setFormEditing(root, on, saveLabel = "Save changes") {
   others.forEach(el => el.classList.toggle("hidden", on));
   if (cancel) cancel.classList.toggle("hidden", !on);
   root.classList.toggle("is-editing", on);
+  const title = root.querySelector("[data-sheet-title]");
+  if (title) title.textContent = on ? title.dataset.editTitle : title.dataset.newTitle;
+  // Editing happens in the same sheet that adds, so opening an entry opens it.
+  if (on) openEntrySheet(root);
 }
 
 // Leaves edit mode without writing anything, and clears the form.
@@ -2772,7 +3018,10 @@ function cancelEdit() {
   const { root, clear } = editing;
   editing = null;
   if (clear) clear();
-  if (root) setFormEditing(root, false);
+  if (root) {
+    setFormEditing(root, false);
+    closeEntrySheet(root);
+  }
 }
 
 /* Called whenever an entry is deleted or the month is rebuilt. An edit whose
@@ -3011,17 +3260,15 @@ function daysRemainingInCycle() {
   return Math.max(1, Math.ceil((end - now) / 86400000));
 }
 
-/* Four small answers derived from figures the app already trusts. They are
+/* Small answers derived from figures the app already trusts. They are
    deliberately descriptive rather than predictive models: daily allowance
-   divides today's real balance over the days left, while projected balance
-   uses the same unpaid-bill forecast drawn in the main progress bar. */
+   divides today's real balance over the days left. The balance after bills is
+   not repeated here - the hero card already shows it under its progress bar. */
 function renderInsights() {
   const dailyEl = document.getElementById("insight-daily");
   if (!dailyEl) return;
 
   const dailyNote = document.getElementById("insight-daily-note");
-  const projectedEl = document.getElementById("insight-projected");
-  const projectedNote = document.getElementById("insight-projected-note");
   const categoryEl = document.getElementById("insight-category");
   const categoryNote = document.getElementById("insight-category-note");
   const comparisonEl = document.getElementById("insight-comparison");
@@ -3040,11 +3287,8 @@ function renderInsights() {
 
   const remaining = moneyValue(getMainRemaining());
   const days = daysRemainingInCycle();
-  const projected = moneyValue(projectedRemainingOf(data, allWallets()));
   dailyEl.textContent = `${cur()} ${fmt(Math.max(remaining, 0) / days)}`;
   dailyNote.textContent = `${days} ${days === 1 ? "day" : "days"} remaining`;
-  projectedEl.textContent = projected < 0 ? `−${cur()} ${fmt(-projected)}` : `${cur()} ${fmt(projected)}`;
-  projectedNote.textContent = unpaidPriorityOf(data) > 0 ? "After unpaid bills" : "All bills accounted for";
 
   const breakdown = spendingBreakdownOf(data, allWallets());
   const top = Object.entries(breakdown.categories).sort((a, b) => b[1] - a[1])[0];
@@ -3081,7 +3325,6 @@ function renderInsights() {
   }
 
   show("daily", settings.cycleEnabled !== false);
-  show("projected", true);
   show("category", !!top);
   show("comparison", settings.cycleEnabled !== false && !!previousKey);
   show("pace", settings.cycleEnabled !== false && !!settings.budgetLimit);
@@ -3288,17 +3531,13 @@ function renderProjection() {
     return;
   }
 
-  const remaining = moneyValue(getMainRemaining());
   const projected = moneyValue(projectedRemainingOf(data, allWallets()));
 
-  line.innerHTML =
-    `<span class="projection-part">Balance ${esc(cur())} ${fmt(remaining)}</span>` +
-    `<span class="projection-sep">·</span>` +
-    `<span class="projection-part is-projected">Projected Balance ${
-      projected < 0
-        ? `overspent by ${esc(cur())} ${fmt(-projected)}`
-        : `${esc(cur())} ${fmt(projected)}`
-    }</span>`;
+  /* Only the forecast. The balance it starts from is the hero figure directly
+     above, so repeating it here would print the same number twice. */
+  line.textContent = projected < 0
+    ? `After bills: overspent by ${cur()} ${fmt(-projected)}`
+    : `After bills: ${cur()} ${fmt(projected)}`;
   line.classList.remove("hidden");
 
   /* The dim segment reaches the point the bar WILL sit at once the bills are
@@ -3349,9 +3588,6 @@ function calculateRemaining(skipChart = false) {
   const spent = moneyValue(income - remaining);
   const breakdown = spendingBreakdownOf(data, allWallets());
   const reserved = moneyValue(Math.max(breakdown.inWallets, 0));
-  walletReservedContext.textContent = `${cur()} ${fmt(reserved)} reserved in wallets`;
-  walletReservedContext.classList.toggle("hidden", reserved <= 0);
-  document.getElementById("summary-income").textContent = `${cur()} ${fmt(income)}`;
   document.getElementById("summary-spent").textContent = `${cur()} ${fmt(breakdown.spent)}`;
   document.getElementById("summary-bills").textContent = `${cur()} ${fmt(unpaidPriorityOf(data))}`;
   document.getElementById("summary-wallets").textContent = `${cur()} ${fmt(reserved)}`;
@@ -3745,7 +3981,7 @@ if (monthStartSelect) {
     const result = commitStateChanges({ [SETTINGS_KEY]: nextSettings, [STORAGE_KEY]: nextData });
     if (!result.ok) {
       monthStartSelect.value = String(settings.monthStartDay);
-      alert(result.message);
+      appAlert(result.message);
       return;
     }
     settings.monthStartDay = chosen;
@@ -5612,15 +5848,15 @@ const TUTORIAL_STEPS = [
     title: "Bills",
     description: "Keep regular or required payments here so you know what still needs to be paid.",
     tab: "bills",
-    target: () => elementIsShown(document.getElementById("priority-form"))
-      ? document.getElementById("priority-form")
+    target: () => elementIsShown(document.getElementById("priority-actions"))
+      ? document.getElementById("priority-actions")
       : document.getElementById("priority-list")
   },
   {
     title: "Spending",
     description: "Use Expense when you spend money and Money In when money comes back in.",
     tab: "spending",
-    target: () => document.getElementById("second-choice-form")
+    target: () => document.getElementById("sc-actions")
   },
   {
     title: "Wallets",
@@ -5916,6 +6152,32 @@ function topVisibleModal() {
       (Number(a.style.getPropertyValue("--modal-layer")) || 9999))[0] || null;
 }
 
+/* Closes a modal the way its own Cancel/Done button would, so any cleanup
+   that button does (restoring a checkbox, clearing a pending action) runs
+   too. Shared by Escape and the swipe-down gesture. */
+function dismissModal(modal) {
+  const close = modal.querySelector(
+    "[id^='cancel-'], #activity-close, #close-category-panel, #close-recurring"
+  );
+  if (close) close.click();
+  else concealSurface(modal);
+}
+
+/* On a phone every dialog is presented as a bottom sheet (see style.css), so
+   it can be swiped down to close like a native one. Not the walkthrough, the
+   first-run question, or the tab-lock blocker - those need an explicit answer. */
+const phoneSheetQuery = window.matchMedia ? window.matchMedia("(max-width: 600px)") : null;
+document.querySelectorAll(".modal > .modal-card").forEach(card => {
+  const modal = card.parentElement;
+  if ([tutorialOverlay, tutorialExit, onboardingWelcome, document.getElementById("session-blocker")].includes(modal)) return;
+  attachSwipeDismiss(card,
+    () => !!phoneSheetQuery?.matches && topVisibleModal() === modal,
+    () => {
+      if (modal === settingsPanel) document.getElementById("close-settings").click();
+      else dismissModal(modal);
+    });
+});
+
 document.addEventListener("keydown", (event) => {
   const modal = topVisibleModal();
 
@@ -5937,11 +6199,12 @@ document.addEventListener("keydown", (event) => {
     }
     if (modal) {
       event.preventDefault();
-      const close = modal.querySelector(
-        "[id^='cancel-'], #activity-close, #close-category-panel"
-      );
-      if (close) close.click();
-      else concealSurface(modal);
+      dismissModal(modal);
+      return;
+    }
+    if (openSheet) {
+      event.preventDefault();
+      dismissEntrySheet(openSheet);
       return;
     }
     if (!settingsPanel.classList.contains("hidden")) {
@@ -5996,7 +6259,7 @@ cancelArchiveDeleteBtn.addEventListener("click", () => {
 
 confirmArchiveDeleteBtn.addEventListener("click", () => {
   const result = commitStoredChanges({ [ARCHIVE_KEY]: {}, [ENDLESS_ARCHIVE_KEY]: [] }, "history deletion");
-  if (!result.ok) { alert(result.message); return; }
+  if (!result.ok) { appAlert(result.message); return; }
   archive = {};
   endlessArchive = [];
   saveSnapshot();
@@ -6099,6 +6362,11 @@ confirmResetBtn.addEventListener("click", () => {
   function syncViewport() {
     document.documentElement.style.setProperty("--vv-top", `${vv.offsetTop}px`);
     document.documentElement.style.setProperty("--vv-height", `${vv.height}px`);
+    /* How far the bottom of the visible area sits above the bottom of the
+       layout viewport - the on-screen keyboard. Entry sheets are anchored
+       here so their fields rest just above the keyboard, not behind it. */
+    const bottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty("--vv-bottom", `${bottom}px`);
   }
 
   vv.addEventListener("resize", syncViewport);
@@ -6125,7 +6393,7 @@ confirmResetBtn.addEventListener("click", () => {
   document.addEventListener("touchstart", (e) => {
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON" || tag === "LABEL") return;
-    if (document.querySelector(".modal:not(.hidden)")) return;
+    if (document.querySelector(".modal:not(.hidden)") || openSheet) return;
     if (!historyView.classList.contains("hidden")) return;
     if (window.scrollY === 0) {
       startY = e.touches[0].clientY;
@@ -6171,16 +6439,48 @@ confirmResetBtn.addEventListener("click", () => {
       pullSpinner.classList.remove("is-pulling");
       indicator.style.opacity = "1";
       app.style.transform = "translateY(40px)";
-      setTimeout(() => location.reload(), 360);
+      haptic(10);
+      /* Refreshes in place instead of reloading the page: picks up a new
+         cycle if one has started, redraws every figure, and asks for an app
+         update. A reload threw away scroll position and flashed the loading
+         screen for nothing the app cannot do itself. */
+      setTimeout(() => {
+        refreshInPlace();
+        pullText.textContent = "Up to date";
+        setTimeout(() => {
+          app.style.transition = "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+          app.style.transform = "";
+          resetIndicator();
+          pullText.textContent = "Pull to refresh";
+        }, 420);
+      }, 260);
       return;
     }
 
+    resetIndicator();
+  }, { passive: true });
+
+  function resetIndicator() {
     pullDistance = 0;
     indicator.style.opacity = "0";
     indicator.style.setProperty("--pull-progress", "0");
     pullSpinner.classList.add("hidden");
     pullSpinner.classList.remove("is-pulling");
-  }, { passive: true });
+  }
+
+  function refreshInPlace() {
+    if (!checkCycleRollover()) {
+      renderMonthLabel();
+      renderIncome();
+      renderPriority();
+      updatePriorityLockUI();
+      updateCopyLastBtn();
+      renderWallets();
+      renderSecondChoice();
+      calculateRemaining();
+    }
+    document.dispatchEvent(new CustomEvent("mony:check-update"));
+  }
 })();
 
 /* =========================
@@ -6244,6 +6544,7 @@ function showNotice(message) {
  * could correctly belong to.
  */
 function dismissOpenPrompts() {
+  if (openSheet) closeEntrySheet(openSheet, false);
   document.querySelectorAll(".modal").forEach(m => {
     if ([onboardingWelcome, tutorialOverlay, tutorialExit].includes(m)) return;
     concealSurface(m, true);

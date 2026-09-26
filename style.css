@@ -782,7 +782,6 @@ header p {
 #tab-home:not(.hidden) { display:flex; flex-direction:column; }
 #tab-home .setup-month { order:0; }
 #tab-home .summary { order:1; }
-#tab-home .cycle-summary { order:2; }
 #tab-home .recent-section { order:3; }
 #tab-home #chart-section { order:4; }
 #tab-home .insights-section { order:5; }
@@ -811,27 +810,30 @@ header p {
   margin-bottom: 12px;
 }
 
-.available-card { padding:20px; }
-.available-card #remaining-money { font-size:clamp(31px,9vw,42px); }
-.income-card { padding-block:14px; }
-.income-card h2 { font-size:21px; }
-.balance-context { margin:7px 0 0; color:var(--text-secondary); font-size:12px; }
+.available-card { padding:22px 20px 18px; }
+.available-card #remaining-money { font-size:clamp(34px,10vw,46px); letter-spacing:-.035em; }
 
+/* The supporting figures, inside the hero card under a hairline. Four equal
+   cells on one row; each figure appears on Home exactly once. */
 .cycle-summary {
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:1px;
-  overflow:hidden;
-  margin-bottom:20px;
-  border:1px solid var(--border-subtle);
-  border-radius:var(--radius-card);
-  background:var(--border-subtle);
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:0;
+  margin:18px -4px 0;
+  padding-top:14px;
+  border-top:1px solid var(--border-subtle);
 }
-.cycle-summary > div { min-width:0; padding:12px; background:var(--surface-card); }
-.cycle-summary span,
-.cycle-summary strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.cycle-summary span { color:var(--text-tertiary); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
-.cycle-summary strong { margin-top:5px; font-size:14px; }
+.summary-cell { min-width:0; padding:4px; text-align:left; }
+.cycle-summary .summary-cell span,
+.cycle-summary .summary-cell strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cycle-summary .summary-cell span { margin:0; color:var(--text-tertiary); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.08em; }
+.cycle-summary .summary-cell strong { margin-top:5px; color:var(--text-primary); font-size:13px; font-weight:650; }
+/* Income is the one editable figure, so it is a real button - reset to look
+   like its neighbours, with a dotted underline as the only "tap me" hint. */
+button.summary-cell { border:0; border-radius:8px; background:none; color:inherit; font:inherit; cursor:pointer; }
+button.summary-cell strong { text-decoration:underline dotted var(--border-strong); text-underline-offset:3px; }
+button.summary-cell:active { background:var(--surface-field); }
+.income-input { width:100%; margin-top:14px; padding:12px; border-radius:var(--radius-control); }
 
 .recent-section { margin-bottom:22px; }
 .recent-activity { margin-top:10px; border:1px solid var(--border-subtle); border-radius:var(--radius-card); padding:0 var(--space-card); background:var(--surface-card); box-shadow:var(--shadow-card); }
@@ -1232,11 +1234,11 @@ td {
   cursor: pointer;
 }
 
-#income-card input {
-  width: 100%;
-  margin-top: 10px;
-  padding: 12px;
-  border-radius: 12px;
+#total-income-input {
+  background: var(--surface-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  font-size: 16px;
 }
 
 /* =====================
@@ -2484,8 +2486,6 @@ body.tutorial-active {
   .app,
   .tab-bar { max-width:760px; }
 
-  .summary { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr); }
-  .cycle-summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .insights-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
   .loading-shell { max-width:704px; }
   .loading-cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -2531,12 +2531,11 @@ body.tutorial-active {
   #tab-wallets .wallets-empty { max-width:700px; }
   #tab-home:not(.hidden) { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:20px 24px; align-items:start; }
   #tab-home .setup-month { grid-column:1 / -1; margin:0; }
-  #tab-home .summary { grid-column:1; grid-row:2; grid-template-columns:minmax(0,1fr); margin:0; }
-  #tab-home .cycle-summary { grid-column:2; grid-row:2; grid-template-columns:repeat(2,minmax(0,1fr)); margin:0; }
+  #tab-home .summary { grid-column:1 / -1; grid-row:2; margin:0; }
   #tab-home .recent-section { grid-column:1; grid-row:3; margin:0; }
   #tab-home #chart-section { grid-column:2; grid-row:3; margin:0; min-width:0; }
   #tab-home .insights-section { grid-column:1 / -1; grid-row:4; margin:0; }
-  .insights-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .insights-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .insight-card small { white-space:normal; }
   .settings-groups { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .settings-group[aria-labelledby="settings-recovery-title"] { grid-column:span 2; }
@@ -2736,3 +2735,175 @@ body.tutorial-active {
 .history-more { width:100%; margin-top:4px; border:1px solid var(--border-strong); border-radius:var(--radius-control); background:var(--surface-field); color:var(--text-primary); font-weight:600; }
 .history-more:active { background:var(--border-subtle); }
 .sr-only { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+
+/* =====================
+   Hero meta line
+===================== */
+/* "31% spent" on the left, the balance after bills on the right. Spans, so
+   the generic `.card span` block styling is undone here. */
+.spend-bar-meta { display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 12px; margin:6px 0 0; }
+.spend-bar-meta span { display:inline; margin:0; font-size:11px; }
+.spend-bar-meta .projection-line { display:inline; margin:0; color:var(--text-tertiary); }
+.spend-bar-meta .spend-bar-label { margin:0; }
+
+/* =====================
+   Entry sheets
+===================== */
+/* The row that opens a sheet. Same filled-primary / outlined-secondary
+   language as every form's action row. */
+.entry-trigger-row { display:flex; gap:10px; margin-bottom:14px; }
+.entry-trigger,
+.entry-trigger-secondary {
+  flex:1;
+  min-height:48px;
+  padding:12px;
+  border-radius:12px;
+  font-size:15px;
+  font-weight:600;
+  cursor:pointer;
+}
+.entry-trigger { border:none; background:var(--surface-action); color:var(--text-on-action); }
+#save-priority.entry-trigger-secondary { flex:0 0 auto; padding-inline:18px; background:transparent; border:1px solid var(--border-strong); color:var(--text-secondary); }
+.wallet-section .entry-trigger-row { margin:0 0 4px; }
+.copy-last-btn { margin:0 0 14px; }
+
+/* A form presented as a sheet rising from the bottom edge. Closed sheets sit
+   just below the screen with visibility hidden, which also keeps their fields
+   out of the tab order. --vv-bottom is the keyboard height, kept in sync by
+   the visualViewport IIFE in app.js. */
+.second-form.entry-sheet {
+  position:fixed;
+  z-index:60;
+  left:0;
+  right:0;
+  bottom:var(--vv-bottom, 0px);
+  width:100%;
+  max-width:480px;
+  max-height:calc(var(--vv-height, 100dvh) - max(24px, env(safe-area-inset-top, 0px)));
+  margin:0 auto;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:6px var(--space-page) calc(18px + env(safe-area-inset-bottom, 0px));
+  background:linear-gradient(155deg, var(--surface-raised), var(--surface-card) 70%);
+  border:1px solid var(--border-strong);
+  border-bottom:0;
+  border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow:var(--shadow-sheet);
+  transform:translateY(calc(100% + 24px));
+  visibility:hidden;
+  transition:transform var(--motion-emphasis) var(--ease-in-native), visibility 0s linear var(--motion-emphasis);
+}
+.second-form.entry-sheet.is-open {
+  transform:none;
+  visibility:visible;
+  transition:transform 260ms var(--ease-native), visibility 0s;
+}
+/* The sheet's title already says "Edit ...", and the old left-edge marker
+   would cut into the rounded top corners. celebrateForm's lift is skipped
+   too: it animates transform, which is what positions the sheet. */
+.second-form.entry-sheet.is-editing { border-left:1px solid var(--border-strong); border-radius:var(--radius-sheet) var(--radius-sheet) 0 0; }
+.entry-sheet.form-success { animation:none; }
+:root[data-theme="light"] .second-form.entry-sheet { background:#fff; }
+
+.sheet-head { position:relative; display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:12px; margin-bottom:10px; }
+.sheet-head h4 { margin:0; font-size:17px; font-weight:680; letter-spacing:-.015em; }
+.sheet-grabber { position:absolute; top:2px; left:50%; width:36px; height:5px; border-radius:3px; background:var(--border-strong); transform:translateX(-50%); }
+.sheet-close { margin-right:-10px; font-size:15px; }
+
+/* The amount is what the sheet is for, so it is the first and largest field. */
+.second-form input.amount-input {
+  padding:14px;
+  font-size:30px;
+  font-weight:700;
+  letter-spacing:-.02em;
+}
+.second-form input.amount-input::placeholder { color:var(--border-strong); }
+
+.sheet-backdrop {
+  position:fixed;
+  inset:0;
+  z-index:55;
+  background:rgba(0,0,0,.6);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity var(--motion-standard) ease;
+}
+.sheet-backdrop.is-visible { opacity:1; pointer-events:auto; }
+:root[data-theme="light"] .sheet-backdrop { background:rgba(24,24,22,.32); }
+body.sheet-open { overflow:hidden; overscroll-behavior:none; }
+
+/* Category chips - the select they mirror stays in the DOM, unseen. */
+.second-form select.chip-source { display:none; }
+.category-chips { display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 12px; }
+.category-chip-btn {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-height:44px;
+  padding:8px 14px;
+  border:1px solid var(--border-strong);
+  border-radius:999px;
+  background:var(--surface-field);
+  color:var(--text-secondary);
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+}
+.category-chip-btn[aria-checked="true"] { background:var(--surface-action); border-color:transparent; color:var(--text-on-action); }
+.chip-source.input-error + .category-chips .category-chip-btn { border-color:var(--text-primary); animation:shake var(--motion-standard) ease; }
+
+/* =====================
+   Phone dialogs as bottom sheets
+===================== */
+/* Below 600px every dialog rises from the bottom edge, full width, with a
+   grabber - the same presentation as the entry sheets - and can be swiped
+   down to close (attachSwipeDismiss in app.js). The walkthrough keeps its
+   own floating card. */
+@media (max-width:600px) {
+  .modal:not(.tutorial-overlay) {
+    align-items:flex-end;
+    padding:max(24px, env(safe-area-inset-top, 0px)) 0 0;
+  }
+  .modal:not(.tutorial-overlay) > .modal-card {
+    width:100%;
+    max-width:none;
+    border-bottom:0;
+    border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;
+    padding-bottom:calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .modal:not(.tutorial-overlay) > .modal-card::before {
+    content:"";
+    display:block;
+    width:36px;
+    height:5px;
+    margin:-8px auto 14px;
+    border-radius:3px;
+    background:var(--border-strong);
+  }
+  .modal.settings-modal > .modal-card.settings-panel-card { max-height:100%; }
+  .modal:not(.hidden):not(.is-closing):not(.tutorial-overlay) > .modal-card,
+  .settings-modal:not(.hidden):not(.is-closing) > .settings-panel-card {
+    animation:sheet-up 260ms var(--ease-native);
+  }
+  .modal.is-closing:not(.tutorial-overlay) > .modal-card,
+  .settings-modal.is-closing > .settings-panel-card {
+    animation:sheet-down var(--motion-fast) var(--ease-in-native) forwards;
+  }
+}
+@keyframes sheet-up { from { transform:translateY(100%); } }
+@keyframes sheet-down { to { transform:translateY(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .second-form.entry-sheet,
+  .second-form.entry-sheet.is-open,
+  .sheet-backdrop { transition:none; }
+}
+
+/* Four figures do not fit one row on a phone without truncating, so they
+   sit two by two there. */
+@media (max-width:520px) {
+  .cycle-summary { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:10px; }
+  .cycle-summary .summary-cell strong { font-size:15px; }
+}

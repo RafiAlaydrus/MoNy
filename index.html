@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.43.0</div>
+            <div class="setting-version">v1.44.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -266,14 +266,9 @@
       </div>
     </section>
 
-    <!-- SUMMARY - the two headline figures -->
+    <!-- SUMMARY - one hero card: Available, then the supporting figures -->
     <section class="summary" id="home-summary">
 
-      <!-- TOTAL INCOME
-           The display and its editor are the same card: tapping the figure
-           reveals the input and hides the <h2>. The value shown is not the
-           number typed here - it is totalIncomeOf(), which adds genuinely new
-           Second choice income on top. -->
       <!-- AVAILABLE
            What is left in MAIN - not net worth. Money sitting in a wallet has
            already left this figure.
@@ -285,7 +280,6 @@
       <div class="card available-card">
         <span>Available</span>
         <h2 id="remaining-money">RM 0</h2>
-        <p id="wallet-reserved-context" class="balance-context hidden"></p>
         <div class="spend-bar-wrapper">
           <div class="spend-bar-track">
             <!-- Projected fill sits BEHIND the real one and reaches further
@@ -296,39 +290,44 @@
             <div id="spend-bar-fill" class="spend-bar-fill"></div>
             <div id="spend-bar-limit" class="spend-bar-limit hidden"></div>
           </div>
-          <span id="spend-bar-label" class="spend-bar-label">0% spent</span>
-          <!-- Balance now against balance after bills. Hidden entirely once
-               every bill is ticked, since the two figures are then equal. -->
-          <p id="projection-line" class="projection-line hidden"></p>
+          <!-- "31% spent" and, while a bill is still unticked, where the
+               balance lands once it is paid. One line, so the hero figure is
+               never repeated underneath itself. -->
+          <p class="spend-bar-meta">
+            <span id="spend-bar-label" class="spend-bar-label">0% spent</span>
+            <span id="projection-line" class="projection-line hidden"></span>
+          </p>
         </div>
         <p id="budget-warning" class="budget-warning hidden"></p>
-      </div>
 
-      <div class="card income-card" id="income-card">
-        <span>Total income</span>
-        <h2 id="total-income-display">RM 0</h2>
+        <!-- The supporting figures live inside the hero card as one compact
+             row, so Home shows each number exactly once. Income is the only
+             editable one: tapping it opens the input below.
+
+             Hidden in the HTML on purpose. Only the matching app.js release may
+             populate and reveal this progressive enhancement. This prevents an
+             older active service worker from pairing its cached script with new
+             markup and showing believable-but-false zero totals while an update
+             is waiting. -->
+        <section id="cycle-summary" class="cycle-summary hidden" aria-label="Current cycle summary">
+          <button type="button" class="summary-cell summary-income" id="income-card" aria-label="Edit income">
+            <span>Income</span><strong id="total-income-display">RM 0</strong>
+          </button>
+          <div class="summary-cell"><span>Spent</span><strong id="summary-spent">RM 0.00</strong></div>
+          <div class="summary-cell"><span>Bills left</span><strong id="summary-bills">RM 0.00</strong></div>
+          <div class="summary-cell"><span>In wallets</span><strong id="summary-wallets">RM 0.00</strong></div>
+        </section>
 
         <input
           type="number"
           inputmode="decimal"
           id="total-income-input"
           placeholder="Enter income (RM)"
-          class="hidden"
+          class="income-input hidden"
+          aria-label="Total income"
         />
       </div>
 
-    </section>
-
-    <!-- Hidden in the HTML on purpose. Only the matching app.js release may
-         populate and reveal this progressive enhancement. This prevents an
-         older active service worker from pairing its cached script with new
-         markup and showing believable-but-false zero totals while an update
-         is waiting. -->
-    <section id="cycle-summary" class="cycle-summary hidden" aria-label="Current cycle summary">
-      <div><span>Income</span><strong id="summary-income">RM 0.00</strong></div>
-      <div><span>Spent</span><strong id="summary-spent">RM 0.00</strong></div>
-      <div><span>Bills remaining</span><strong id="summary-bills">RM 0.00</strong></div>
-      <div><span>In wallets</span><strong id="summary-wallets">RM 0.00</strong></div>
     </section>
 
     <section id="recent-section" class="recent-section hidden" aria-labelledby="recent-title">
@@ -351,11 +350,6 @@
           <span>Daily allowance</span>
           <strong id="insight-daily">&mdash;</strong>
           <small id="insight-daily-note">Set income to calculate</small>
-        </article>
-        <article class="insight-card" data-insight="projected">
-          <span>Projected balance</span>
-          <strong id="insight-projected">&mdash;</strong>
-          <small id="insight-projected-note">After unpaid bills</small>
         </article>
         <article class="insight-card" data-insight="category">
           <span>Top spending</span>
@@ -397,33 +391,41 @@
       </div>
       <p id="bills-lock-note" class="section-note hidden">Prevents accidental changes. You can unlock them anytime.</p>
 
-      <!-- PRIORITY FORM - hidden entirely once locked.
-           These three category values are fixed rather than free text because
-           the chart colours them by exact name; a wallet may not reuse one. -->
-      <div class="second-form" id="priority-form">
-        <input id="pb-name" placeholder="Bill name" />
-        <!-- Options are built by renderCategoryOptions() from
-             settings.categories, so the list is editable and defined in one
-             place. Only the disabled prompt is markup. -->
-        <select id="pb-category">
+      <!-- The bill form lives in a bottom sheet, so the list is what the tab
+           shows first. This row opens it and holds the lock action; like the
+           sheet itself it is hidden entirely once the list is locked. -->
+      <div id="priority-actions" class="entry-trigger-row">
+        <button id="open-priority-sheet" class="entry-trigger" type="button" data-open-sheet="priority-form" aria-label="Add a bill">+ Add bill</button>
+        <button id="save-priority" class="entry-trigger-secondary" type="button" aria-label="Finish and lock bill setup">Finish setup</button>
+      </div>
+      <!-- Only shown when a backup from last month exists, the list is
+           empty, and it is not locked - see updateCopyLastBtn(). -->
+      <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy bills from last cycle">Copy last cycle's bills</button>
+
+      <!-- PRIORITY FORM - a bottom sheet, hidden entirely once locked.
+           The select is the real value; the chips below it are built from it
+           by renderCategoryOptions() and only write back into it.
+
+           data-edit marks each button's role while an entry is being edited:
+           the primary becomes "Save changes", anything that would create a
+           NEW entry is hidden so one cannot be added mid-edit, and Cancel
+           appears. -->
+      <div class="second-form entry-sheet" id="priority-form" role="dialog" aria-modal="true" aria-labelledby="priority-sheet-title" aria-hidden="true">
+        <div class="sheet-head">
+          <span class="sheet-grabber" aria-hidden="true"></span>
+          <h4 id="priority-sheet-title" data-sheet-title data-new-title="New bill" data-edit-title="Edit bill">New bill</h4>
+          <button class="settings-btn sheet-close" type="button" data-sheet-close aria-label="Close">✕</button>
+        </div>
+        <input id="pb-amount" class="amount-input" type="number" inputmode="decimal" placeholder="RM 0.00" aria-label="Amount" />
+        <input id="pb-name" placeholder="Bill name" aria-label="Bill name" />
+        <select id="pb-category" class="chip-source" aria-label="Category">
           <option value="" disabled selected>Category</option>
         </select>
-        <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
-
-        <!-- Filled button = primary action, outlined = secondary. The app is
-             greyscale, so shape carries the emphasis instead of colour. -->
-        <!-- data-edit marks each button's role while an entry is being edited:
-             the primary becomes "Save changes", anything that would create a
-             NEW entry is hidden so one cannot be added mid-edit, and Cancel
-             appears. -->
+        <div class="category-chips" data-chips-for="pb-category" role="radiogroup" aria-label="Category"></div>
         <div class="actions">
           <button id="add-priority" data-edit="primary" aria-label="Add bill">Add Bill</button>
-          <button id="save-priority" data-edit="hide-while-editing" aria-label="Finish and lock bill setup">Finish bill setup</button>
           <button id="cancel-priority-edit" data-edit="cancel" class="hidden" aria-label="Cancel editing this bill">Cancel</button>
         </div>
-        <!-- Only shown when a backup from last month exists, the list is
-             empty, and it is not locked - see updateCopyLastBtn(). -->
-        <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy bills from last cycle">Copy last cycle's bills</button>
       </div>
 
       <!-- Built by renderPriority(); each row is a swipe-to-delete wrapper. -->
@@ -435,20 +437,30 @@
     <!-- SPENDING -->
     <div class="tab-panel hidden" id="tab-spending" data-tab="spending">
 
-    <!-- SECOND CHOICE - free-form day-to-day money in and out.
-         "+ Add" opens the new-money/coming-back question, because whether a
+    <!-- SECOND CHOICE - free-form day-to-day money in and out. The form is a
+         bottom sheet opened from "+ New transaction". "Money In" opens the new-money/coming-back question, because whether a
          credit is income or a repayment changes the whole month's totals and
          cannot be inferred from the amount. -->
     <section>
       <h3>Spending</h3>
 
-      <div class="second-form" id="second-choice-form">
-        <input id="sc-name" placeholder="Name" />
+      <div id="sc-actions" class="entry-trigger-row">
+        <button id="open-sc-sheet" class="entry-trigger" type="button" data-open-sheet="second-choice-form" aria-label="Add a transaction">+ New transaction</button>
+      </div>
+
+      <div class="second-form entry-sheet" id="second-choice-form" role="dialog" aria-modal="true" aria-labelledby="sc-sheet-title" aria-hidden="true">
+        <div class="sheet-head">
+          <span class="sheet-grabber" aria-hidden="true"></span>
+          <h4 id="sc-sheet-title" data-sheet-title data-new-title="New transaction" data-edit-title="Edit transaction">New transaction</h4>
+          <button class="settings-btn sheet-close" type="button" data-sheet-close aria-label="Close">✕</button>
+        </div>
+        <input id="sc-amount" class="amount-input" type="number" inputmode="decimal" placeholder="RM 0.00" aria-label="Amount" />
+        <input id="sc-name" placeholder="Name" aria-label="Name" />
         <!-- Built by renderCategoryOptions(), same as the bill categories. -->
-        <select id="sc-category">
+        <select id="sc-category" class="chip-source" aria-label="Category">
           <option value="" disabled selected>Category</option>
         </select>
-        <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
+        <div class="category-chips" data-chips-for="sc-category" role="radiogroup" aria-label="Category"></div>
         <!-- input[type=date] ignores the placeholder attribute, and iOS
              renders an empty one completely blank with no hint at all. The
              overlaid span is the placeholder; the .is-empty class is toggled
@@ -586,6 +598,10 @@
       <p id="storage-line" class="storage-line"></p>
     </section>
   </main>
+
+  <!-- One backdrop shared by every entry sheet. Only one sheet is ever open,
+       and tapping here closes it without saving. -->
+  <div id="sheet-backdrop" class="sheet-backdrop" aria-hidden="true"></div>
 
   <!-- ===================================================================
        MODALS
@@ -965,6 +981,20 @@
       <div class="modal-actions">
         <button id="cancel-priority" aria-label="Cancel">Cancel</button>
         <button id="confirm-priority" class="danger" aria-label="Confirm">Yes, Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP DIALOG - the styled replacement for the browser's alert() and
+       confirm(). Filled in by showAppDialog(); Cancel only appears when the
+       dialog is asking rather than telling. -->
+  <div id="app-dialog" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="app-dialog-title" aria-describedby="app-dialog-message">
+    <div class="modal-card">
+      <h3 id="app-dialog-title">MoNy</h3>
+      <p id="app-dialog-message"></p>
+      <div class="modal-actions">
+        <button id="cancel-app-dialog" type="button">Cancel</button>
+        <button id="confirm-app-dialog" class="danger" type="button" data-modal-initial-focus>OK</button>
       </div>
     </div>
   </div>
