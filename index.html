@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.46.2</div>
+            <div class="setting-version">v1.47.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -360,6 +360,8 @@
         <button id="priority-lock-badge" class="lock-badge hidden" aria-label="Bills locked - tap to unlock">Bills locked</button>
       </div>
       <p id="bills-lock-note" class="section-note hidden">Prevents accidental changes. You can unlock them anytime.</p>
+      <!-- "2 of 3 paid · RM 200.00 left". Kept in step by updateBillsProgress(). -->
+      <p id="bills-progress" class="bills-progress hidden" aria-live="polite"></p>
 
       <!-- PRIORITY FORM - hidden entirely once locked.
            These three category values are fixed rather than free text because

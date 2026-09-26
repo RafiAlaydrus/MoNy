@@ -1487,12 +1487,18 @@ function buildPriorityItem(bill) {
   deleteLayer.textContent = "Delete";
 
   const li = document.createElement("li");
+  li.classList.toggle("is-paid", !!bill.paid);
+  /* The whole left side is the label, so tapping the name ticks the bill just
+     as tapping the circle does; the amount side opens it for editing. */
   li.innerHTML = `
-    <label style="display:flex; gap:8px;">
-      <input type="checkbox" ${bill.paid ? "checked" : ""} />
-      ${esc(bill.name)} (${esc(bill.category)})
+    <label class="bill-row">
+      <input type="checkbox" class="bill-check" ${bill.paid ? "checked" : ""} aria-label="Mark ${esc(bill.name)} as paid" />
+      <span class="bill-text">
+        <span class="bill-name">${esc(bill.name)}</span>
+        <span class="bill-meta">${esc(bill.category)}</span>
+      </span>
     </label>
-    <strong>${esc(cur())} ${fmt(bill.amount)}</strong>
+    <strong class="bill-amount">${esc(cur())} ${fmt(bill.amount)}</strong>
   `;
 
   /* Tapping the row opens it for editing. The checkbox and its label own their
@@ -1508,6 +1514,7 @@ function buildPriorityItem(bill) {
       // `date` is when the bill was added.
       if (bill.paid) bill.paidAt = new Date().toISOString();
       else delete bill.paidAt;
+      li.classList.toggle("is-paid", bill.paid);
       haptic(bill.paid ? 12 : 6);
       saveData();
       calculateRemaining();
@@ -1635,6 +1642,20 @@ function attachSwipeToDelete(wrapper, el, onDelete) {
       el.style.transform = "translateX(0)";
     }
   }, { passive: true });
+}
+
+// "2 of 3 paid · RM 200.00 left" under the Bills heading.
+function updateBillsProgress() {
+  const line = document.getElementById("bills-progress");
+  if (!line) return;
+  const bills = data.priority || [];
+  line.classList.toggle("hidden", bills.length === 0);
+  if (!bills.length) return;
+  const paid = bills.filter(b => b.paid).length;
+  const left = moneyValue(unpaidPriorityOf(data));
+  line.textContent = paid === bills.length
+    ? `All ${bills.length} paid`
+    : `${paid} of ${bills.length} paid · ${cur()} ${fmt(left)} left`;
 }
 
 // Renders the priority bills list
@@ -3375,6 +3396,7 @@ function renderProjection() {
 
 function calculateRemaining(skipChart = false) {
   renderIncome();
+  updateBillsProgress();
   renderProjection();
   renderActivityFinder();
   renderRecentActivity();

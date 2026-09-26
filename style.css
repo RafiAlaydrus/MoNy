@@ -109,7 +109,7 @@
 :root[data-theme="light"] .card,
 :root[data-theme="light"] .chart-container,
 :root[data-theme="light"] .history-row { background:#fff; }
-:root[data-theme="light"] #priority-list,
+:root[data-theme="light"] #priority-list { background:#fff; }
 :root[data-theme="light"] .second-form,
 :root[data-theme="light"] .wallet-form { background:#f7f7f5; }
 :root[data-theme="light"] #priority-list li { background:#fff; border-color:#e4e4e0; color:#1a1a1a; }
@@ -969,9 +969,11 @@ h3 {
   align-items: center;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid #1f1f1f;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 15px;
-  background: #0f0f0f;
+  /* Same fill as the list around it, so no darker strip shows along the
+     row, but still opaque - the swipe-to-delete layer sits underneath. */
+  background: var(--surface-card);
   position: relative;
   z-index: 1;
 }
@@ -2790,3 +2792,66 @@ body.tutorial-active {
 :root[data-theme="light"] .spend-bar-fill[data-level="mid"] { background:#62625e; }
 :root[data-theme="light"] .spend-bar-fill[data-level="high"] { background:#1d1d1c; }
 :root[data-theme="light"] .spend-bar-label.is-high { color:#1d1d1c; }
+
+/* =====================
+   Bill rows
+===================== */
+.bills-progress { margin:-6px 0 12px; color:var(--text-secondary); font-size:12px; }
+.bills-heading-row + .section-note.hidden + .bills-progress { margin-top:-4px; }
+
+#priority-list li:not(.empty-state-rich) { min-height:58px; padding:8px 0; gap:12px; }
+.bill-row { display:flex; align-items:center; gap:12px; min-width:0; flex:1; cursor:pointer; }
+.bill-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.bill-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; font-weight:600; color:var(--text-primary); }
+.bill-meta { color:var(--text-tertiary); font-size:12px; }
+.bill-amount { flex:0 0 auto; font-size:15px; font-weight:650; color:var(--text-primary); }
+
+/* A round tick in the app's own monochrome, replacing the browser's square
+   checkbox. The tick is two borders of a rotated box, so it needs no icon. */
+.bill-check {
+  -webkit-appearance:none;
+  appearance:none;
+  display:grid;
+  place-content:center;
+  flex:0 0 auto;
+  width:26px;
+  height:26px;
+  margin:0;
+  border:1.5px solid var(--border-strong);
+  border-radius:50%;
+  background:transparent;
+  cursor:pointer;
+  transition:background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--ease-native);
+}
+.bill-check::after {
+  content:"";
+  width:11px;
+  height:6px;
+  border-left:2px solid var(--text-on-action);
+  border-bottom:2px solid var(--text-on-action);
+  transform:translateY(-1px) rotate(-45deg) scale(0);
+  transition:transform var(--motion-emphasis) var(--ease-spring);
+}
+.bill-check:checked { background:var(--surface-action); border-color:var(--surface-action); }
+.bill-check:checked::after { transform:translateY(-1px) rotate(-45deg) scale(1); }
+.bill-check:active { transform:scale(.9); }
+
+/* Paid: the row steps back - dimmed and struck through - so what is still
+   owed is what stands out. */
+.bill-name,
+.bill-amount { transition:color var(--motion-standard) ease; }
+#priority-list li.is-paid .bill-name,
+#priority-list li.is-paid .bill-amount {
+  color:var(--text-tertiary);
+  text-decoration:line-through;
+  text-decoration-color:var(--border-strong);
+}
+#priority-list li.is-paid .bill-amount { font-weight:600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bill-check,
+  .bill-check::after { transition:none; }
+}
+/* The light theme gives every input a field fill; the tick is not a field. */
+:root[data-theme="light"] .bill-check { background:transparent; border-color:#c9c9c3; }
+:root[data-theme="light"] .bill-check:checked { background:var(--surface-action); border-color:var(--surface-action); }
