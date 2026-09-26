@@ -2747,119 +2747,10 @@ body.tutorial-active {
 .spend-bar-meta .spend-bar-label { margin:0; }
 
 /* =====================
-   Entry sheets
-===================== */
-/* The row that opens a sheet. Same filled-primary / outlined-secondary
-   language as every form's action row. */
-.entry-trigger-row { display:flex; gap:10px; margin-bottom:14px; }
-.entry-trigger,
-.entry-trigger-secondary {
-  flex:1;
-  min-height:48px;
-  padding:12px;
-  border-radius:12px;
-  font-size:15px;
-  font-weight:600;
-  cursor:pointer;
-}
-.entry-trigger { border:none; background:var(--surface-action); color:var(--text-on-action); }
-#save-priority.entry-trigger-secondary { flex:0 0 auto; padding-inline:18px; background:transparent; border:1px solid var(--border-strong); color:var(--text-secondary); }
-.wallet-section .entry-trigger-row { margin:0 0 4px; }
-.copy-last-btn { margin:0 0 14px; }
-
-/* A form presented as a sheet rising from the bottom edge. Closed sheets sit
-   just below the screen with visibility hidden, which also keeps their fields
-   out of the tab order. --vv-bottom is the keyboard height, kept in sync by
-   the visualViewport IIFE in app.js. */
-.second-form.entry-sheet {
-  position:fixed;
-  z-index:60;
-  left:0;
-  right:0;
-  bottom:var(--vv-bottom, 0px);
-  width:100%;
-  max-width:480px;
-  max-height:calc(var(--vv-height, 100dvh) - max(24px, env(safe-area-inset-top, 0px)));
-  margin:0 auto;
-  overflow-y:auto;
-  overscroll-behavior:contain;
-  padding:6px var(--space-page) calc(18px + env(safe-area-inset-bottom, 0px));
-  background:linear-gradient(155deg, var(--surface-raised), var(--surface-card) 70%);
-  border:1px solid var(--border-strong);
-  border-bottom:0;
-  border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;
-  box-shadow:var(--shadow-sheet);
-  transform:translateY(calc(100% + 24px));
-  visibility:hidden;
-  transition:transform var(--motion-emphasis) var(--ease-in-native), visibility 0s linear var(--motion-emphasis);
-}
-.second-form.entry-sheet.is-open {
-  transform:none;
-  visibility:visible;
-  transition:transform 260ms var(--ease-native), visibility 0s;
-}
-/* The sheet's title already says "Edit ...", and the old left-edge marker
-   would cut into the rounded top corners. celebrateForm's lift is skipped
-   too: it animates transform, which is what positions the sheet. */
-.second-form.entry-sheet.is-editing { border-left:1px solid var(--border-strong); border-radius:var(--radius-sheet) var(--radius-sheet) 0 0; }
-.entry-sheet.form-success { animation:none; }
-:root[data-theme="light"] .second-form.entry-sheet { background:#fff; }
-
-.sheet-head { position:relative; display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:12px; margin-bottom:10px; }
-.sheet-head h4 { margin:0; font-size:17px; font-weight:680; letter-spacing:-.015em; }
-.sheet-grabber { position:absolute; top:2px; left:50%; width:36px; height:5px; border-radius:3px; background:var(--border-strong); transform:translateX(-50%); }
-.sheet-close { margin-right:-10px; font-size:15px; }
-
-/* The amount is what the sheet is for, so it is the first and largest field. */
-.second-form input.amount-input {
-  padding:14px;
-  font-size:30px;
-  font-weight:700;
-  letter-spacing:-.02em;
-}
-.second-form input.amount-input::placeholder { color:var(--border-strong); }
-
-.sheet-backdrop {
-  position:fixed;
-  inset:0;
-  z-index:55;
-  background:rgba(0,0,0,.6);
-  backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);
-  opacity:0;
-  pointer-events:none;
-  transition:opacity var(--motion-standard) ease;
-}
-.sheet-backdrop.is-visible { opacity:1; pointer-events:auto; }
-:root[data-theme="light"] .sheet-backdrop { background:rgba(24,24,22,.32); }
-body.sheet-open { overflow:hidden; overscroll-behavior:none; }
-
-/* Category chips - the select they mirror stays in the DOM, unseen. */
-.second-form select.chip-source { display:none; }
-.category-chips { display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 12px; }
-.category-chip-btn {
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  min-height:44px;
-  padding:8px 14px;
-  border:1px solid var(--border-strong);
-  border-radius:999px;
-  background:var(--surface-field);
-  color:var(--text-secondary);
-  font-size:14px;
-  font-weight:600;
-  cursor:pointer;
-}
-.category-chip-btn[aria-checked="true"] { background:var(--surface-action); border-color:transparent; color:var(--text-on-action); }
-.chip-source.input-error + .category-chips .category-chip-btn { border-color:var(--text-primary); animation:shake var(--motion-standard) ease; }
-
-/* =====================
    Phone dialogs as bottom sheets
 ===================== */
 /* Below 600px every dialog rises from the bottom edge, full width, with a
-   grabber - the same presentation as the entry sheets - and can be swiped
-   down to close (attachSwipeDismiss in app.js). The walkthrough keeps its
+   grabber, and can be swiped down to close (attachSwipeDismiss in app.js). The walkthrough keeps its
    own floating card. */
 @media (max-width:600px) {
   .modal:not(.tutorial-overlay) {
@@ -2895,11 +2786,6 @@ body.sheet-open { overflow:hidden; overscroll-behavior:none; }
 @keyframes sheet-up { from { transform:translateY(100%); } }
 @keyframes sheet-down { to { transform:translateY(100%); } }
 
-@media (prefers-reduced-motion: reduce) {
-  .second-form.entry-sheet,
-  .second-form.entry-sheet.is-open,
-  .sheet-backdrop { transition:none; }
-}
 
 /* Four figures do not fit one row on a phone without truncating, so they
    sit two by two there. */

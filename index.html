@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.44.0</div>
+            <div class="setting-version">v1.45.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -391,41 +391,33 @@
       </div>
       <p id="bills-lock-note" class="section-note hidden">Prevents accidental changes. You can unlock them anytime.</p>
 
-      <!-- The bill form lives in a bottom sheet, so the list is what the tab
-           shows first. This row opens it and holds the lock action; like the
-           sheet itself it is hidden entirely once the list is locked. -->
-      <div id="priority-actions" class="entry-trigger-row">
-        <button id="open-priority-sheet" class="entry-trigger" type="button" data-open-sheet="priority-form" aria-label="Add a bill">+ Add bill</button>
-        <button id="save-priority" class="entry-trigger-secondary" type="button" aria-label="Finish and lock bill setup">Finish setup</button>
-      </div>
-      <!-- Only shown when a backup from last month exists, the list is
-           empty, and it is not locked - see updateCopyLastBtn(). -->
-      <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy bills from last cycle">Copy last cycle's bills</button>
-
-      <!-- PRIORITY FORM - a bottom sheet, hidden entirely once locked.
-           The select is the real value; the chips below it are built from it
-           by renderCategoryOptions() and only write back into it.
-
-           data-edit marks each button's role while an entry is being edited:
-           the primary becomes "Save changes", anything that would create a
-           NEW entry is hidden so one cannot be added mid-edit, and Cancel
-           appears. -->
-      <div class="second-form entry-sheet" id="priority-form" role="dialog" aria-modal="true" aria-labelledby="priority-sheet-title" aria-hidden="true">
-        <div class="sheet-head">
-          <span class="sheet-grabber" aria-hidden="true"></span>
-          <h4 id="priority-sheet-title" data-sheet-title data-new-title="New bill" data-edit-title="Edit bill">New bill</h4>
-          <button class="settings-btn sheet-close" type="button" data-sheet-close aria-label="Close">✕</button>
-        </div>
-        <input id="pb-amount" class="amount-input" type="number" inputmode="decimal" placeholder="RM 0.00" aria-label="Amount" />
-        <input id="pb-name" placeholder="Bill name" aria-label="Bill name" />
-        <select id="pb-category" class="chip-source" aria-label="Category">
+      <!-- PRIORITY FORM - hidden entirely once locked.
+           These three category values are fixed rather than free text because
+           the chart colours them by exact name; a wallet may not reuse one. -->
+      <div class="second-form" id="priority-form">
+        <input id="pb-name" placeholder="Bill name" />
+        <!-- Options are built by renderCategoryOptions() from
+             settings.categories, so the list is editable and defined in one
+             place. Only the disabled prompt is markup. -->
+        <select id="pb-category">
           <option value="" disabled selected>Category</option>
         </select>
-        <div class="category-chips" data-chips-for="pb-category" role="radiogroup" aria-label="Category"></div>
+        <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
+
+        <!-- Filled button = primary action, outlined = secondary. The app is
+             greyscale, so shape carries the emphasis instead of colour. -->
+        <!-- data-edit marks each button's role while an entry is being edited:
+             the primary becomes "Save changes", anything that would create a
+             NEW entry is hidden so one cannot be added mid-edit, and Cancel
+             appears. -->
         <div class="actions">
           <button id="add-priority" data-edit="primary" aria-label="Add bill">Add Bill</button>
+          <button id="save-priority" data-edit="hide-while-editing" aria-label="Finish and lock bill setup">Finish bill setup</button>
           <button id="cancel-priority-edit" data-edit="cancel" class="hidden" aria-label="Cancel editing this bill">Cancel</button>
         </div>
+        <!-- Only shown when a backup from last month exists, the list is
+             empty, and it is not locked - see updateCopyLastBtn(). -->
+        <button id="copy-last-priority" class="copy-last-btn hidden" aria-label="Copy bills from last cycle">Copy last cycle's bills</button>
       </div>
 
       <!-- Built by renderPriority(); each row is a swipe-to-delete wrapper. -->
@@ -437,30 +429,20 @@
     <!-- SPENDING -->
     <div class="tab-panel hidden" id="tab-spending" data-tab="spending">
 
-    <!-- SECOND CHOICE - free-form day-to-day money in and out. The form is a
-         bottom sheet opened from "+ New transaction". "Money In" opens the new-money/coming-back question, because whether a
+    <!-- SECOND CHOICE - free-form day-to-day money in and out.
+         "+ Add" opens the new-money/coming-back question, because whether a
          credit is income or a repayment changes the whole month's totals and
          cannot be inferred from the amount. -->
     <section>
       <h3>Spending</h3>
 
-      <div id="sc-actions" class="entry-trigger-row">
-        <button id="open-sc-sheet" class="entry-trigger" type="button" data-open-sheet="second-choice-form" aria-label="Add a transaction">+ New transaction</button>
-      </div>
-
-      <div class="second-form entry-sheet" id="second-choice-form" role="dialog" aria-modal="true" aria-labelledby="sc-sheet-title" aria-hidden="true">
-        <div class="sheet-head">
-          <span class="sheet-grabber" aria-hidden="true"></span>
-          <h4 id="sc-sheet-title" data-sheet-title data-new-title="New transaction" data-edit-title="Edit transaction">New transaction</h4>
-          <button class="settings-btn sheet-close" type="button" data-sheet-close aria-label="Close">✕</button>
-        </div>
-        <input id="sc-amount" class="amount-input" type="number" inputmode="decimal" placeholder="RM 0.00" aria-label="Amount" />
-        <input id="sc-name" placeholder="Name" aria-label="Name" />
+      <div class="second-form" id="second-choice-form">
+        <input id="sc-name" placeholder="Name" />
         <!-- Built by renderCategoryOptions(), same as the bill categories. -->
-        <select id="sc-category" class="chip-source" aria-label="Category">
+        <select id="sc-category">
           <option value="" disabled selected>Category</option>
         </select>
-        <div class="category-chips" data-chips-for="sc-category" role="radiogroup" aria-label="Category"></div>
+        <input id="sc-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
         <!-- input[type=date] ignores the placeholder attribute, and iOS
              renders an empty one completely blank with no hint at all. The
              overlaid span is the placeholder; the .is-empty class is toggled
@@ -598,10 +580,6 @@
       <p id="storage-line" class="storage-line"></p>
     </section>
   </main>
-
-  <!-- One backdrop shared by every entry sheet. Only one sheet is ever open,
-       and tapping here closes it without saving. -->
-  <div id="sheet-backdrop" class="sheet-backdrop" aria-hidden="true"></div>
 
   <!-- ===================================================================
        MODALS

@@ -774,8 +774,6 @@ function celebrateForm(form) {
   playTransient(form, "form-success", 380);
   const action = form?.querySelector("[data-edit='primary'], #add-priority");
   playTransient(action, "action-success", 300);
-  // An entry sheet has done its job once the entry is saved.
-  if (form?.classList.contains("entry-sheet")) closeEntrySheet(form);
 }
 
 /* A short tap of vibration on phones that support it (Android). iOS Safari
@@ -787,118 +785,9 @@ function haptic(pattern = 10) {
   } catch (_) { /* optional feedback only */ }
 }
 
-/* =========================
-   ENTRY SHEETS
-
-   The bill, spending and wallet forms each live in a bottom sheet rather than
-   permanently above their list, so a tab opens on its money instead of on
-   blank fields. The form elements themselves never move or get rebuilt -
-   every handler that reads or clears them works exactly as before; the sheet
-   is only how they are presented.
-
-   One sheet is open at a time. It opens from its "+" trigger, or when an
-   entry is opened for editing (setFormEditing), and closes once the entry is
-   saved (celebrateForm), on Cancel, the backdrop, Escape, or a swipe down.
-   Closing without saving keeps whatever was typed, like a draft.
-========================= */
-
-const sheetBackdrop = document.getElementById("sheet-backdrop");
-let openSheet = null;
-
-function openEntrySheet(sheet, trigger) {
-  if (!sheet) return;
-  if (openSheet && openSheet !== sheet) dismissEntrySheet(openSheet, false);
-  if (trigger) sheet._sheetTrigger = trigger;
-  syncCategoryChips(sheet);
-  sheet.style.transform = "";
-  openSheet = sheet;
-  sheet.classList.add("is-open");
-  sheet.setAttribute("aria-hidden", "false");
-  sheetBackdrop.classList.add("is-visible");
-  document.body.classList.add("sheet-open");
-  /* Focused synchronously, inside the tap that opened the sheet - iOS only
-     raises the keyboard for a focus that happens during a user gesture. */
-  const first = sheet.querySelector(".amount-input") || sheet.querySelector("input");
-  first?.focus({ preventScroll: true });
-}
-
-function closeEntrySheet(sheet, restoreFocus = true) {
-  if (!sheet || !sheet.classList.contains("is-open")) return;
-  sheet.classList.remove("is-open");
-  sheet.setAttribute("aria-hidden", "true");
-  sheet.style.transform = "";
-  if (sheet.contains(document.activeElement)) document.activeElement.blur();
-  if (openSheet === sheet) forgetOpenSheet();
-  const trigger = sheet._sheetTrigger;
-  if (restoreFocus && trigger && trigger.isConnected) trigger.focus({ preventScroll: true });
-}
-
-function forgetOpenSheet() {
-  openSheet = null;
-  sheetBackdrop.classList.remove("is-visible");
-  document.body.classList.remove("sheet-open");
-}
-
-/* A wallet section is rebuilt from scratch by some money actions, which
-   detaches the sheet that was open inside it. Nothing is left to close, so
-   only the backdrop needs to go. */
-function forgetDetachedSheet() {
-  if (openSheet && !openSheet.isConnected) forgetOpenSheet();
-}
-
-// Closing without saving. An edit in progress is abandoned, as Cancel does.
-function dismissEntrySheet(sheet, restoreFocus = true) {
-  if (!sheet) return;
-  if (editing && editing.root === sheet) cancelEdit();
-  closeEntrySheet(sheet, restoreFocus);
-}
-
-document.addEventListener("click", (event) => {
-  const opener = event.target.closest("[data-open-sheet]");
-  if (opener) {
-    const sheet = opener.dataset.openSheet
-      ? document.getElementById(opener.dataset.openSheet)
-      : opener.closest(".wallet-section")?.querySelector(".entry-sheet");
-    openEntrySheet(sheet, opener);
-    return;
-  }
-  const closer = event.target.closest("[data-sheet-close]");
-  if (closer) dismissEntrySheet(closer.closest(".entry-sheet"));
-});
-sheetBackdrop.addEventListener("click", () => dismissEntrySheet(openSheet));
-
-/* Category chips. The <select> stays the single source of truth - every
-   handler reads select.value, and editing re-offers a removed category through
-   it - so the chips are rebuilt from its options and only ever write back into
-   it. */
-function syncCategoryChips(root) {
-  (root || document).querySelectorAll(".category-chips[data-chips-for]").forEach(group => {
-    const select = document.getElementById(group.dataset.chipsFor);
-    if (!select) return;
-    group.innerHTML = "";
-    Array.from(select.options).forEach(option => {
-      if (option.disabled || !option.value) return;
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "category-chip-btn";
-      chip.setAttribute("role", "radio");
-      chip.setAttribute("aria-checked", String(option.value === select.value));
-      chip.innerHTML = `<span class="category-chip" style="background:${categoryColor(option.value)}"></span>${esc(option.textContent)}`;
-      chip.addEventListener("click", () => {
-        select.value = option.value;
-        select.classList.remove("input-error");
-        group.querySelectorAll(".category-chip-btn").forEach(other =>
-          other.setAttribute("aria-checked", String(other === chip)));
-        haptic(6);
-      });
-      group.appendChild(chip);
-    });
-  });
-}
-
-/* Swipe down to close, shared by the entry sheets and the phone-sized modal
-   sheets. Only starts when the sheet is scrolled to its top, so scrolling a
-   long sheet still scrolls it, and never from inside a text field. */
+/* Swipe down to close, for the phone-sized modal sheets. Only starts when the
+   sheet is scrolled to its top, so scrolling a long sheet still scrolls it,
+   and never from inside a text field. */
 function attachSwipeDismiss(card, canStart, onDismiss) {
   let startY = 0, startX = 0, dy = 0, tracking = false, dragging = false;
   card.addEventListener("touchstart", (e) => {
@@ -940,9 +829,6 @@ function attachSwipeDismiss(card, canStart, onDismiss) {
     }
   }, { passive: true });
 }
-
-document.querySelectorAll(".entry-sheet").forEach(sheet =>
-  attachSwipeDismiss(sheet, () => sheet.classList.contains("is-open"), () => dismissEntrySheet(sheet)));
 
 /* Modal/popover close animation with an immediate interaction cutoff. State
    changes happen when the user taps; only display:none waits for the final
@@ -1100,7 +986,6 @@ function renderCategoryOptions(select, list, keep) {
   }
   if (keep) select.value = keep;
   else select.selectedIndex = 0;
-  syncCategoryChips(select.parentElement);
 }
 
 // Rebuilds both category dropdowns from settings.
@@ -1772,12 +1657,9 @@ function renderPriority() {
  * door gets built by accident. */
 function updatePriorityLockUI() {
   const form = document.getElementById("priority-form");
-  const actions = document.getElementById("priority-actions");
   const lockBadge = document.getElementById("priority-lock-badge");
   const lockNote = document.getElementById("bills-lock-note");
-  if (actions) actions.classList.toggle("hidden", !!data.priorityLocked);
   if (data.priorityLocked) {
-    closeEntrySheet(form, false);
     if (form) form.style.display = "none";
     if (lockBadge) lockBadge.classList.remove("hidden");
     if (lockNote) lockNote.classList.remove("hidden");
@@ -2099,7 +1981,6 @@ function makeRowDeletable(row, onDelete) {
 
   // Desktop fallback, since there is no swipe with a mouse
   row.addEventListener("dblclick", () => {
-    clearTimeout(row._editTimer);
     appConfirm("This entry will be removed. You can undo it for a few seconds afterwards.",
       { title: "Delete entry?", confirmLabel: "Delete" })
       .then(ok => { if (ok) onDelete(); });
@@ -2247,17 +2128,9 @@ function buildWalletSection(wallet) {
         <span class="spend-bar-label" data-role="bar-label">0% spent</span>
       </div>
     </div>
-    <div class="entry-trigger-row">
-      <button type="button" class="entry-trigger" data-open-sheet="" aria-label="New entry in ${esc(wallet.name)}">+ New entry</button>
-    </div>
-    <div class="second-form wallet-form entry-sheet" role="dialog" aria-modal="true" aria-label="${esc(wallet.name)}" aria-hidden="true">
-      <div class="sheet-head">
-        <span class="sheet-grabber" aria-hidden="true"></span>
-        <h4 data-sheet-title data-new-title="${esc(wallet.name)}" data-edit-title="Edit entry">${esc(wallet.name)}</h4>
-        <button class="settings-btn sheet-close" type="button" data-sheet-close aria-label="Close">✕</button>
-      </div>
-      <input type="number" inputmode="decimal" class="amount-input" data-role="item-amount" placeholder="${esc(cur())} 0.00" aria-label="Amount" />
-      <input type="text" data-role="item-name" placeholder="Item name" aria-label="Item name" />
+    <div class="second-form wallet-form">
+      <input type="text" data-role="item-name" placeholder="Item name" />
+      <input type="number" inputmode="decimal" data-role="item-amount" placeholder="Amount (${esc(cur())})" />
       <div class="date-field">
         <input type="date" data-role="item-date" class="is-empty" aria-label="Date, optional, defaults to today" />
         <span class="date-placeholder">Date (Optional)</span>
@@ -2284,8 +2157,6 @@ function buildWalletSection(wallet) {
   const tbody = section.querySelector("[data-role='table']");
 
   wireDateInput(dateInput);
-  const sheet = section.querySelector(".entry-sheet");
-  attachSwipeDismiss(sheet, () => sheet.classList.contains("is-open"), () => dismissEntrySheet(sheet));
 
   const tableEl = section.querySelector("table");
   tableEl.parentNode.insertBefore(buildTableToggle(wallet.id, tableEl), tableEl);
@@ -2531,8 +2402,6 @@ function buildWalletSection(wallet) {
       dateInput.value = "";
       dateInput.classList.add("is-empty");
       haptic(12);
-      closeEntrySheet(section.querySelector(".wallet-form"));
-      forgetDetachedSheet();
     });
   });
   [nameInput, amountInput].forEach(el => {
@@ -2552,7 +2421,6 @@ function renderWallets() {
   open.forEach(wallet => {
     walletsContainer.appendChild(buildWalletSection(wallet));
   });
-  forgetDetachedSheet();
   // Looked up each time rather than cached: renderWallets runs before the
   // element bindings further down the file exist.
   const empty = document.getElementById("wallets-empty");
@@ -2576,7 +2444,6 @@ function renderWallet(wallet) {
     return;
   }
   existing.replaceWith(buildWalletSection(wallet));
-  forgetDetachedSheet();
 }
 
 /* =========================
@@ -2907,21 +2774,10 @@ function deleteSecondChoiceItem(item) {
 function makeRowEditable(row, item, onEdit) {
   if (!isEditable(item)) return;
   row.classList.add("row-editable");
-  row.addEventListener("pointerdown", (e) => { row._pointerType = e.pointerType; });
   row.addEventListener("click", (e) => {
     if (row._swipeMoved) return;
     // The checkbox on a priority row owns its own click.
     if (e.target.closest("input, button, a")) return;
-    /* With a mouse, a deletable row also answers a double-click. The edit
-       sheet (and its backdrop) would open on the first click and swallow the
-       second, so wait out the double-click window before opening it, and let
-       the second click of a pair cancel it. Touch opens immediately. */
-    clearTimeout(row._editTimer);
-    if (row._pointerType === "mouse" && row.classList.contains("row-deletable")) {
-      if (e.detail > 1) return;
-      row._editTimer = setTimeout(onEdit, 260);
-      return;
-    }
     onEdit();
   });
 }
@@ -3022,10 +2878,6 @@ function setFormEditing(root, on, saveLabel = "Save changes") {
   others.forEach(el => el.classList.toggle("hidden", on));
   if (cancel) cancel.classList.toggle("hidden", !on);
   root.classList.toggle("is-editing", on);
-  const title = root.querySelector("[data-sheet-title]");
-  if (title) title.textContent = on ? title.dataset.editTitle : title.dataset.newTitle;
-  // Editing happens in the same sheet that adds, so opening an entry opens it.
-  if (on) openEntrySheet(root);
 }
 
 // Leaves edit mode without writing anything, and clears the form.
@@ -3034,10 +2886,7 @@ function cancelEdit() {
   const { root, clear } = editing;
   editing = null;
   if (clear) clear();
-  if (root) {
-    setFormEditing(root, false);
-    closeEntrySheet(root);
-  }
+  if (root) setFormEditing(root, false);
 }
 
 /* Called whenever an entry is deleted or the month is rebuilt. An edit whose
@@ -5864,15 +5713,15 @@ const TUTORIAL_STEPS = [
     title: "Bills",
     description: "Keep regular or required payments here so you know what still needs to be paid.",
     tab: "bills",
-    target: () => elementIsShown(document.getElementById("priority-actions"))
-      ? document.getElementById("priority-actions")
+    target: () => elementIsShown(document.getElementById("priority-form"))
+      ? document.getElementById("priority-form")
       : document.getElementById("priority-list")
   },
   {
     title: "Spending",
     description: "Use Expense when you spend money and Money In when money comes back in.",
     tab: "spending",
-    target: () => document.getElementById("sc-actions")
+    target: () => document.getElementById("second-choice-form")
   },
   {
     title: "Wallets",
@@ -6218,11 +6067,6 @@ document.addEventListener("keydown", (event) => {
       dismissModal(modal);
       return;
     }
-    if (openSheet) {
-      event.preventDefault();
-      dismissEntrySheet(openSheet);
-      return;
-    }
     if (!settingsPanel.classList.contains("hidden")) {
       event.preventDefault();
       concealSurface(settingsPanel);
@@ -6378,11 +6222,6 @@ confirmResetBtn.addEventListener("click", () => {
   function syncViewport() {
     document.documentElement.style.setProperty("--vv-top", `${vv.offsetTop}px`);
     document.documentElement.style.setProperty("--vv-height", `${vv.height}px`);
-    /* How far the bottom of the visible area sits above the bottom of the
-       layout viewport - the on-screen keyboard. Entry sheets are anchored
-       here so their fields rest just above the keyboard, not behind it. */
-    const bottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    document.documentElement.style.setProperty("--vv-bottom", `${bottom}px`);
   }
 
   vv.addEventListener("resize", syncViewport);
@@ -6409,7 +6248,7 @@ confirmResetBtn.addEventListener("click", () => {
   document.addEventListener("touchstart", (e) => {
     const tag = e.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "BUTTON" || tag === "LABEL") return;
-    if (document.querySelector(".modal:not(.hidden)") || openSheet) return;
+    if (document.querySelector(".modal:not(.hidden)")) return;
     if (!historyView.classList.contains("hidden")) return;
     if (window.scrollY === 0) {
       startY = e.touches[0].clientY;
@@ -6560,7 +6399,6 @@ function showNotice(message) {
  * could correctly belong to.
  */
 function dismissOpenPrompts() {
-  if (openSheet) closeEntrySheet(openSheet, false);
   document.querySelectorAll(".modal").forEach(m => {
     if ([onboardingWelcome, tutorialOverlay, tutorialExit].includes(m)) return;
     concealSurface(m, true);
