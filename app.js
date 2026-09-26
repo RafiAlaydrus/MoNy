@@ -3125,78 +3125,6 @@ function daysRemainingInCycle() {
   return Math.max(1, Math.ceil((end - now) / 86400000));
 }
 
-/* Small answers derived from figures the app already trusts. They are
-   deliberately descriptive rather than predictive models: daily allowance
-   divides today's real balance over the days left. The balance after bills is
-   not repeated here - the hero card already shows it under its progress bar. */
-function renderInsights() {
-  const dailyEl = document.getElementById("insight-daily");
-  if (!dailyEl) return;
-
-  const dailyNote = document.getElementById("insight-daily-note");
-  const categoryEl = document.getElementById("insight-category");
-  const categoryNote = document.getElementById("insight-category-note");
-  const comparisonEl = document.getElementById("insight-comparison");
-  const comparisonNote = document.getElementById("insight-comparison-note");
-  const paceEl = document.getElementById("insight-pace");
-  const paceNote = document.getElementById("insight-pace-note");
-  const section = document.querySelector(".insights-section");
-  const card = name => document.querySelector(`[data-insight="${name}"]`);
-  const show = (name, visible) => card(name)?.classList.toggle("hidden", !visible);
-
-  const insightIncome = totalIncomeOf(data, allWallets());
-  if (insightIncome === null || moneyCents(insightIncome) <= 0) {
-    section?.classList.add("hidden");
-    return;
-  }
-
-  const remaining = moneyValue(getMainRemaining());
-  const days = daysRemainingInCycle();
-  dailyEl.textContent = `${cur()} ${fmt(Math.max(remaining, 0) / days)}`;
-  dailyNote.textContent = `${days} ${days === 1 ? "day" : "days"} remaining`;
-
-  const breakdown = spendingBreakdownOf(data, allWallets());
-  const top = Object.entries(breakdown.categories).sort((a, b) => b[1] - a[1])[0];
-  categoryEl.textContent = top ? top[0] : "—";
-  categoryNote.textContent = top ? `${cur()} ${fmt(top[1])} spent` : "No spending yet";
-
-  const archiveKeys = sortedArchiveKeys();
-  const previousKey = archiveKeys[archiveKeys.length - 1];
-  if (!previousKey) {
-    comparisonEl.textContent = "—";
-    comparisonNote.textContent = "No completed cycle yet";
-  } else {
-    const previous = summarizeEntry(archive[previousKey]).spent;
-    const current = breakdown.spent;
-    if (previous <= 0) {
-      comparisonEl.textContent = current > 0 ? "New spending" : "No change";
-      comparisonNote.textContent = `Compared with ${monthLabel(previousKey)}`;
-    } else {
-      const change = ((current - previous) / previous) * 100;
-      comparisonEl.textContent = `${change > 0 ? "+" : ""}${Math.round(change)}%`;
-      comparisonNote.textContent = `${change <= 0 ? "Less" : "More"} than ${monthLabel(previousKey)}`;
-    }
-  }
-  if (!settings.budgetLimit) {
-    paceEl.textContent = "—";
-    paceNote.textContent = "Set a budget limit to compare";
-  } else {
-    const spent = breakdown.spent;
-    const pct = Math.round((spent / settings.budgetLimit) * 100);
-    paceEl.textContent = `${pct}% used`;
-    paceNote.textContent = spent > settings.budgetLimit
-      ? `${cur()} ${fmt(spent - settings.budgetLimit)} over your limit`
-      : `${cur()} ${fmt(settings.budgetLimit - spent)} still available`;
-  }
-
-  show("daily", settings.cycleEnabled !== false);
-  show("category", !!top);
-  show("comparison", settings.cycleEnabled !== false && !!previousKey);
-  show("pace", settings.cycleEnabled !== false && !!settings.budgetLimit);
-  document.getElementById("insights-title").textContent = settings.cycleEnabled === false ? "All time" : "This cycle";
-  section?.classList.remove("hidden");
-}
-
 function activityIndex() {
   const records = [];
   (data.secondChoice || []).forEach(item => records.push({
@@ -3422,7 +3350,6 @@ function renderProjection() {
 function calculateRemaining(skipChart = false) {
   renderIncome();
   renderProjection();
-  renderInsights();
   renderActivityFinder();
   renderRecentActivity();
 
@@ -5024,7 +4951,7 @@ function syncTabMotionIndicator() {
 function playPanelEntrance(panel) {
   if (!panel || prefersReducedMotion()) return;
   const surfaces = panel.querySelectorAll(
-    ".card, .second-form, #priority-list, .chart-container, .insight-card, .wallet-section"
+    ".card, .second-form, #priority-list, .chart-container, .wallet-section"
   );
   surfaces.forEach((surface, index) => {
     surface.style.setProperty("--surface-delay", `${Math.min(index * 24, 144)}ms`);
@@ -5651,7 +5578,7 @@ cycleEnabledToggle.addEventListener("change", () => {
   document.getElementById("cycle-mode-title").textContent = pendingCycleMode ? "Turn monthly cycles back on?" : "Turn monthly cycles off?";
   document.getElementById("cycle-mode-description").textContent = pendingCycleMode
     ? `The endless ledger will become a read-only History record. A new cycle starts today with your exact main and wallet balances, without recording them as new income. Its first boundary is ${nextCycleStartOf(todayString(), settings.monthStartDay)} so no two cycles share one History month. Monthly controls will return.`
-    : "Your current records and balances will continue in one ledger. Monthly rollover, statements, History, carry-forward, recurring cycle entries, and monthly pace insights will pause. Previous archived months stay safe.";
+    : "Your current records and balances will continue in one ledger. Monthly rollover, statements, History, carry-forward, and recurring cycle entries will pause. Previous archived months stay safe.";
   document.getElementById("confirm-cycle-mode").textContent = pendingCycleMode ? "Start monthly cycle" : "Use endless tracking";
   revealSurface(cycleModeModal);
 });
