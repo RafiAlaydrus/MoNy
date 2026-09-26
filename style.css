@@ -2778,3 +2778,15 @@ body.tutorial-active {
   .cycle-summary { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:10px; }
   .cycle-summary .summary-cell strong { font-size:15px; }
 }
+
+/* Spend bar brightness steps (setSpendLevel in app.js). Dark brightens toward
+   white; light darkens toward black, so the last step never disappears into
+   the pale track. */
+.spend-bar-fill[data-level="low"] { background:#6f6f6f; }
+.spend-bar-fill[data-level="mid"] { background:#b0b0b0; }
+.spend-bar-fill[data-level="high"] { background:#ffffff; }
+.spend-bar-label.is-high { color:#e8e8e8; }
+:root[data-theme="light"] .spend-bar-fill[data-level="low"] { background:#a3a39e; }
+:root[data-theme="light"] .spend-bar-fill[data-level="mid"] { background:#62625e; }
+:root[data-theme="light"] .spend-bar-fill[data-level="high"] { background:#1d1d1c; }
+:root[data-theme="light"] .spend-bar-label.is-high { color:#1d1d1c; }

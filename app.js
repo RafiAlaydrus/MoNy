@@ -1504,6 +1504,10 @@ function buildPriorityItem(bill) {
   checkbox.addEventListener("change", (e) => {
     const commit = () => {
       bill.paid = e.target.checked;
+      // When it was paid, which is when it belongs in the activity lists -
+      // `date` is when the bill was added.
+      if (bill.paid) bill.paidAt = new Date().toISOString();
+      else delete bill.paidAt;
       haptic(bill.paid ? 12 : 6);
       saveData();
       calculateRemaining();
@@ -2091,14 +2095,7 @@ function updateWalletBar(wallet, section) {
   fill.style.width = `${pct}%`;
   label.textContent = `${Math.round(pct)}% spent`;
 
-  if (pct < 50) {
-    fill.style.background = "#6f6f6f";
-  } else if (pct < 75) {
-    fill.style.background = "#b0b0b0";
-  } else {
-    fill.style.background = "#ffffff";
-  }
-  label.style.color = pct >= 75 ? "#e8e8e8" : "";
+  setSpendLevel(fill, label, pct);
 }
 
 // Refreshes a wallet's balance card and bar
@@ -3112,6 +3109,14 @@ function animateMoneyTo(el, to) {
   requestAnimationFrame(tick);
 }
 
+/* The bar brightens as more is spent rather than turning red. The three steps
+   are colours per theme in style.css - a fixed white here vanished against
+   the light theme's pale track once 75% was spent. */
+function setSpendLevel(fill, label, pct) {
+  fill.dataset.level = pct < 50 ? "low" : pct < 75 ? "mid" : "high";
+  label.classList.toggle("is-high", pct >= 75);
+}
+
 // Animates the remaining balance toward a new value and pulses the card
 function updateRemainingDisplay(to) {
   animateMoneyTo(remainingMoneyEl, to);
@@ -3139,15 +3144,17 @@ function activityIndex() {
     (wd && wd.items || []).forEach(item => records.push({
       name: item.name, category: wallet.name, amount: Number(item.amount) || 0,
       date: item.date, source: wallet.id, sourceLabel: wallet.name,
-      type: isTransferEntry(item) || item.type === "in" || item.type === "out" ? "transfer" :
-        isWalletInflow(item) ? "income" : "expense",
+      /* An "add" is money moved in from the main balance - a transfer, like
+         "in"/"out" between wallets. None of them is new income. */
+      type: isTransferEntry(item) || item.type === "add" || item.type === "in" || item.type === "out"
+        ? "transfer" : "expense",
       direction: isWalletInflow(item) ? 1 : -1, txId: item.txId
     }));
   });
 
   (data.priority || []).filter(bill => bill.paid).forEach(bill => records.push({
     name: bill.name, category: bill.category || "Bills", amount: Number(bill.amount) || 0,
-    date: bill.date, source: "main", sourceLabel: "Main balance", type: "bill", direction: -1
+    date: bill.paidAt || bill.date, source: "main", sourceLabel: "Main balance", type: "bill", direction: -1
   }));
   return records.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 }
@@ -3166,10 +3173,29 @@ function recentDateLabel(value) {
   return entryDateLabel(value).text || (settings.cycleEnabled === false ? "All time" : "This cycle");
 }
 
+// Green is for money that arrived. A transfer only moved between your own
+// balances, so it stays neutral whichever way it went.
+function activityAmountClass(record) {
+  return record.direction > 0 && record.type !== "transfer" ? "amount-in" : "amount-out";
+}
+
+/* Recent means what has already happened. An entry dated after today is
+   allowed, but it is listed after everything up to today rather than pinned
+   above it for weeks. */
+function recentOrder(records) {
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const future = record => {
+    const time = new Date(record.date).getTime();
+    return Number.isFinite(time) && time > end.getTime();
+  };
+  return [...records.filter(r => !future(r)), ...records.filter(future)];
+}
+
 function renderRecentActivity() {
   if (!recentActivity) return;
   const seenTransfers = new Set();
-  const records = activityIndex().filter(record => {
+  const records = recentOrder(activityIndex()).filter(record => {
     if (!record.txId) return true;
     if (seenTransfers.has(record.txId)) return false;
     seenTransfers.add(record.txId);
@@ -3185,7 +3211,7 @@ function renderRecentActivity() {
   recentActivity.innerHTML = records.map(record => `
     <div class="recent-row">
       <div class="recent-main"><strong>${esc(record.name)}</strong><span>${esc(record.category)} · ${esc(record.type === "bill" ? "Paid bill" : record.type)}</span></div>
-      <div class="recent-side"><strong class="${record.direction > 0 ? "amount-in" : "amount-out"}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</strong><span>${esc(recentDateLabel(record.date))}</span></div>
+      <div class="recent-side"><strong class="${activityAmountClass(record)}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</strong><span>${esc(recentDateLabel(record.date))}</span></div>
     </div>`).join("");
 }
 
@@ -3262,7 +3288,7 @@ function renderActivityFinder() {
         <div class="activity-result-name">${esc(record.name)}</div>
         <div class="activity-result-meta">${esc(record.category)} · ${esc(record.sourceLabel)}</div>
       </div>
-      <div class="activity-result-amount ${record.direction > 0 ? "amount-in" : "amount-out"}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</div>
+      <div class="activity-result-amount ${activityAmountClass(record)}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</div>
       <div class="activity-result-meta">${esc(record.type === "bill" ? "Paid bill" : record.type)}</div>
       <div class="activity-result-date">${esc(entryDateLabel(record.date).text)}</div>`;
     return result;
@@ -3391,14 +3417,7 @@ function calculateRemaining(skipChart = false) {
   fill.style.width = `${pct}%`;
   label.textContent = `${Math.round(pct)}% spent`;
 
-  if (pct < 50) {
-    fill.style.background = "#6f6f6f";
-  } else if (pct < 75) {
-    fill.style.background = "#b0b0b0";
-  } else {
-    fill.style.background = "#ffffff";
-  }
-  label.style.color = pct >= 75 ? "#e8e8e8" : "";
+  setSpendLevel(fill, label, pct);
 
   if (settings.cycleEnabled !== false && settings.budgetLimit && income > 0) {
     const limitSpendPct = ((income - settings.budgetLimit) / income) * 100;
@@ -4506,7 +4525,8 @@ function validateBillList(list, scope) {
     !isRecord(b) || !isNonEmptyString(b.name) ||
     !isNonEmptyString(b.category) || !isFiniteAmount(b.amount) ||
     (b.paid !== undefined && typeof b.paid !== "boolean") ||
-    !isValidStoredDate(b.date)
+    !isValidStoredDate(b.date) ||
+    (b.paidAt !== undefined && !isValidStoredDate(b.paidAt))
   );
   return bad === undefined ? null : `${scope}'s priority bills contain a malformed entry.`;
 }
@@ -6251,14 +6271,11 @@ confirmResetBtn.addEventListener("click", () => {
   }
 
   function refreshInPlace() {
+    /* A new cycle re-renders everything itself. Otherwise nothing in memory
+       has changed, so only the date-driven figures are redrawn - rebuilding
+       the lists and forms would throw away anything half typed in them. */
     if (!checkCycleRollover()) {
       renderMonthLabel();
-      renderIncome();
-      renderPriority();
-      updatePriorityLockUI();
-      updateCopyLastBtn();
-      renderWallets();
-      renderSecondChoice();
       calculateRemaining();
     }
     document.dispatchEvent(new CustomEvent("mony:check-update"));
