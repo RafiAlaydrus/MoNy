@@ -931,6 +931,10 @@ function attachSwipeDismiss(card, canStart, onDismiss) {
     if (dy > 90) {
       haptic(8);
       onDismiss();
+      /* A dialog is hidden by its own close animation, which overrides this
+         inline offset while it runs. Clear it afterwards, or the next open
+         would start already pushed down the screen. */
+      setTimeout(() => { card.style.transform = ""; }, 260);
     } else {
       card.style.transform = "";
     }
@@ -2095,6 +2099,7 @@ function makeRowDeletable(row, onDelete) {
 
   // Desktop fallback, since there is no swipe with a mouse
   row.addEventListener("dblclick", () => {
+    clearTimeout(row._editTimer);
     appConfirm("This entry will be removed. You can undo it for a few seconds afterwards.",
       { title: "Delete entry?", confirmLabel: "Delete" })
       .then(ok => { if (ok) onDelete(); });
@@ -2902,10 +2907,21 @@ function deleteSecondChoiceItem(item) {
 function makeRowEditable(row, item, onEdit) {
   if (!isEditable(item)) return;
   row.classList.add("row-editable");
+  row.addEventListener("pointerdown", (e) => { row._pointerType = e.pointerType; });
   row.addEventListener("click", (e) => {
     if (row._swipeMoved) return;
     // The checkbox on a priority row owns its own click.
     if (e.target.closest("input, button, a")) return;
+    /* With a mouse, a deletable row also answers a double-click. The edit
+       sheet (and its backdrop) would open on the first click and swallow the
+       second, so wait out the double-click window before opening it, and let
+       the second click of a pair cancel it. Touch opens immediately. */
+    clearTimeout(row._editTimer);
+    if (row._pointerType === "mouse" && row.classList.contains("row-deletable")) {
+      if (e.detail > 1) return;
+      row._editTimer = setTimeout(onEdit, 260);
+      return;
+    }
     onEdit();
   });
 }
