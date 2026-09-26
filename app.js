@@ -6418,9 +6418,9 @@ window.addEventListener("focus", () => { checkCycleRollover(); });
 document.addEventListener("mony:before-update", (event) => {
   const draft = Array.from(document.querySelectorAll(".second-form input, .wallet-form input"))
     .some(input => input.value.trim() !== "");
-  if (draft || editing || !incomeInput.classList.contains("hidden")) {
+  if ((draft || editing || !incomeInput.classList.contains("hidden")) && !event.detail.force) {
     event.preventDefault();
-    event.detail.message = "Save or clear your entry before refreshing. Your draft is still here.";
+    event.detail.message = "You have an unsaved entry. Save or clear it and MoNy updates by itself, or tap Update now to update anyway and clear it.";
     return;
   }
   flushUndoStack();

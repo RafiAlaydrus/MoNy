@@ -37,11 +37,15 @@
     try { localStorage.setItem(LAST_UPDATE_CHECK_KEY, String(value)); } catch { /* optional hint only */ }
   }
 
-  function updateGuard() {
-    const event = new CustomEvent("mony:before-update", { cancelable: true, detail: {} });
+  /* `force` is only ever true for a tap on "Update now". The app then lets an
+     unsaved entry go instead of holding the update back - the banner has
+     already said so - but still refuses if the saved records themselves
+     cannot be written. */
+  function updateGuard(force = false) {
+    const event = new CustomEvent("mony:before-update", { cancelable: true, detail: { force } });
     return {
       allowed: document.dispatchEvent(event),
-      message: event.detail.message || "Finish your current entry first."
+      message: event.detail.message || "Finish your current entry first. MoNy will update automatically when it is safe."
     };
   }
 
@@ -66,11 +70,12 @@
     location.reload();
   }
 
-  function applyAvailableUpdate() {
+  // Also used directly as an event listener, so only a literal true forces.
+  function applyAvailableUpdate(force) {
     if (requested || reloading || (!waitingWorker && !reloadReady)) return;
-    const guard = updateGuard();
+    const guard = updateGuard(force === true);
     if (!guard.allowed) {
-      message.textContent = `${guard.message} MoNy will update automatically when it is safe.`;
+      message.textContent = guard.message;
       banner.classList.remove("hidden");
       if (status) status.textContent = "Update ready. It will install automatically after your draft is saved.";
       scheduleAutomaticRetry();
@@ -114,7 +119,7 @@
   });
 
   apply.addEventListener("click", () => {
-    applyAvailableUpdate();
+    applyAvailableUpdate(true);
   });
   dismiss.addEventListener("click", () => banner.classList.add("hidden"));
 
