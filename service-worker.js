@@ -11,7 +11,7 @@
    their browser never has a reason to look at the network again.
 ========================= */
 
-const CACHE_NAME = "mmt-v83";
+const CACHE_NAME = "mmt-v84";
 
 /* Everything needed to cold-start the app offline. "./" is listed separately
    from "./index.html" because that is the URL the browser actually requests
@@ -72,19 +72,41 @@ const LAUNCH_IMAGES = [
    The launch images that follow are deliberately NOT held to it; see the
    note on LAUNCH_IMAGES.
 
+   Every file is fetched with this release's name added to the URL. GitHub
+   Pages sits behind a CDN that can keep serving a file's previous version for
+   a few minutes after a deploy, and `cache: "reload"` only skips the
+   browser's cache, not the CDN's. Without the unique URL an install during
+   that window could store new HTML with old scripts - a mix that fails on
+   every launch until the next release. The response is stored under the
+   plain URL, which is what the page actually requests.
+
    Once the complete cache is ready, the worker activates immediately. pwa.js
    controls the page reload separately and waits until no money-entry draft is
    open, so existing installations migrate without requiring the old Refresh
    button while unfinished input remains protected. */
+function releaseRequest(url) {
+  const plain = new URL(url, self.registration.scope);
+  const fresh = new URL(plain);
+  fresh.searchParams.set("release", CACHE_NAME);
+  return { plain: plain.href, fresh: new Request(fresh.href, { cache: "reload" }) };
+}
+
+async function cacheFresh(cache, url) {
+  const { plain, fresh } = releaseRequest(url);
+  const response = await fetch(fresh);
+  if (!response.ok) throw new Error(`${url} could not be downloaded (${response.status})`);
+  await cache.put(plain, response);
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll(ASSETS.map(url => new Request(new URL(url, self.registration.scope), { cache: "reload" }))).then(() =>
+      Promise.all(ASSETS.map(url => cacheFresh(cache, url))).then(() =>
         /* Tolerant, one at a time: a launch image that 404s is logged by the
            browser and skipped, and the install still succeeds. See the note on
            LAUNCH_IMAGES for why these must not be able to fail the install. */
         Promise.all(LAUNCH_IMAGES.map((url) =>
-          cache.add(new Request(new URL(url, self.registration.scope), { cache: "reload" })).catch(() => {})
+          cacheFresh(cache, url).catch(() => {})
         )).then(() => self.skipWaiting())
       )
     )

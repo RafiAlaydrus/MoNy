@@ -3,9 +3,15 @@
   const message = document.getElementById("session-message");
   const retry = document.getElementById("session-reload");
   let blocked = true;
+  let repairOnReload = false;
 
-  function block(text) {
+  /* `repair` is set when the app's own files failed rather than the records -
+     a missing or broken script. Reload then drops the saved copy of the app
+     files (Cache Storage and the service worker) so they are fetched fresh.
+     The records live in localStorage, which this never touches. */
+  function block(text, repair = false) {
     blocked = true;
+    repairOnReload = repairOnReload || repair;
     message.textContent = text;
     document.getElementById("app-loading").classList.add("hidden");
     document.querySelectorAll("body > :not(script)").forEach(el => { if (el !== panel) el.inert = true; });
@@ -15,7 +21,24 @@
     panel.setAttribute("aria-hidden", "false");
     retry.focus();
   }
-  retry.addEventListener("click", () => location.reload());
+  async function repairAppFiles() {
+    try {
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(key => /^mmt-v\d+$/.test(key)).map(key => caches.delete(key)));
+      }
+      if (navigator.serviceWorker) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(registration => registration.unregister()));
+      }
+    } catch (_) { /* a plain reload is still the best remaining step */ }
+  }
+
+  retry.addEventListener("click", async () => {
+    retry.disabled = true;
+    if (repairOnReload) await repairAppFiles();
+    location.reload();
+  });
   ["click", "change", "keydown", "blur", "submit", "pointerdown", "pointerup"].forEach(type => {
     document.addEventListener(type, event => {
       if (blocked && (event.target !== retry || (type === "keydown" && event.key === "Escape"))) {
@@ -38,10 +61,10 @@
           return;
         }
         blocked = false;
-        window.addEventListener("error", () => block("MoNy could not finish loading safely. Reload to recover. Do not clear browser data."), { once: true });
+        window.addEventListener("error", () => block("MoNy could not finish loading safely. Reload to recover - it downloads a fresh copy of the app. Your records stay on this device; do not clear browser data.", true), { once: true });
         const script = document.createElement("script");
         script.src = "app.js";
-        script.onerror = () => block("MoNy could not load. Check your connection and reload.");
+        script.onerror = () => block("MoNy could not load. Check your connection and reload.", true);
         document.body.appendChild(script);
         // Held for this document's lifetime; closing/reloading releases it.
         await new Promise(() => {});
