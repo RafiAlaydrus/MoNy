@@ -4169,6 +4169,13 @@ function categoryUsageCount(list, name) {
  *
  * Returns the number of entries re-filed, for the confirmation message.
  */
+/* Recurring templates whose category comes from a given list: bills from the
+   bill categories, expenses and income from the spending ones. */
+function recurringUsing(list, name) {
+  return (settings.recurring || []).filter(t =>
+    t && t.category === name && (t.type === "bill" ? "priority" : "secondChoice") === list);
+}
+
 function renameCategory(list, from, to) {
   if (from === to) return 0;
   let moved = 0;
@@ -4182,6 +4189,8 @@ function renameCategory(list, from, to) {
   entries.forEach(e => {
     if (e.category === from) { e.category = to; moved++; }
   });
+  // Recurring entries follow, or next cycle would re-create the old name.
+  recurringUsing(list, from).forEach(t => { t.category = to; });
 
   saveSettings();
   if (moved) saveData();
@@ -4390,6 +4399,11 @@ confirmDeleteCategoryBtn.addEventListener("click", () => {
 
   settings.categories[list] = (settings.categories[list] || [])
     .filter(c => c !== name);
+  /* Entries already recorded keep their category, but a recurring entry would
+     keep adding new ones under the removed name every cycle - move it to the
+     default category instead. */
+  const fallback = settings.categories[list].find(c => c.toLowerCase() === FALLBACK_CATEGORY.toLowerCase()) || FALLBACK_CATEGORY;
+  recurringUsing(list, name).forEach(t => { t.category = fallback; });
   saveSettings();
 
   concealSurface(deleteCategoryModal);
