@@ -779,6 +779,7 @@ header p {
 #tab-home .setup-month { order:0; }
 #tab-home .summary { order:1; }
 #tab-home #chart-section { order:3; margin:8px 0 22px; }
+#tab-home .backup-reminder { order:2; }
 #tab-home .recent-section { order:4; }
 
 .setup-month {
@@ -2522,8 +2523,9 @@ body.tutorial-active {
   #tab-home:not(.hidden) { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:20px 24px; align-items:start; }
   #tab-home .setup-month { grid-column:1 / -1; margin:0; }
   #tab-home .summary { grid-column:1 / -1; grid-row:2; margin:0; }
-  #tab-home #chart-section { grid-column:1; grid-row:3; margin:0; min-width:0; }
-  #tab-home .recent-section { grid-column:2; grid-row:3; margin:0; }
+  #tab-home .backup-reminder { grid-column:1 / -1; grid-row:3; margin:0; }
+  #tab-home #chart-section { grid-column:1; grid-row:4; margin:0; min-width:0; }
+  #tab-home .recent-section { grid-column:2; grid-row:4; margin:0; }
   .settings-groups { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .settings-group[aria-labelledby="settings-recovery-title"] { grid-column:span 2; }
 }
@@ -2855,3 +2857,87 @@ body.tutorial-active {
 /* The light theme gives every input a field fill; the tick is not a field. */
 :root[data-theme="light"] .bill-check { background:transparent; border-color:#c9c9c3; }
 :root[data-theme="light"] .bill-check:checked { background:var(--surface-action); border-color:var(--surface-action); }
+
+/* =====================
+   Day-grouped histories
+===================== */
+/* Spending and each wallet's history read like Recent Activity: one card,
+   rows grouped under a heading per day, the name with its category beneath
+   and the amount on the right. Still a table underneath - every row, swipe
+   and edit handler is unchanged - only laid out as a list. */
+table.day-list {
+  display: block;
+  margin-top: 8px;
+  padding: 0 var(--space-card) 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+}
+table.day-list thead { display: none; }
+table.day-list tbody { display: block; }
+table.day-list tr { border-bottom: 0; }
+
+table.day-list .day-row th {
+  display: block;
+  padding: 16px 0 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+table.day-list tbody tr:not(.day-row):not(.history-page-control):not(.empty-row) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name amount" "meta amount";
+  align-items: center;
+  column-gap: 14px;
+  padding: 11px 0;
+  /* Opaque, so the row still covers what is behind it while swiping. */
+  background: var(--surface-card);
+}
+table.day-list tbody tr:not(.day-row) + tr:not(.day-row):not(.history-page-control) {
+  border-top: 1px solid var(--border-subtle);
+}
+table.day-list td { padding: 0; }
+table.day-list .cell-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+table.day-list .cell-meta { grid-area: meta; margin-top: 3px; color: var(--text-tertiary); font-size: 11px; }
+table.day-list .cell-meta:empty { display: none; }
+table.day-list .cell-amount { grid-area: amount; font-size: 14px; font-weight: 650; text-align: right; white-space: nowrap; }
+table.day-list .date-stamp { display: none; }
+table.day-list .carried-row .cell-name { font-style: italic; font-weight: 500; }
+
+/* Empty state and "Show more" keep their own block layout inside the card. */
+table.day-list tbody tr.empty-row { display: block; }
+table.day-list td[colspan] { display: block; padding: 14px 0; }
+table.day-list .empty-state-rich { border: 0; }
+table.day-list tr.history-page-control,
+table.day-list tr.history-page-control > td { display: block; }
+
+/* Backup reminder - the same card language as "Set up this month". */
+.backup-reminder {
+  padding: 20px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: linear-gradient(145deg, #171717, #0d0d0d);
+  box-shadow: var(--shadow-card);
+}
+.backup-reminder h2 { margin: 5px 0 7px; font-size: 20px; letter-spacing: -.02em; }
+.backup-reminder p { margin: 0 0 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.backup-reminder-actions { display: flex; gap: 10px; }
+.backup-reminder-actions button {
+  flex: 1;
+  min-height: 44px;
+  padding: 11px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-field);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+.backup-reminder-actions .primary { border-color: transparent; background: var(--surface-action); color: var(--text-on-action); }
+:root[data-theme="light"] .backup-reminder { background: #fff; }

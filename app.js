@@ -1031,6 +1031,17 @@ function moneyCents(value) {
 
 function moneyValue(value) { return moneyCents(value) / 100; }
 
+/* An amount typed into a field, rounded to cents - the only precision the app
+   can show. Storing 12.345 while displaying 12.35 let totals drift a cent at
+   a time from what was on screen. Empty or unreadable input is NaN, which
+   every isValidAmount check rejects. */
+function inputAmount(el) {
+  const raw = String(el?.value ?? "").trim();
+  if (!raw) return NaN;
+  const n = Number(raw);
+  return Number.isFinite(n) ? moneyValue(n) : NaN;
+}
+
 function hasEnough(available, amount) {
   return moneyCents(available) >= moneyCents(amount);
 }
@@ -1393,9 +1404,11 @@ setupIncomeBtn.addEventListener("click", startIncomeEdit);
 
 // Saves the income input
 function saveIncome() {
-  const value = Number(incomeInput.value);
+  const value = inputAmount(incomeInput);
 
-  if (!isValidAmount(value)) {
+  /* Zero is a real answer - a cycle tracked for spending only - so it is
+     accepted. Empty or negative input leaves the income as it was. */
+  if (!Number.isFinite(value) || value < 0) {
     incomeInput.classList.add("hidden");
     calculateRemaining();
     return;
@@ -1452,7 +1465,7 @@ function editPriorityBill(bill) {
     save() {
       const name = pbName.value.trim();
       const category = pbCategory.value;
-      const amount = Number(pbAmount.value);
+      const amount = inputAmount(pbAmount);
       const fields = [
         { el: pbName, valid: !!name },
         { el: pbCategory, valid: !!category },
@@ -1756,7 +1769,7 @@ addPriorityBtn.addEventListener("click", () => {
 
   const name = pbName.value.trim();
   const category = pbCategory.value;
-  const amount = Number(pbAmount.value);
+  const amount = inputAmount(pbAmount);
 
   const fields = [
     { el: pbName, valid: !!name },
@@ -1925,12 +1938,11 @@ function deleteWalletItem(wallet, item, tbody, section) {
 function buildCarriedRow(amount, columnCount) {
   const row = document.createElement("tr");
   row.className = "carried-row";
-  const spacer = columnCount === 4 ? "<td></td>" : "";
   row.innerHTML = `
-    <td>${settings.cycleEnabled === false ? "Opening balance" : "Brought forward"}</td>
-    ${spacer}
+    <td class="cell-name">${settings.cycleEnabled === false ? "Opening balance" : "Brought forward"}</td>
+    <td class="cell-meta">${settings.cycleEnabled === false ? "Carried in" : "From last cycle"}</td>
     <td class="date-stamp">${settings.cycleEnabled === false ? "earlier" : "last cycle"}</td>
-    <td class="${amount < 0 ? "amount-out" : "amount-in"}">${amount < 0 ? "−" : "+"} ${esc(cur())} ${fmt(Math.abs(amount))}</td>
+    <td class="cell-amount ${amount < 0 ? "amount-out" : "amount-in"}">${amount < 0 ? "−" : "+"} ${esc(cur())} ${fmt(Math.abs(amount))}</td>
   `;
   return row;
 }
@@ -1945,10 +1957,14 @@ function buildWalletItemRow(item, wallet, tbody, section) {
     label = `${esc(item.name)} ← ${esc(transferPartyName(item.fromId, item.fromName))}`;
   }
 
+  const kind = item.type === "take" ? "Spent" : item.type === "add" ? "Added from balance"
+    : item.type === "in" ? "Transfer in" : "Transfer out";
+  row._item = item;
   row.innerHTML = `
-    <td>${label}</td>
+    <td class="cell-name">${label}</td>
+    <td class="cell-meta">${kind}</td>
     ${dateCellHtml(item.date)}
-    <td class="${isWalletInflow(item) ? "amount-in" : "amount-out"}">${isWalletInflow(item) ? "+" : "−"} ${esc(cur())} ${fmt(item.amount)}</td>
+    <td class="cell-amount ${isWalletInflow(item) ? "amount-in" : "amount-out"}">${isWalletInflow(item) ? "+" : "−"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
 
   if (wallet) {
@@ -2021,6 +2037,28 @@ function sortedTransactions(items) {
   return [...items].sort((a, b) => direction * String(a.date || "").localeCompare(String(b.date || "")));
 }
 
+/* "Today", "Yesterday", or the date. The year is added when it is not this
+   one, and when the entry falls outside the current cycle - the same cases in
+   which the per-row date used to spell it out. */
+function dayHeading(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Undated";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(date); day.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  const withYear = day.getFullYear() !== today.getFullYear() || entryDateLabel(iso).outside;
+  return day.toLocaleDateString("en-GB", withYear
+    ? { weekday: "short", day: "numeric", month: "short", year: "numeric" }
+    : { weekday: "short", day: "numeric", month: "short" });
+}
+
+function localDayKey(iso) {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
 function renderPagedRecords(host, key, records, buildRecord, columns = 0, scope = "") {
   const context = `${data.month}|${data.cycleStart}|${settings.sortOrder}|${scope}`;
   let page = historyPages.get(key);
@@ -2045,12 +2083,29 @@ function renderPagedRecords(host, key, records, buildRecord, columns = 0, scope 
   more.setAttribute("aria-controls", host.id);
   actions.append(count, more);
   let shown = 0;
+  // Table histories (Spending and each wallet) are grouped under a heading
+  // per day; the last day is remembered across "Show more" pages.
+  let lastDay = null;
 
   function appendPage(focusNew = false) {
     const fragment = document.createDocumentFragment();
     let first;
     const end = Math.min(page.limit, records.length);
     for (; shown < end; shown++) {
+      if (columns) {
+        const dayKey = localDayKey(records[shown].date);
+        if (dayKey !== lastDay) {
+          lastDay = dayKey;
+          const heading = document.createElement("tr");
+          heading.className = "day-row";
+          const cell = document.createElement("th");
+          cell.colSpan = columns;
+          cell.scope = "colgroup";
+          cell.textContent = dayHeading(records[shown].date);
+          heading.appendChild(cell);
+          fragment.appendChild(heading);
+        }
+      }
       const row = buildRecord(records[shown]);
       first ||= row;
       fragment.appendChild(row);
@@ -2087,7 +2142,7 @@ function renderWalletItemsTable(wallet, tbody, section) {
   if (wd.items.length === 0) {
     // The opening line alone is still a history worth showing.
     if (carried <= 0) {
-      tbody.innerHTML = '<tr><td colspan="3"><div class="empty-state-rich"><strong>No wallet activity yet</strong><p>Tap the balance to set a budget, then record your first purchase above.</p></div></td></tr>';
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="3"><div class="empty-state-rich"><strong>No wallet activity yet</strong><p>Tap the balance to set a budget, then record your first purchase above.</p></div></td></tr>';
     }
     return;
   }
@@ -2160,7 +2215,7 @@ function buildWalletSection(wallet) {
       </div>
       <button data-role="transfer-btn" data-edit="hide-while-editing" class="transfer-btn" aria-label="Transfer money from ${esc(wallet.name)}">Transfer</button>
     </div>
-    <table>
+    <table class="day-list">
       <thead><tr><th>Item</th><th>Date</th><th>Amount</th></tr></thead>
       <tbody data-role="table"></tbody>
     </table>
@@ -2194,7 +2249,7 @@ function buildWalletSection(wallet) {
   });
 
   function saveBudget() {
-    const value = Number(budgetInput.value);
+    const value = inputAmount(budgetInput);
     if (!isValidAmount(value)) {
       budgetInput.classList.add("hidden");
       return;
@@ -2252,24 +2307,8 @@ function buildWalletSection(wallet) {
     dateInput.classList.add("is-empty");
     [nameInput, amountInput].forEach(el => el.classList.remove("input-error"));
 
-    if (dateValue || wd.items.length > HISTORY_PAGE_SIZE) {
-      // A picked date can belong anywhere in the list, so re-sort the table
-      renderWalletItemsTable(wallet, tbody, section);
-    } else {
-      const emptyRow = tbody.querySelector("td.empty-state, .empty-state-rich");
-      if (emptyRow) emptyRow.closest("tr").remove();
-      const newItem = wd.items[wd.items.length - 1];
-      const row = buildWalletItemRow(newItem, wallet, tbody, section);
-      row.classList.add("item-enter");
-      if (settings.sortOrder === "newest") {
-        const carriedRow = tbody.querySelector(".carried-row");
-        if (carriedRow) carriedRow.after(row);
-        else tbody.prepend(row);
-      } else {
-        tbody.appendChild(row);
-      }
-      requestAnimationFrame(() => row.classList.add("item-enter-active"));
-    }
+    renderWalletItemsTable(wallet, tbody, section);
+    animateNewRow(tbody, wd.items[wd.items.length - 1]);
 
     renderWalletCard(wallet, section);
     celebrateForm(section.querySelector(".wallet-form"));
@@ -2278,7 +2317,7 @@ function buildWalletSection(wallet) {
 
   function addItem(type) {
     const name = nameInput.value.trim();
-    const amount = Number(amountInput.value);
+    const amount = inputAmount(amountInput);
     const dateValue = dateInput.value;
 
     const fields = [
@@ -2345,7 +2384,7 @@ function buildWalletSection(wallet) {
       },
       save() {
         const name = nameInput.value.trim();
-        const amount = Number(amountInput.value);
+        const amount = inputAmount(amountInput);
         const fields = [
           { el: nameInput, valid: !!name },
           { el: amountInput, valid: isValidAmount(amount) }
@@ -2395,7 +2434,7 @@ function buildWalletSection(wallet) {
   section.querySelector("[data-role='take-btn']").addEventListener("click", () => addItem("take"));
   section.querySelector("[data-role='transfer-btn']").addEventListener("click", () => {
     const name = nameInput.value.trim();
-    const amount = Number(amountInput.value);
+    const amount = inputAmount(amountInput);
 
     const fields = [
       { el: nameInput, valid: !!name },
@@ -2808,15 +2847,24 @@ function buildSecondChoiceRow(item) {
     ? ' <span class="returned-mark" title="Money coming back, not income">&#8617;</span>'
     : "";
 
+  row._item = item;
   row.innerHTML = `
-    <td>${esc(item.name)}${mark}</td>
-    <td>${esc(item.category)}</td>
+    <td class="cell-name">${esc(item.name)}${mark}</td>
+    <td class="cell-meta">${esc(item.category)}</td>
     ${dateCellHtml(item.date)}
-    <td class="${item.type === "add" ? "amount-in" : "amount-out"}">${item.type === "add" ? "+" : "−"} ${esc(cur())} ${fmt(item.amount)}</td>
+    <td class="cell-amount ${item.type === "add" ? "amount-in" : "amount-out"}">${item.type === "add" ? "+" : "−"} ${esc(cur())} ${fmt(item.amount)}</td>
   `;
   makeRowDeletable(row, () => deleteSecondChoiceItem(item));
   makeRowEditable(row, item, () => editSecondChoice(item));
   return row;
+}
+
+// Plays the entrance on the row just added, found by the entry it shows.
+function animateNewRow(host, item) {
+  const row = Array.from(host.children).find(r => r._item === item);
+  if (!row || prefersReducedMotion()) return;
+  row.classList.add("item-enter");
+  requestAnimationFrame(() => row.classList.add("item-enter-active"));
 }
 
 // Renders the second choice transactions table
@@ -2830,7 +2878,7 @@ function renderSecondChoice() {
 
   if (data.secondChoice.length === 0) {
     if (carried === 0) {
-      scTable.innerHTML = '<tr><td colspan="4"><div class="empty-state-rich"><strong>No spending activity yet</strong><p>Use Money In or Expense above to record your first transaction.</p></div></td></tr>';
+      scTable.innerHTML = '<tr class="empty-row"><td colspan="4"><div class="empty-state-rich"><strong>No spending activity yet</strong><p>Use Money In or Expense above to record your first transaction.</p></div></td></tr>';
     }
     return;
   }
@@ -2917,7 +2965,7 @@ function cancelEditIfEditing(item) {
 function readSecondChoiceForm() {
   const name = scName.value.trim();
   const category = scCategory.value;
-  const amount = Number(scAmount.value);
+  const amount = inputAmount(scAmount);
 
   const fields = [
     { el: scName, valid: !!name },
@@ -2942,7 +2990,6 @@ function addSecondChoice(type, newMoney) {
   if (!form) return false;
   const { name, category, amount, fields } = form;
 
-  const backdated = !!scDate.value;
   const entry = { name, category, amount, type, date: resolveDate(scDate.value) };
   if (type === "add") entry.newMoney = newMoney !== false;
   data.secondChoice.push(entry);
@@ -2955,24 +3002,10 @@ function addSecondChoice(type, newMoney) {
   scDate.classList.add("is-empty");
   fields.forEach(f => f.el.classList.remove("input-error"));
 
-  if (backdated || data.secondChoice.length > HISTORY_PAGE_SIZE) {
-    // A picked date can belong anywhere in the list, so re-sort the table
-    renderSecondChoice();
-  } else {
-    const emptyRow = scTable.querySelector("td.empty-state, .empty-state-rich");
-    if (emptyRow) emptyRow.closest("tr").remove();
-    const newSc = data.secondChoice[data.secondChoice.length - 1];
-    const scRow = buildSecondChoiceRow(newSc);
-    scRow.classList.add("item-enter");
-    if (settings.sortOrder === "newest") {
-      const carriedRow = scTable.querySelector(".carried-row");
-      if (carriedRow) carriedRow.after(scRow);
-      else scTable.prepend(scRow);
-    } else {
-      scTable.appendChild(scRow);
-    }
-    requestAnimationFrame(() => scRow.classList.add("item-enter-active"));
-  }
+  /* Re-rendered rather than inserted, so the new row lands under the right
+     day heading wherever its date puts it. */
+  renderSecondChoice();
+  animateNewRow(scTable, entry);
 
   calculateRemaining();
   celebrateForm(document.getElementById("second-choice-form"));
@@ -3389,21 +3422,24 @@ function renderProjection() {
     bar.classList.add("hidden");
     return;
   }
-  const projectedPct = Math.min(Math.max(((income - projected) / income) * 100, 0), 100);
+  // Spending once the bills are paid - wallet money excluded, like the bar.
+  const reserved = Math.max(spendingBreakdownOf(data, allWallets()).inWallets, 0);
+  const projectedPct = Math.min(Math.max(((income - projected - reserved) / income) * 100, 0), 100);
   bar.style.width = `${projectedPct}%`;
   bar.classList.remove("hidden");
 }
 
 function calculateRemaining(skipChart = false) {
   renderIncome();
+  renderBackupReminder();
   updateBillsProgress();
   renderProjection();
   renderActivityFinder();
   renderRecentActivity();
 
   const incomeTotal = totalIncomeOf(data, allWallets());
-  const hasIncome = incomeTotal !== null &&
-    (moneyCents(incomeTotal) > 0 || settings.cycleEnabled === false || data.signedCarry === true);
+  // Any set income counts, zero included - a spending-only cycle is started.
+  const hasIncome = incomeTotal !== null;
   setupMonth.classList.toggle("hidden", hasIncome);
   homeSummary.classList.toggle("hidden", !hasIncome && incomeInput.classList.contains("hidden"));
   cycleSummary.classList.toggle("hidden", !hasIncome);
@@ -3425,13 +3461,15 @@ function calculateRemaining(skipChart = false) {
   updateRemainingDisplay(remaining);
 
   const income = moneyValue(totalIncomeOf(data, allWallets()));
-  const spent = moneyValue(income - remaining);
   const breakdown = spendingBreakdownOf(data, allWallets());
   const reserved = moneyValue(Math.max(breakdown.inWallets, 0));
   document.getElementById("summary-spent").textContent = `${cur()} ${fmt(breakdown.spent)}`;
   document.getElementById("summary-bills").textContent = `${cur()} ${fmt(unpaidPriorityOf(data))}`;
   document.getElementById("summary-wallets").textContent = `${cur()} ${fmt(reserved)}`;
-  const pct = income > 0 ? Math.min(Math.max((spent / income) * 100, 0), 100) : 0;
+  /* Real spending only. Money moved into a wallet has left the Available
+     figure but has not been spent, so counting it here made the bar read
+     "40% spent" beside a Spent figure of RM 12. */
+  const pct = income > 0 ? Math.min(Math.max((breakdown.spent / income) * 100, 0), 100) : 0;
   const fill = document.getElementById("spend-bar-fill");
   const label = document.getElementById("spend-bar-label");
   const limitMark = document.getElementById("spend-bar-limit");
@@ -3442,7 +3480,9 @@ function calculateRemaining(skipChart = false) {
   setSpendLevel(fill, label, pct);
 
   if (settings.cycleEnabled !== false && settings.budgetLimit && income > 0) {
-    const limitSpendPct = ((income - settings.budgetLimit) / income) * 100;
+    // The spending at which Available would reach the limit, given what is
+    // already set aside in wallets.
+    const limitSpendPct = ((income - reserved - settings.budgetLimit) / income) * 100;
     limitMark.style.left = `${Math.min(Math.max(limitSpendPct, 0), 100)}%`;
     limitMark.classList.remove("hidden");
   } else {
@@ -3902,7 +3942,7 @@ const budgetLimitInput = document.getElementById("budget-limit-input");
 budgetLimitInput.value = settings.budgetLimit || "";
 
 budgetLimitInput.addEventListener("change", () => {
-  const val = Number(budgetLimitInput.value);
+  const val = inputAmount(budgetLimitInput);
   settings.budgetLimit = val > 0 ? val : null;
   if (!val) budgetLimitInput.value = "";
   saveSettings();
@@ -4394,13 +4434,38 @@ renderAllCategorySettings();
 ========================= */
 const recurringModal = document.getElementById("recurring-modal");
 const recurringList = document.getElementById("recurring-list");
+/* The category is chosen from the app's own lists - bill categories for a
+   bill, spending categories otherwise - so a recurring entry can never invent
+   a stray category (and chart colour) through a typo. */
+function renderRecurringCategoryOptions() {
+  const type = document.getElementById("recurring-type");
+  const select = document.getElementById("recurring-category");
+  if (!type || !select) return;
+  const keep = select.value;
+  const list = type.value === "bill" ? "priority" : "secondChoice";
+  renderCategoryOptions(select, list, (settings.categories[list] || []).includes(keep) ? keep : undefined);
+}
+
 function renderRecurring() {
+  renderRecurringCategoryOptions();
   recurringList.innerHTML = settings.recurring.length
     ? settings.recurring.map((item, index) => `<div class="wallet-settings-row"><span>${esc(item.name)}<small>${esc(item.type)} · ${esc(item.category || "Others")} · ${esc(cur())} ${fmt(item.amount)}</small></span><button data-recurring-delete="${index}" aria-label="Remove ${esc(item.name)}">✕</button></div>`).join("")
     : '<p class="setting-note">No recurring transactions yet.</p>';
   recurringList.querySelectorAll("[data-recurring-delete]").forEach(btn => btn.addEventListener("click", () => {
-    settings.recurring.splice(Number(btn.dataset.recurringDelete), 1);
-    saveSettings(); renderRecurring();
+    const index = Number(btn.dataset.recurringDelete);
+    const [removed] = settings.recurring.splice(index, 1);
+    if (!removed) return;
+    renderRecurring();
+    // Staged like every other deletion: saved when the undo window closes.
+    showUndo(
+      `"${removed.name}" removed from recurring`,
+      () => saveSettings(),
+      () => {
+        settings.recurring.splice(Math.min(index, settings.recurring.length), 0, removed);
+        saveSettings();
+        renderRecurring();
+      }
+    );
   }));
 }
 document.getElementById("open-recurring-panel-btn").addEventListener("click", () => {
@@ -4408,14 +4473,16 @@ document.getElementById("open-recurring-panel-btn").addEventListener("click", ()
   renderRecurring(); revealSurface(recurringModal);
 });
 document.getElementById("close-recurring").addEventListener("click", () => concealSurface(recurringModal));
+document.getElementById("recurring-type").addEventListener("change", renderRecurringCategoryOptions);
+
 document.getElementById("add-recurring").addEventListener("click", () => {
   const name = document.getElementById("recurring-name");
   const type = document.getElementById("recurring-type");
   const category = document.getElementById("recurring-category");
   const amount = document.getElementById("recurring-amount");
-  if (!name.value.trim() || !(Number(amount.value) > 0)) { name.classList.toggle("input-error", !name.value.trim()); amount.classList.toggle("input-error", !(Number(amount.value) > 0)); return; }
-  settings.recurring.push({ name: name.value.trim(), type: type.value, category: category.value.trim() || "Others", amount: Number(amount.value) });
-  saveSettings(); name.value = category.value = amount.value = ""; renderRecurring();
+  if (!name.value.trim() || !isValidAmount(inputAmount(amount))) { name.classList.toggle("input-error", !name.value.trim()); amount.classList.toggle("input-error", !isValidAmount(inputAmount(amount))); return; }
+  settings.recurring.push({ name: name.value.trim(), type: type.value, category: category.value || "Others", amount: inputAmount(amount) });
+  saveSettings(); name.value = amount.value = ""; renderRecurring();
 });
 
 const backupStatus = document.getElementById("backup-status");
@@ -4945,7 +5012,66 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
     : `money-tracker-${currentMonthKey}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  writeReminderTime(LAST_EXPORT_KEY, Date.now());
+  renderBackupReminder();
 });
+
+/* =========================
+   BACKUP REMINDER
+
+   Kept in its own small localStorage keys, outside every financial record, so
+   it can never affect a balance, an import, or the "records changed in
+   another tab" check. A person who has never exported is counted from the day
+   this version first ran, so an existing user is not nagged on the spot.
+========================= */
+const LAST_EXPORT_KEY = "mony-last-export";
+const FIRST_SEEN_KEY = "mony-first-seen";
+const BACKUP_SNOOZE_KEY = "mony-backup-snooze";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const BACKUP_REMINDER_DAYS = 30;
+const BACKUP_SNOOZE_DAYS = 7;
+
+function readReminderTime(key) {
+  try {
+    const value = Number(localStorage.getItem(key));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch (_) { return 0; }
+}
+
+function writeReminderTime(key, value) {
+  try { localStorage.setItem(key, String(value)); } catch (_) { /* a reminder only */ }
+}
+
+if (!readReminderTime(FIRST_SEEN_KEY)) writeReminderTime(FIRST_SEEN_KEY, Date.now());
+
+function renderBackupReminder() {
+  // calculateRemaining runs during boot, before the constants above exist.
+  if (!renderBackupReminder.ready) return;
+  const card = document.getElementById("backup-reminder");
+  if (!card) return;
+  const lastExport = readReminderTime(LAST_EXPORT_KEY);
+  const since = lastExport || readReminderTime(FIRST_SEEN_KEY) || Date.now();
+  const hasRecords = !monthIsUnset(data) || Object.keys(archive).length > 0;
+  const due = hasRecords && Date.now() - since >= BACKUP_REMINDER_DAYS * DAY_MS &&
+    Date.now() >= readReminderTime(BACKUP_SNOOZE_KEY);
+  card.classList.toggle("hidden", !due);
+  if (!due) return;
+  const days = Math.floor((Date.now() - lastExport) / DAY_MS);
+  document.getElementById("backup-reminder-text").textContent =
+    (lastExport ? `Your last backup was ${days} days ago. ` : "You haven't exported a backup yet. ") +
+    "Your records are only on this device - a backup file keeps them safe if it is lost or its browser data is cleared.";
+}
+
+renderBackupReminder.ready = true;
+
+document.getElementById("backup-reminder-export").addEventListener("click", () => {
+  document.getElementById("export-data-btn").click();
+});
+document.getElementById("backup-reminder-later").addEventListener("click", () => {
+  writeReminderTime(BACKUP_SNOOZE_KEY, Date.now() + BACKUP_SNOOZE_DAYS * DAY_MS);
+  renderBackupReminder();
+});
+renderBackupReminder();
 
 /* Reserves exactly as much room at the foot of the app view as the fixed tab
    bar occupies. Measured rather than hard-coded: the bar's height depends on

@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.47.1</div>
+            <div class="setting-version">v1.48.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -330,6 +330,19 @@
 
     </section>
 
+    <!-- Shown about once a month by renderBackupReminder(). The records live
+         only in this browser, so an exported file is the one copy that
+         survives a lost phone or cleared browser data. -->
+    <section id="backup-reminder" class="backup-reminder hidden" aria-labelledby="backup-reminder-title">
+      <span class="section-eyebrow">Protect your records</span>
+      <h2 id="backup-reminder-title">Time for a backup</h2>
+      <p id="backup-reminder-text"></p>
+      <div class="backup-reminder-actions">
+        <button id="backup-reminder-export" class="primary" type="button">Export backup</button>
+        <button id="backup-reminder-later" type="button">Later</button>
+      </div>
+    </section>
+
     <section id="recent-section" class="recent-section hidden" aria-labelledby="recent-title">
       <div class="section-heading-row">
         <div><span class="section-eyebrow">Latest</span><h3 id="recent-title">Recent Activity</h3></div>
@@ -435,7 +448,7 @@
         </div>
       </div>
 
-      <table>
+      <table class="day-list">
         <thead>
           <tr>
             <th>Name</th>
@@ -800,7 +813,7 @@
       <div class="second-form recurring-form">
         <input id="recurring-name" placeholder="Name" />
         <select id="recurring-type"><option value="bill">Bill</option><option value="expense">Expense</option><option value="income">Income</option></select>
-        <input id="recurring-category" placeholder="Category" />
+        <select id="recurring-category" aria-label="Category"></select>
         <input id="recurring-amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="Amount" />
       </div>
       <div class="modal-actions">
