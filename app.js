@@ -997,6 +997,60 @@ function renderCategoryOptions(select, list, keep) {
   }
   if (keep) select.value = keep;
   else select.selectedIndex = 0;
+  renderCategoryChips(select);
+}
+
+/* The category is picked from buttons, three to a row, instead of a dropdown.
+   The <select> stays as the hidden holder of the value, so saving, editing
+   and validation read it exactly as before. Each button carries the colour
+   the chart gives that category. */
+function renderCategoryChips(select) {
+  let grid = select.nextElementSibling;
+  if (!grid || !grid.classList.contains("category-picks")) {
+    grid = document.createElement("div");
+    grid.className = "category-picks";
+    grid.setAttribute("role", "radiogroup");
+    grid.setAttribute("aria-label", "Category");
+    select.after(grid);
+    select.classList.add("category-select");
+    select.tabIndex = -1;
+    select.setAttribute("aria-hidden", "true");
+    // Validation marks the select; show that on the buttons too.
+    new MutationObserver(() => syncCategoryChips(select))
+      .observe(select, { attributes: true, attributeFilter: ["class"] });
+    grid.addEventListener("click", e => {
+      const chip = e.target.closest(".category-pick");
+      if (!chip) return;
+      select.value = chip.dataset.value;
+      select.classList.remove("input-error");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      syncCategoryChips(select);
+    });
+  }
+  grid.innerHTML = "";
+  [...select.options].filter(o => o.value).forEach(o => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "category-pick";
+    chip.dataset.value = o.value;
+    chip.setAttribute("role", "radio");
+    chip.style.setProperty("--pick-color", categoryColor(o.value));
+    chip.innerHTML = `<span class="category-pick-dot" aria-hidden="true"></span><span class="category-pick-name">${esc(o.textContent)}</span>`;
+    grid.appendChild(chip);
+  });
+  syncCategoryChips(select);
+}
+
+// Marks the button that matches the select's current value.
+function syncCategoryChips(select) {
+  const grid = select && select.nextElementSibling;
+  if (!grid || !grid.classList.contains("category-picks")) return;
+  grid.classList.toggle("input-error", select.classList.contains("input-error"));
+  grid.querySelectorAll(".category-pick").forEach(chip => {
+    const on = chip.dataset.value === select.value;
+    chip.classList.toggle("is-selected", on);
+    chip.setAttribute("aria-checked", on ? "true" : "false");
+  });
 }
 
 // Rebuilds both category dropdowns from settings.
@@ -1847,6 +1901,7 @@ addPriorityBtn.addEventListener("click", () => {
 
   pbName.value = "";
   pbCategory.selectedIndex = 0;
+  syncCategoryChips(pbCategory);
   pbAmount.value = "";
   fields.forEach(f => f.el.classList.remove("input-error"));
 
@@ -3177,6 +3232,7 @@ function addSecondChoice(type, newMoney) {
 
   scName.value = "";
   scCategory.selectedIndex = 0;
+  syncCategoryChips(scCategory);
   scAmount.value = "";
   scDate.value = "";
   scDate.classList.add("is-empty");

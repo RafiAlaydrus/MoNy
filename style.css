@@ -2947,3 +2947,60 @@ table.day-list tr.history-page-control > td { display: block; }
 
 /* Under the income box while editing: what the total adds on top. */
 .income-edit-note { margin:8px 0 0; color:var(--text-secondary); font-size:12px; line-height:1.45; }
+
+/* Category buttons - replace the category dropdown in the Bills and Spending
+   forms. Three to a row; the hidden select keeps the value. Each button's dot
+   and selected tint use the colour the chart gives that category. */
+.second-form select.category-select { display:none; }
+.category-picks {
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:8px;
+  margin-bottom:10px;
+}
+.category-pick {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  min-width:0;
+  min-height:52px;
+  padding:6px 4px;
+  background:var(--surface-field);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-control);
+  color:#b0b0b0;
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  transition:background var(--motion-fast, .15s) ease, border-color var(--motion-fast, .15s) ease, color var(--motion-fast, .15s) ease;
+}
+.category-pick-dot {
+  flex:0 0 auto;
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--pick-color);
+}
+.category-pick-name {
+  min-width:0;
+  line-height:1.2;
+  text-align:center;
+  overflow-wrap:break-word;
+}
+.category-pick.is-selected {
+  border-color:var(--pick-color);
+  background:color-mix(in srgb, var(--pick-color) 22%, var(--surface-field));
+  color:#fff;
+}
+.category-pick:focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; }
+.category-picks.input-error .category-pick { border-color:#e8e8e8; }
+.category-picks.input-error { animation:shake var(--motion-standard) ease; }
+:root[data-theme="light"] .category-pick { background:#fff; border-color:#d2d2cd; color:#4a4a46; }
+:root[data-theme="light"] .category-pick.is-selected {
+  border-color:var(--pick-color);
+  background:color-mix(in srgb, var(--pick-color) 16%, #fff);
+  color:#1a1a1a;
+}
+:root[data-theme="light"] .category-picks.input-error .category-pick { border-color:#1a1a1a; }
