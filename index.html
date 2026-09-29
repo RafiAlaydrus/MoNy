@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.48.2</div>
+            <div class="setting-version">v1.49.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -311,7 +311,7 @@
              is waiting. -->
         <section id="cycle-summary" class="cycle-summary hidden" aria-label="Current cycle summary">
           <button type="button" class="summary-cell summary-income" id="income-card" aria-label="Edit income">
-            <span>Income</span><strong id="total-income-display">RM 0</strong>
+            <span>Total income</span><strong id="total-income-display">RM 0</strong>
           </button>
           <div class="summary-cell"><span>Spent</span><strong id="summary-spent">RM 0.00</strong></div>
           <div class="summary-cell"><span>Bills left</span><strong id="summary-bills">RM 0.00</strong></div>
@@ -324,8 +324,11 @@
           id="total-income-input"
           placeholder="Enter income (RM)"
           class="income-input hidden"
-          aria-label="Total income"
+          aria-label="Income"
         />
+        <!-- Shown while editing when the total includes money that is not
+             typed here, so "correcting" the box cannot count it twice. -->
+        <p id="income-edit-note" class="income-edit-note hidden"></p>
       </div>
 
     </section>
@@ -598,6 +601,7 @@
           <option value="all">All types</option>
           <option value="expense">Expenses</option>
           <option value="income">Income</option>
+          <option value="returned">Money back</option>
           <option value="transfer">Transfers</option>
           <option value="bill">Paid bills</option>
         </select>

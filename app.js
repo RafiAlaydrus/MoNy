@@ -134,7 +134,9 @@ function showAppDialog({ title = "Couldn't finish that", message = "", confirmLa
   return new Promise(resolve => {
     const queue = showAppDialog.queue || (showAppDialog.queue = []);
     queue.push({ title, message, confirmLabel, cancelLabel, resolve });
-    if (queue.length === 1) presentAppDialog();
+    // Also presents when the dialog is hidden with messages still queued, so
+    // a dialog closed by any other route can never strand the ones after it.
+    if (queue.length === 1 || document.getElementById("app-dialog").classList.contains("hidden")) presentAppDialog();
   });
 }
 
@@ -158,6 +160,15 @@ function settleAppDialog(confirmed) {
   window.MoNyUI.concealSurface(document.getElementById("app-dialog"));
   current.resolve(confirmed);
   if (queue.length) setTimeout(presentAppDialog, 140);
+}
+
+// Closes the dialog and answers everything still waiting as cancelled - used
+// when the month changes underneath it.
+function dismissAppDialogs() {
+  const queue = showAppDialog.queue || [];
+  showAppDialog.queue = [];
+  queue.forEach(item => item.resolve(false));
+  window.MoNyUI.concealSurface(document.getElementById("app-dialog"), true);
 }
 
 document.getElementById("confirm-app-dialog").addEventListener("click", () => settleAppDialog(true));
@@ -491,7 +502,7 @@ if (!data) {
  * Extracted from the startup path so the exact same code can run later
  * without a reload - see checkCycleRollover at the bottom of this file.
  * `data` is mutated IN PLACE rather than reassigned, the same reason
- * restoreSnapshot does: by the time this runs live, closures and cached
+ * an undo does: by the time this runs live, closures and cached
  * nodes already exist, and swapping the object out from under them would
  * leave them writing into a month that is no longer on screen. */
 function performRollover(today) {
@@ -1174,36 +1185,42 @@ let undoTimeout = null;
    that had since taken it over. */
 let noticeTimeout = null;
 
-/* Pending undoable actions, oldest first.
- *
- * This was a single slot, so deleting two things in quick succession stranded
- * the first one - the toast showed only the second and the first could never
- * be taken back. It is a stack now: each Undo takes back the most recent
- * action and then re-offers the one before it, so a run of mistaken deletions
- * can be walked back one at a time.
- *
- * Order matters and must stay LIFO. Several of these undos restore a whole
- * month snapshot taken before their own action, so replaying them out of
- * order would reinstate a state that never existed.
- */
+/* Undoable actions, oldest first.
+
+   Every deletion is SAVED the moment it happens; an entry here only knows how
+   to put back exactly what that deletion took out. Two older designs are why
+   it works this way:
+
+   - Deletions used to be staged and written only when the 5-second bar ran
+     out, so closing the app inside that window quietly brought the entry
+     back.
+   - Undo used to restore a whole-month snapshot taken before the deletion,
+     which also wiped out anything added or edited after it, and replaced the
+     object an open edit form was pointing at.
+
+   It is a stack, so a run of mistaken deletions can be walked back one at a
+   time. Entries are tied to the month they were made in, and anything that
+   replaces the month (a new cycle, a mode switch, deleting all history,
+   closing a wallet) clears the stack, so an undo can never write into
+   records it no longer belongs to. */
 let undoStack = [];
 
-/* Full-month snapshots are not small, and the stack only exists to cover a
-   burst of quick mistakes. Past this, the oldest is committed for real. */
+// Past this, the oldest is dropped - the stack covers a burst of quick mistakes.
 const UNDO_STACK_LIMIT = 10;
 
-// Commits one entry - the action becomes permanent and leaves the stack.
-function commitUndoEntry(entry) {
-  if (entry && typeof entry.onExpire === "function") entry.onExpire();
+// Which month an undo belongs to. An undo made in another month is dropped.
+function undoToken() {
+  return `${data.month}|${data.cycleStart}|${settings.cycleEnabled === false ? "endless" : "monthly"}`;
 }
 
-/* Commits everything still pending. Called when the toast times out: the
-   window has closed on all of them, not just the one being shown. Oldest
-   first, so each writes over the last in the order the user acted. */
-function flushUndoStack() {
-  const pending = undoStack;
+// Drops every pending undo and hides the toast if it was offering one.
+function clearUndoStack() {
   undoStack = [];
-  pending.forEach(commitUndoEntry);
+  if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
+  if (!undoToast.classList.contains("hidden") && !undoBtn.classList.contains("hidden")) {
+    undoToast.classList.add("hidden");
+    undoToast.classList.remove("fading");
+  }
 }
 
 // Paints the toast for whatever is currently on top and restarts the timer.
@@ -1234,23 +1251,19 @@ function showTopUndo() {
       undoToast.classList.add("hidden");
       undoToast.classList.remove("fading");
       undoTimeout = null;
-      flushUndoStack();
+      // The window has closed. The deletions are already saved, so nothing
+      // is left to write - the offers simply expire.
+      undoStack = [];
     }, MOTION_FAST_MS);
   }, 5000);
 }
 
-/* Registers an undoable action and shows the toast.
- *
- * Signature unchanged, so every caller keeps working: `onExpire` commits the
- * action once the window closes, `onUndo` takes it back. */
-function showUndo(message, onExpire, onUndo) {
-  undoStack.push({ message, onExpire, onUndo });
-
-  // Past the cap the oldest is no longer offerable, so make it permanent.
-  while (undoStack.length > UNDO_STACK_LIMIT) {
-    commitUndoEntry(undoStack.shift());
-  }
-
+/* Registers an undoable action that has ALREADY been saved, and shows the
+   toast. `onUndo` puts it back; it may return false when that is no longer
+   possible, and says why itself. */
+function showUndo(message, onUndo) {
+  undoStack.push({ message, onUndo, token: undoToken() });
+  while (undoStack.length > UNDO_STACK_LIMIT) undoStack.shift();
   showTopUndo();
 }
 
@@ -1268,11 +1281,10 @@ undoBtn.addEventListener("click", () => {
   haptic(8);
 
   const entry = undoStack.pop();
-  if (entry && typeof entry.onUndo === "function") entry.onUndo();
+  if (entry && entry.token === undoToken() && typeof entry.onUndo === "function") entry.onUndo();
 
-  /* Re-offer the previous action rather than dropping it. Without this the
-     stack would still hold it but nothing would ever show it again, which is
-     the single-slot bug wearing a different hat. */
+  /* Re-offer the previous action rather than dropping it, so a run of
+     deletions can be walked back one at a time. */
   if (undoStack.length > 0) showTopUndo();
   else hideUndo();
 });
@@ -1396,7 +1408,35 @@ function startIncomeEdit() {
   homeSummary.classList.remove("hidden");
   incomeInput.classList.remove("hidden");
   incomeInput.value = data.income ?? "";
+  renderIncomeEditNote();
   incomeInput.focus();
+}
+
+/* Total income can include money that is not typed into this box - money
+   brought forward, and new money recorded in Spending. Say so while editing,
+   or someone "correcting" the box to match the total counts it twice. */
+function renderIncomeEditNote() {
+  const note = document.getElementById("income-edit-note");
+  if (!note) return;
+  const total = totalIncomeOf(data, allWallets());
+  const carried = carryOverOf(data);
+  const moneyIn = total === null ? 0 : moneyValue(total - (Number(data.income) || 0) - carried);
+  const parts = [];
+  if (moneyCents(carried) > 0) parts.push(`${cur()} ${fmt(carried)} brought forward`);
+  if (moneyCents(moneyIn) > 0) parts.push(`${cur()} ${fmt(moneyIn)} money in`);
+  note.textContent = parts.length
+    ? `Type your own income only. ${parts.join(" and ")} ${parts.length === 1 ? "is" : "are"} added on top automatically.`
+    : "";
+  note.classList.toggle("hidden", !parts.length || incomeInput.classList.contains("hidden"));
+}
+
+/* The amount placeholders follow the currency setting. They were fixed "(RM)"
+   in the markup, so they kept saying RM after switching to another currency. */
+function renderCurrencyPlaceholders() {
+  const c = cur();
+  incomeInput.placeholder = `Enter income (${c})`;
+  document.getElementById("pb-amount").placeholder = `Amount (${c})`;
+  scAmount.placeholder = `Amount (${c})`;
 }
 
 incomeCard.addEventListener("click", startIncomeEdit);
@@ -1410,6 +1450,7 @@ function saveIncome() {
      accepted. Empty or negative input leaves the income as it was. */
   if (!Number.isFinite(value) || value < 0) {
     incomeInput.classList.add("hidden");
+    renderIncomeEditNote();
     calculateRemaining();
     return;
   }
@@ -1418,6 +1459,7 @@ function saveIncome() {
   saveData();
 
   incomeInput.classList.add("hidden");
+  renderIncomeEditNote();
   renderIncome();
   calculateRemaining();
 }
@@ -1478,13 +1520,20 @@ function editPriorityBill(bill) {
       });
       if (bad) return false;
 
-      bill.name = name;
-      bill.category = category;
-      bill.amount = amount;
-      saveData();
-      renderPriority();
-      calculateRemaining();
-      return true;
+      const apply = () => {
+        bill.name = name;
+        bill.category = category;
+        bill.amount = amount;
+        saveData();
+        renderPriority();
+        calculateRemaining();
+        return true;
+      };
+      // Only a paid bill has taken money from the main balance.
+      return confirmEditFromMain({
+        grow: bill.paid ? moneyValue(amount - Number(bill.amount)) : 0,
+        name, amount, apply
+      });
     }
   };
   setFormEditing(root, true);
@@ -1501,16 +1550,20 @@ function buildPriorityItem(bill) {
 
   const li = document.createElement("li");
   li.classList.toggle("is-paid", !!bill.paid);
-  /* The whole left side is the label, so tapping the name ticks the bill just
-     as tapping the circle does; the amount side opens it for editing. */
+  /* Only the round tick marks a bill paid - its label is just the 44px area
+     around the circle. Tapping the name or the amount opens the bill for
+     editing. The label used to wrap the name too, so one tap on the name both
+     paid the bill and opened it. */
   li.innerHTML = `
-    <label class="bill-row">
-      <input type="checkbox" class="bill-check" ${bill.paid ? "checked" : ""} aria-label="Mark ${esc(bill.name)} as paid" />
+    <div class="bill-row">
+      <label class="bill-tick">
+        <input type="checkbox" class="bill-check" ${bill.paid ? "checked" : ""} aria-label="Mark ${esc(bill.name)} as paid" />
+      </label>
       <span class="bill-text">
         <span class="bill-name">${esc(bill.name)}</span>
         <span class="bill-meta">${esc(bill.category)}</span>
       </span>
-    </label>
+    </div>
     <strong class="bill-amount">${esc(cur())} ${fmt(bill.amount)}</strong>
   `;
 
@@ -1560,20 +1613,25 @@ function buildPriorityItem(bill) {
       if (index === -1) return;
       cancelEditIfEditing(bill);
       data.priority.splice(index, 1);
+      if (!saveData()) {
+        data.priority.splice(index, 0, bill);
+        renderPriority();
+        calculateRemaining();
+        return;
+      }
 
       renderPriority();
       calculateRemaining();
 
-      showUndo(
-        `"${bill.name}" deleted`,
-        () => saveData(),
-        () => {
-          data.priority.splice(Math.min(index, data.priority.length), 0, bill);
-          saveData();
-          renderPriority();
-          calculateRemaining();
-        }
-      );
+      // Saved already; undo puts back this one bill and nothing else.
+      showUndo(`"${bill.name}" deleted`, () => {
+        if (data.priority.includes(bill)) return true;
+        data.priority.splice(Math.min(index, data.priority.length), 0, bill);
+        saveData();
+        renderPriority();
+        calculateRemaining();
+        return true;
+      });
     });
   }
 
@@ -1859,78 +1917,123 @@ function transferPartyName(id, fallback) {
   return fallback || "deleted wallet";
 }
 
-// Removes a transfer's matching half so money is never created or destroyed
-// by deleting only one side. Both halves share a txId.
-function removeTransferCounterparts(txId, exceptItem) {
-  if (!txId) return 0;
-  let removed = 0;
+/* The list an entry lives in, named rather than held by reference, so an
+   undo always writes into the month's CURRENT list. */
+function entryList(where) {
+  return where === "main" ? data.secondChoice : ensureWalletData(where).items;
+}
 
-  Object.values(data.walletData).forEach(wd => {
-    for (let i = (wd.items || []).length - 1; i >= 0; i--) {
-      const it = wd.items[i];
-      if (it !== exceptItem && it.txId === txId) { wd.items.splice(i, 1); removed++; }
-    }
-  });
-  for (let i = data.secondChoice.length - 1; i >= 0; i--) {
-    const it = data.secondChoice[i];
-    if (it !== exceptItem && it.txId === txId) { data.secondChoice.splice(i, 1); removed++; }
+/* Takes an entry out of its list and, for a transfer, the other half that
+   shares its txId - so money is never created or destroyed by deleting only
+   one side. Returns every piece removed with where it was, which is exactly
+   what an undo needs to put back. */
+function removeEntryAndPartners(item, where) {
+  const removed = [];
+  const takeOut = (from, entry) => {
+    const list = entryList(from);
+    const index = list.indexOf(entry);
+    if (index === -1) return;
+    list.splice(index, 1);
+    removed.push({ where: from, index, entry });
+  };
+  takeOut(where, item);
+  if (item.txId) {
+    Object.keys(data.walletData || {}).forEach(id => {
+      (data.walletData[id].items || [])
+        .filter(entry => entry !== item && entry.txId === item.txId)
+        .forEach(entry => takeOut(id, entry));
+    });
+    data.secondChoice
+      .filter(entry => entry !== item && entry.txId === item.txId)
+      .forEach(entry => takeOut("main", entry));
   }
-
   return removed;
 }
 
-// Restores a whole-month snapshot taken before a deletion. Simpler and safer
-// than un-splicing both halves of a transfer in the right order.
-function restoreSnapshot(snapshot) {
-  const revived = JSON.parse(snapshot);
-  // Mutate in place so nothing holds a stale reference to the old object
-  Object.keys(data).forEach(k => { delete data[k]; });
-  Object.assign(data, revived);
-  saveData();
+// Puts removed pieces back where they were, last removed first, so every
+// saved position still refers to the list as it was at that moment.
+function putBackEntries(removed) {
+  [...removed].reverse().forEach(({ where, index, entry }) => {
+    const list = entryList(where);
+    if (list.includes(entry)) return;
+    list.splice(Math.min(index, list.length), 0, entry);
+  });
+}
+
+function takeOutAgain(removed) {
+  removed.forEach(({ where, entry }) => {
+    const list = entryList(where);
+    const index = list.indexOf(entry);
+    if (index !== -1) list.splice(index, 1);
+  });
+}
+
+function overdrawnWallet() {
+  return allWallets().find(w => moneyCents(getWalletBalance(w.id)) < 0) || null;
+}
+
+/* Undo for a deleted entry: puts back only what was removed, so anything
+   added or edited since stays exactly as it is - and an open edit keeps
+   pointing at the same object. Refused when a wallet has since spent the
+   money it would need. */
+function undoRemoval(removed) {
+  putBackEntries(removed);
+  const overdrawn = overdrawnWallet();
+  if (overdrawn) {
+    takeOutAgain(removed);
+    appAlert(`Putting it back would leave ${overdrawn.name} below zero, because that money has been spent since.`,
+      "Can't undo");
+    return false;
+  }
+  if (!saveData()) { takeOutAgain(removed); return false; }
   renderWallets();
   renderSecondChoice();
-  renderPriority();
   calculateRemaining();
+  return true;
 }
 
 // Deletes one wallet transaction (plus the other half if it was a transfer)
 function deleteWalletItem(wallet, item, tbody, section) {
   cancelEditIfEditing(item);
-  const wd = ensureWalletData(wallet.id);
-  const index = wd.items.indexOf(item);
-  if (index === -1) return;
+  if (!ensureWalletData(wallet.id).items.includes(item)) return;
 
-  const snapshot = JSON.stringify(data);
-
-  wd.items.splice(index, 1);
-  const pairedRemoved = removeTransferCounterparts(item.txId, item);
+  const removed = removeEntryAndPartners(item, wallet.id);
 
   /* Removing money that came INTO a wallet (a top-up, or a transfer's
      incoming half) after some of it was spent would leave that wallet below
-     zero, which the books cannot represent. Put everything back and say why. */
-  const overdrawn = allWallets().find(w => moneyCents(getWalletBalance(w.id)) < 0);
+     zero, which the books cannot represent. Put it back and say why. */
+  const overdrawn = overdrawnWallet();
   if (overdrawn) {
-    restoreSnapshot(snapshot);
+    putBackEntries(removed);
+    renderWallets();
+    renderSecondChoice();
+    calculateRemaining();
     appAlert(`Deleting "${item.name}" would leave ${overdrawn.name} below zero, because some of that money has already been spent. Delete or reduce the spending from ${overdrawn.name} first.`,
       "Can't delete this entry");
     return;
   }
+  removed.forEach(({ entry }) => cancelEditIfEditing(entry));
+  if (!saveData()) {
+    putBackEntries(removed);
+    renderWallets();
+    renderSecondChoice();
+    calculateRemaining();
+    return;
+  }
 
+  const pairedRemoved = removed.length > 1;
   if (pairedRemoved) {
     renderWallets();
+    renderSecondChoice();
   } else {
     renderWalletItemsTable(wallet, tbody, section);
     renderWalletCard(wallet, section);
   }
-  // An ordinary wallet transaction does not change main activity. A transfer
-  // does, because its counterpart may live there.
-  if (pairedRemoved) renderSecondChoice();
   calculateRemaining();
 
   showUndo(
     pairedRemoved ? `"${item.name}" transfer deleted` : `"${item.name}" deleted`,
-    () => saveData(),
-    () => restoreSnapshot(snapshot)
+    () => undoRemoval(removed)
   );
 }
 
@@ -2261,7 +2364,9 @@ function buildWalletSection(wallet) {
 
   function saveBudget() {
     const value = inputAmount(budgetInput);
-    if (!isValidAmount(value)) {
+    /* Zero is allowed: it hands the whole budget back to the main balance.
+       Empty or negative input leaves the budget as it was. */
+    if (!Number.isFinite(value) || value < 0) {
       budgetInput.classList.add("hidden");
       return;
     }
@@ -2289,7 +2394,7 @@ function buildWalletSection(wallet) {
 
     budgetInput.classList.remove("input-error");
     budgetHint.classList.add("hidden");
-    wd.budget = value;
+    wd.budget = value > 0 ? value : null;
     saveData();
     budgetInput.classList.add("hidden");
     renderWalletCard(wallet, section);
@@ -2428,13 +2533,20 @@ function buildWalletSection(wallet) {
           }
         }
 
-        item.name = name;
-        item.amount = amount;
-        item.date = resolveDate(dateInput.value);
-        saveData();
-        renderWallet(wallet);
-        calculateRemaining();
-        return true;
+        const apply = () => {
+          item.name = name;
+          item.amount = amount;
+          item.date = editedDate(item, dateInput.value);
+          saveData();
+          renderWallet(wallet);
+          calculateRemaining();
+          return true;
+        };
+        // A bigger top-up takes more from the main balance - ask if it isn't there.
+        return confirmEditFromMain({
+          grow: item.type === "add" ? moneyValue(amount - Number(item.amount)) : 0,
+          name, amount, apply, excludeWalletId: wallet.id
+        });
       }
     };
     setFormEditing(form, true);
@@ -2819,22 +2931,38 @@ cancelOverspendBtn.addEventListener("click", () => {
 // Deletes one Second choice entry (plus the wallet half if it was a transfer)
 function deleteSecondChoiceItem(item) {
   cancelEditIfEditing(item);
-  const index = data.secondChoice.indexOf(item);
-  if (index === -1) return;
+  if (!data.secondChoice.includes(item)) return;
 
-  const snapshot = JSON.stringify(data);
+  const removed = removeEntryAndPartners(item, "main");
 
-  data.secondChoice.splice(index, 1);
-  const pairedRemoved = removeTransferCounterparts(item.txId, item);
+  // A transfer's wallet half goes with it - refused if the wallet has spent it.
+  const overdrawn = overdrawnWallet();
+  if (overdrawn) {
+    putBackEntries(removed);
+    renderSecondChoice();
+    renderWallets();
+    calculateRemaining();
+    appAlert(`Deleting "${item.name}" would leave ${overdrawn.name} below zero, because some of that money has already been spent. Delete or reduce the spending from ${overdrawn.name} first.`,
+      "Can't delete this entry");
+    return;
+  }
+  removed.forEach(({ entry }) => cancelEditIfEditing(entry));
+  if (!saveData()) {
+    putBackEntries(removed);
+    renderSecondChoice();
+    renderWallets();
+    calculateRemaining();
+    return;
+  }
 
+  const pairedRemoved = removed.length > 1;
   renderSecondChoice();
   if (pairedRemoved) renderWallets();
   calculateRemaining();
 
   showUndo(
     pairedRemoved ? `"${item.name}" transfer deleted` : `"${item.name}" deleted`,
-    () => saveData(),
-    () => restoreSnapshot(snapshot)
+    () => undoRemoval(removed)
   );
 }
 
@@ -2854,8 +2982,8 @@ function makeRowEditable(row, item, onEdit) {
   row.classList.add("row-editable");
   row.addEventListener("click", (e) => {
     if (row._swipeMoved) return;
-    // The checkbox on a priority row owns its own click.
-    if (e.target.closest("input, button, a")) return;
+    // The tick on a bill row owns its own click, label included.
+    if (e.target.closest("input, button, a, label")) return;
     onEdit();
   });
 }
@@ -2939,6 +3067,14 @@ function isEditable(item) {
 }
 
 // Formats a stored timestamp for a date input, which needs exactly YYYY-MM-DD.
+/* The date an edited entry should keep. Its stored timestamp stays exactly as
+   it is unless a different day is picked - re-resolving the same day stamped
+   it with the current time, moving it within the day and in Recent. */
+function editedDate(item, picked) {
+  if (!picked || picked === dateInputValue(item.date)) return item.date;
+  return resolveDate(picked);
+}
+
 function dateInputValue(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -2965,6 +3101,29 @@ function setFormEditing(root, on, saveLabel = "Save changes") {
   others.forEach(el => el.classList.toggle("hidden", on));
   if (cancel) cancel.classList.toggle("hidden", !on);
   root.classList.toggle("is-editing", on);
+}
+
+/* An edit that pulls more out of the main balance than it has left asks the
+   same question adding does - cover it from a wallet, record it anyway, or
+   cancel - instead of quietly taking the balance negative. `grow` is how much
+   further the edit reaches into main. Returns true when applied now, false
+   while the question is open (the form stays in edit mode until answered). */
+function confirmEditFromMain({ grow, name, amount, apply, excludeWalletId }) {
+  const available = getMainRemaining();
+  if (!(grow > 0) || hasEnough(available, grow)) return apply();
+  askOverspend({
+    amount: grow,
+    available,
+    label: `Changing "${name}" to ${cur()} ${fmt(amount)}`,
+    transferName: name,
+    excludeWalletId,
+    proceed: () => {
+      const done = apply();
+      if (done !== false) cancelEdit();
+      return done;
+    }
+  });
+  return false;
 }
 
 // Leaves edit mode without writing anything, and clears the form.
@@ -3075,14 +3234,23 @@ function editSecondChoice(item) {
       if (!form) return false;
       /* Written in place so the entry keeps its position in the list and its
          identity - deletion resolves rows by object, not index. */
-      item.name = form.name;
-      item.category = form.category;
-      item.amount = form.amount;
-      item.date = resolveDate(scDate.value);
-      saveData();
-      renderSecondChoice();
-      calculateRemaining();
-      return true;
+      const picked = scDate.value;
+      const apply = () => {
+        item.name = form.name;
+        item.category = form.category;
+        item.amount = form.amount;
+        item.date = editedDate(item, picked);
+        saveData();
+        renderSecondChoice();
+        calculateRemaining();
+        return true;
+      };
+      /* A bigger expense, or smaller money in, takes more out of the main
+         balance - the same "Not enough left" question adding asks. */
+      const grow = item.type === "take"
+        ? moneyValue(form.amount - Number(item.amount))
+        : moneyValue(Number(item.amount) - form.amount);
+      return confirmEditFromMain({ grow, name: form.name, amount: form.amount, apply });
     }
   };
   setFormEditing(root, true);
@@ -3210,7 +3378,10 @@ function activityIndex() {
   (data.secondChoice || []).forEach(item => records.push({
     name: item.name, category: item.category || "Others", amount: Number(item.amount) || 0,
     date: item.date, source: "main", sourceLabel: "Main balance",
-    type: isTransferEntry(item) ? "transfer" : item.type === "add" ? "income" : "expense",
+    /* Money coming back is not income - it cancels earlier spending - so it
+       is its own kind rather than green "income". */
+    type: isTransferEntry(item) ? "transfer" : isReimbursement(item) ? "returned"
+      : item.type === "add" ? "income" : "expense",
     direction: item.type === "add" ? 1 : -1, txId: item.txId
   }));
 
@@ -3248,10 +3419,14 @@ function recentDateLabel(value) {
   return entryDateLabel(value).text || (settings.cycleEnabled === false ? "All time" : "This cycle");
 }
 
-// Green is for money that arrived. A transfer only moved between your own
-// balances, so it stays neutral whichever way it went.
+// Green is for new income only. A transfer only moved between your own
+// balances, and money coming back only undoes spending, so both stay neutral.
 function activityAmountClass(record) {
-  return record.direction > 0 && record.type !== "transfer" ? "amount-in" : "amount-out";
+  return record.type === "income" ? "amount-in" : "amount-out";
+}
+
+function activityTypeLabel(type) {
+  return type === "bill" ? "Paid bill" : type === "returned" ? "money back" : type;
 }
 
 /* Recent means what has already happened. An entry dated after today is
@@ -3285,7 +3460,7 @@ function renderRecentActivity() {
   recentViewAll.classList.remove("hidden");
   recentActivity.innerHTML = records.map(record => `
     <div class="recent-row">
-      <div class="recent-main"><strong>${esc(record.name)}</strong><span>${esc(record.category)} · ${esc(record.type === "bill" ? "Paid bill" : record.type)}</span></div>
+      <div class="recent-main"><strong>${esc(record.name)}</strong><span>${esc(record.category)} · ${esc(activityTypeLabel(record.type))}</span></div>
       <div class="recent-side"><strong class="${activityAmountClass(record)}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</strong><span>${esc(recentDateLabel(record.date))}</span></div>
     </div>`).join("");
 }
@@ -3364,7 +3539,7 @@ function renderActivityFinder() {
         <div class="activity-result-meta">${esc(record.category)} · ${esc(record.sourceLabel)}</div>
       </div>
       <div class="activity-result-amount ${activityAmountClass(record)}">${record.direction > 0 ? "+" : "−"} ${esc(cur())} ${fmt(record.amount)}</div>
-      <div class="activity-result-meta">${esc(record.type === "bill" ? "Paid bill" : record.type)}</div>
+      <div class="activity-result-meta">${esc(activityTypeLabel(record.type))}</div>
       <div class="activity-result-date">${esc(entryDateLabel(record.date).text)}</div>`;
     return result;
   }, 0, scope);
@@ -3490,13 +3665,17 @@ function calculateRemaining(skipChart = false) {
   /* Real spending only. Money moved into a wallet has left the Available
      figure but has not been spent, so counting it here made the bar read
      "40% spent" beside a Spent figure of RM 12. */
-  const pct = income > 0 ? Math.min(Math.max((breakdown.spent / income) * 100, 0), 100) : 0;
+  /* With no income there is no percentage to give: any spending at all is
+     the whole of it, and the label says the amount instead of "0% spent". */
+  const pct = income > 0
+    ? Math.min(Math.max((breakdown.spent / income) * 100, 0), 100)
+    : breakdown.spent > 0 ? 100 : 0;
   const fill = document.getElementById("spend-bar-fill");
   const label = document.getElementById("spend-bar-label");
   const limitMark = document.getElementById("spend-bar-limit");
 
   fill.style.width = `${pct}%`;
-  label.textContent = `${Math.round(pct)}% spent`;
+  label.textContent = income > 0 ? `${Math.round(pct)}% spent` : `${cur()} ${fmt(breakdown.spent)} spent`;
 
   setSpendLevel(fill, label, pct);
 
@@ -3723,6 +3902,7 @@ function renderChart() {
 ========================= */
 
 wireDateInput(scDate);
+renderCurrencyPlaceholders();
 
 const scTableEl = scTable.closest("table");
 scTableEl.parentNode.insertBefore(buildTableToggle("secondChoice", scTableEl), scTableEl);
@@ -3906,6 +4086,7 @@ currencySelect.value = settings.currency;
 currencySelect.addEventListener("change", () => {
   settings.currency = currencySelect.value;
   saveSettings();
+  renderCurrencyPlaceholders();
   renderIncome();
   renderPriority();
   renderWallets();
@@ -4452,6 +4633,8 @@ confirmDeleteWalletBtn.addEventListener("click", () => {
     // Keep this month's history; rollover purges the closed wallet later.
     wallet.deleted = true;
   })) return;
+  // An undo could otherwise put money back into the closed wallet.
+  clearUndoStack();
   concealSurface(deleteWalletModal);
   walletPendingDelete = null;
   renderWallets();
@@ -4490,17 +4673,16 @@ function renderRecurring() {
     const index = Number(btn.dataset.recurringDelete);
     const [removed] = settings.recurring.splice(index, 1);
     if (!removed) return;
+    saveSettings();
     renderRecurring();
-    // Staged like every other deletion: saved when the undo window closes.
-    showUndo(
-      `"${removed.name}" removed from recurring`,
-      () => saveSettings(),
-      () => {
-        settings.recurring.splice(Math.min(index, settings.recurring.length), 0, removed);
-        saveSettings();
-        renderRecurring();
-      }
-    );
+    // Saved already, like every other deletion; undo puts back this one.
+    showUndo(`"${removed.name}" removed from recurring`, () => {
+      if (settings.recurring.includes(removed)) return true;
+      settings.recurring.splice(Math.min(index, settings.recurring.length), 0, removed);
+      saveSettings();
+      renderRecurring();
+      return true;
+    });
   }));
 }
 document.getElementById("open-recurring-panel-btn").addEventListener("click", () => {
@@ -5554,20 +5736,23 @@ function buildHistoryRow(key) {
 // Deletes one archived month with undo
 function deleteArchivedMonth(key) {
   const removed = archive[key];
+  if (!removed) return;
   delete archive[key];
+  if (!saveArchive()) {
+    archive[key] = removed;
+    renderHistory();
+    return;
+  }
   renderHistory();
 
-  showUndo(
-    `${monthLabel(key)} deleted`,
-    () => {
-      saveArchive();
-    },
-    () => {
+  showUndo(`${monthLabel(key)} deleted`, () => {
+    if (!archive[key]) {
       archive[key] = removed;
       saveArchive();
-      renderHistory();
     }
-  );
+    renderHistory();
+    return true;
+  });
 }
 
 // Total app storage across all keys
@@ -5587,7 +5772,7 @@ function buildEndlessHistoryRow(entry, index) {
   row.innerHTML = `<div class="history-row-main" role="button" tabindex="0" aria-expanded="false" aria-label="Endless period from ${esc(started)} to ${esc(ended)}"><div><div class="history-month">Endless period</div><div class="history-sub">${esc(started)} – ${esc(ended)} · ${esc(c)} ${fmtWhole(s.spent)} spent</div></div><div class="history-right"><strong class="history-remaining">${esc(c)} ${fmtWhole(s.remaining)}</strong></div></div><div class="history-detail hidden"><span class="history-meta">${esc(counts)}</span><span class="history-meta">${esc(c)} ${fmt(s.inWallets)} in wallets · ${esc(c)} ${fmt(s.remaining)} in main</span><div class="endless-entry-list"></div></div>`;
   const records = [
     ...entry.data.priority.map(bill => ({ name: bill.name, type: bill.paid ? "Paid bill" : "Unpaid bill", amount: bill.amount, date: bill.date, direction: bill.paid ? -1 : 0 })),
-    ...entry.data.secondChoice.map(item => ({ name: item.name, type: isTransferEntry(item) ? "Transfer" : item.type === "add" ? "Money in" : "Expense", amount: item.amount, date: item.date, direction: item.type === "add" ? 1 : -1 })),
+    ...entry.data.secondChoice.map(item => ({ name: item.name, type: isTransferEntry(item) ? "Transfer" : isReimbursement(item) ? "Money back" : item.type === "add" ? "Money in" : "Expense", amount: item.amount, date: item.date, direction: item.type === "add" ? 1 : -1 })),
     ...entry.wallets.flatMap(wallet => (entry.data.walletData?.[wallet.id]?.items || []).map(item => ({ name: item.name, type: wallet.name, amount: item.amount, date: item.date, direction: isWalletInflow(item) ? 1 : -1 })))
   ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const head = row.querySelector(".history-row-main");
@@ -5767,6 +5952,8 @@ function switchCycleMode(enable) {
     restoreInPlace(data, fresh);
     currentMonthKey = fresh.month;
   }
+  // The month on screen is a different record now; no undo may reach back.
+  clearUndoStack();
   saveSnapshot();
   renderCycleModeUI();
   renderIncome(); renderPriority(); updatePriorityLockUI(); renderWallets(); renderSecondChoice(); calculateRemaining();
@@ -6252,6 +6439,8 @@ confirmArchiveDeleteBtn.addEventListener("click", () => {
   if (!result.ok) { appAlert(result.message); return; }
   archive = {};
   endlessArchive = [];
+  // "Cannot be undone" has to hold: no earlier undo may bring a month back.
+  clearUndoStack();
   saveSnapshot();
   concealSurface(archiveModal);
   renderHistory();
@@ -6483,11 +6672,10 @@ confirmResetBtn.addEventListener("click", () => {
 // hiding the button and the draining bar - neither means anything here,
 // because a rollover is not something the user can undo.
 function showNotice(message) {
-  if (undoTimeout) { clearTimeout(undoTimeout); undoTimeout = null; }
   /* Anything still undoable belongs to the month that just closed, and the
-     toast is about to be taken over by this notice - so commit it now rather
-     than leave entries pending with nothing on screen offering them. */
-  flushUndoStack();
+     toast is about to be taken over by this notice. The deletions are already
+     saved, so the offers are simply dropped. */
+  clearUndoStack();
 
   undoText.textContent = message;
   undoBtn.classList.add("hidden");
@@ -6526,8 +6714,11 @@ function showNotice(message) {
  * could correctly belong to.
  */
 function dismissOpenPrompts() {
+  /* The app's own dialog is closed through its queue, so whatever was waiting
+     on it is answered rather than left stuck in front of every later one. */
+  dismissAppDialogs();
   document.querySelectorAll(".modal").forEach(m => {
-    if ([onboardingWelcome, tutorialOverlay, tutorialExit].includes(m)) return;
+    if ([onboardingWelcome, tutorialOverlay, tutorialExit, document.getElementById("app-dialog")].includes(m)) return;
     concealSurface(m, true);
   });
   overspendCancel = null;
@@ -6623,7 +6814,7 @@ document.addEventListener("mony:before-update", (event) => {
     event.detail.message = "You have an unsaved entry. Save or clear it and MoNy updates by itself, or tap Update now to update anyway and clear it.";
     return;
   }
-  flushUndoStack();
+  clearUndoStack();
   if (!saveData()) {
     event.preventDefault();
     event.detail.message = "Your changes could not be saved. Export a backup before refreshing.";
@@ -6646,3 +6837,8 @@ window.addEventListener("resize", () => {
     if (!historyView.classList.contains("hidden")) renderHistory();
   }, 150);
 });
+
+/* Start-up has finished: every line above ran without throwing. From here on
+   an error is reported as a problem with what was being done, not as a broken
+   download of the app's files. */
+window.MoNySession?.ready?.();

@@ -23,6 +23,14 @@
   let lastCheck = readLastCheck();
   let activationTimer;
   let retryTimer;
+  /* "Later" means later. The update still installs on its own the moment it
+     is safe, but the banner is not put back over the screen on every
+     keystroke while an entry is being typed. */
+  let bannerDismissed = false;
+
+  function showBanner() {
+    if (!bannerDismissed) banner.classList.remove("hidden");
+  }
 
   function readLastCheck() {
     try {
@@ -58,6 +66,8 @@
   }
 
   function offerUpdate(worker) {
+    // A newer release than the one dismissed is worth mentioning again.
+    if (worker && worker !== waitingWorker) bannerDismissed = false;
     waitingWorker = worker;
     applyAvailableUpdate();
   }
@@ -76,7 +86,7 @@
     const guard = updateGuard(force === true);
     if (!guard.allowed) {
       message.textContent = guard.message;
-      banner.classList.remove("hidden");
+      showBanner();
       if (status) status.textContent = "Update ready. It will install automatically after your draft is saved.";
       scheduleAutomaticRetry();
       return;
@@ -95,7 +105,7 @@
         apply.disabled = false;
         apply.textContent = "Update now";
         message.textContent = "Automatic update paused. MoNy will retry shortly.";
-        banner.classList.remove("hidden");
+        showBanner();
         scheduleAutomaticRetry();
       }, 10000);
     } catch {
@@ -103,7 +113,7 @@
       apply.disabled = false;
       apply.textContent = "Update now";
       message.textContent = "Unable to apply the update. MoNy will retry when you are online.";
-      banner.classList.remove("hidden");
+      showBanner();
       scheduleAutomaticRetry();
     }
   }
@@ -121,7 +131,10 @@
   apply.addEventListener("click", () => {
     applyAvailableUpdate(true);
   });
-  dismiss.addEventListener("click", () => banner.classList.add("hidden"));
+  dismiss.addEventListener("click", () => {
+    bannerDismissed = true;
+    banner.classList.add("hidden");
+  });
 
   function watchWorker(worker) {
     if (!worker) return;
@@ -135,6 +148,8 @@
 
   async function checkForUpdate(manual = false) {
     if (!registration) return;
+    // Asking for updates by hand brings a dismissed banner back.
+    if (manual) bannerDismissed = false;
     if (registration.waiting || reloadReady) {
       offerUpdate(registration.waiting);
       return;

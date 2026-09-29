@@ -2803,6 +2803,9 @@ body.tutorial-active {
 
 #priority-list li:not(.empty-state-rich) { min-height:58px; padding:8px 0; gap:12px; }
 .bill-row { display:flex; align-items:center; gap:12px; min-width:0; flex:1; cursor:pointer; }
+/* A 44px tap area around the 26px tick, pulled back in with negative margins
+   so the row does not move. */
+.bill-tick { display:grid; place-items:center; flex:0 0 auto; width:44px; height:44px; margin:-9px; cursor:pointer; }
 .bill-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
 .bill-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; font-weight:600; color:var(--text-primary); }
 .bill-meta { color:var(--text-tertiary); font-size:12px; }
@@ -2941,3 +2944,6 @@ table.day-list tr.history-page-control > td { display: block; }
 }
 .backup-reminder-actions .primary { border-color: transparent; background: var(--surface-action); color: var(--text-on-action); }
 :root[data-theme="light"] .backup-reminder { background: #fff; }
+
+/* Under the income box while editing: what the total adds on top. */
+.income-edit-note { margin:8px 0 0; color:var(--text-secondary); font-size:12px; line-height:1.45; }
