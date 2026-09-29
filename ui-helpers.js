@@ -74,5 +74,44 @@
     }, duration);
   }
 
-  global.MoNyUI = { prefersReducedMotion, playTransient, revealSurface, concealSurface };
+  /* While any dialog or sheet is open the page behind it must not scroll.
+     iOS ignores overflow:hidden on the body for touch scrolling, so the body
+     is pinned in place with position:fixed at its current offset, and put
+     back exactly where it was when the last dialog closes. The guided tour
+     scrolls the page to what it points at, so its overlay is left out.
+     Watching class changes covers every way a dialog opens or closes. */
+  let lockedScrollY = null;
+  function openDialogs() {
+    return Array.from(document.querySelectorAll(".modal:not(.hidden)"))
+      .filter(el => !el.classList.contains("is-closing") && !el.classList.contains("tutorial-overlay"));
+  }
+  function updateScrollLock() {
+    const body = document.body;
+    if (!body) return;
+    const shouldLock = openDialogs().length > 0;
+    if (shouldLock && lockedScrollY === null) {
+      lockedScrollY = global.scrollY || 0;
+      body.classList.add("scroll-locked");
+      body.style.top = `-${lockedScrollY}px`;
+    } else if (!shouldLock && lockedScrollY !== null) {
+      const y = lockedScrollY;
+      lockedScrollY = null;
+      body.classList.remove("scroll-locked");
+      body.style.top = "";
+      global.scrollTo(0, y);
+    }
+  }
+  let lockCheckQueued = false;
+  function queueScrollLockCheck() {
+    if (lockCheckQueued) return;
+    lockCheckQueued = true;
+    Promise.resolve().then(() => { lockCheckQueued = false; updateScrollLock(); });
+  }
+  if (typeof global.MutationObserver === "function" && document.documentElement) {
+    new global.MutationObserver(records => {
+      if (records.some(r => r.target.classList && r.target.classList.contains("modal"))) queueScrollLockCheck();
+    }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["class"] });
+  }
+
+  global.MoNyUI = { prefersReducedMotion, playTransient, revealSurface, concealSurface, updateScrollLock };
 })(window);

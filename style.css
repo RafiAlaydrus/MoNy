@@ -3004,3 +3004,13 @@ table.day-list tr.history-page-control > td { display: block; }
   color:#1a1a1a;
 }
 :root[data-theme="light"] .category-picks.input-error .category-pick { border-color:#1a1a1a; }
+
+/* Set by ui-helpers.js while a dialog or sheet is open: the page behind it is
+   pinned so it cannot scroll (iOS ignores overflow:hidden for touch). */
+body.scroll-locked {
+  position: fixed;
+  left: 0;
+  right: 0;
+  width: 100%;
+  overflow: hidden;
+}
