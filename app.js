@@ -1905,6 +1905,17 @@ function deleteWalletItem(wallet, item, tbody, section) {
   wd.items.splice(index, 1);
   const pairedRemoved = removeTransferCounterparts(item.txId, item);
 
+  /* Removing money that came INTO a wallet (a top-up, or a transfer's
+     incoming half) after some of it was spent would leave that wallet below
+     zero, which the books cannot represent. Put everything back and say why. */
+  const overdrawn = allWallets().find(w => moneyCents(getWalletBalance(w.id)) < 0);
+  if (overdrawn) {
+    restoreSnapshot(snapshot);
+    appAlert(`Deleting "${item.name}" would leave ${overdrawn.name} below zero, because some of that money has already been spent. Delete or reduce the spending from ${overdrawn.name} first.`,
+      "Can't delete this entry");
+    return;
+  }
+
   if (pairedRemoved) {
     renderWallets();
   } else {
@@ -2402,6 +2413,16 @@ function buildWalletSection(wallet) {
         if (item.type === "take") {
           const balanceExcludingThis = getWalletBalance(wallet.id) + Number(item.amount);
           if (!hasEnough(balanceExcludingThis, amount)) {
+            amountInput.classList.add("input-error");
+            return false;
+          }
+        }
+        /* Lowering money added to the wallet must not take back more than it
+           still holds - what has already been spent from it would push the
+           balance negative, which the books cannot represent. */
+        if (isWalletInflow(item)) {
+          const balanceExcludingThis = getWalletBalance(wallet.id) - Number(item.amount);
+          if (moneyCents(balanceExcludingThis + amount) < 0) {
             amountInput.classList.add("input-error");
             return false;
           }
