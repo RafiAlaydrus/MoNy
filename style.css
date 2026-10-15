@@ -37,136 +37,144 @@
   --ease-native: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-native: cubic-bezier(0.4, 0, 1, 1);
   --ease-spring: cubic-bezier(0.34, 1.5, 0.64, 1);
+  /* QUIET LEDGER palette. Dark is true black with iOS-style grouped greys; the
+     one accent is blue and is used only for things you can tap, plus the
+     "today" mark. --accent is for text and icons on a surface; --accent-fill
+     is the (slightly deeper) button fill that still gives white text 4.5:1. */
   --surface-page: #000;
-  --surface-card: #111;
-  --surface-raised: #171717;
-  --surface-field: #1a1a1a;
-  --border-subtle: #242424;
-  --border-strong: #303030;
-  --text-primary: #f5f5f5;
-  --text-secondary: #a0a0a0;
-  --text-tertiary: #929292;
-  --surface-action: #e8e8e8;
-  --text-on-action: #0a0a0a;
-  --focus-ring: #b0b0b0;
-  --radius-control: 10px;
-  --radius-card: 16px;
-  --radius-sheet: 20px;
+  --surface-card: #1c1c1e;
+  --surface-raised: #2c2c2e;
+  --surface-field: #2c2c2e;
+  --surface-bar: rgba(28, 28, 30, 0.82);
+  --border-subtle: #38383a;
+  --border-strong: #48484a;
+  --text-primary: #ffffff;
+  --text-secondary: #aeaeb2;
+  --text-tertiary: #98989d;
+  --accent: #0a84ff;
+  --accent-fill: #0a6fe0;
+  --on-accent: #ffffff;
+  --surface-action: var(--accent-fill);
+  --text-on-action: var(--on-accent);
+  --focus-ring: var(--accent);
+  /* Big figures are set in the system's rounded face (Safari/iOS); every other
+     browser falls back to the regular system face. */
+  --font-num: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  --num-weight: 600;
+  /* Soft corners. */
+  --radius-control: 14px;
+  --radius-card: 20px;
+  --radius-sheet: 30px;
   --space-page: 20px;
   --space-card: 16px;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+  --shadow-card: none;
   --shadow-sheet: 0 24px 70px rgba(0, 0, 0, 0.72), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
-  --shadow-nav: 0 -12px 34px rgba(0, 0, 0, 0.45);
+  --shadow-nav: 0 10px 30px rgba(0, 0, 0, 0.55);
   --semantic-in:#7fae8c;
-  --semantic-out:#c78181;
+  --semantic-out:#ff453a;
+  --danger-fill:#d70015;
 }
 
-/* Light is intentionally a quiet paper version of the same monochrome system,
-   not a separate visual identity. System leaves the existing dark PWA chrome
-   untouched and follows the device where the browser supports it. */
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="light"] body { background:#f5f5f3; color:#171717; }
+:root[data-theme="light"] body { background:var(--surface-page); color:var(--text-primary); }
 :root[data-theme="light"] .app,
-:root[data-theme="light"] #history-view { background:#f5f5f3; color:#171717; }
+:root[data-theme="light"] #history-view { background:var(--surface-page); color:var(--text-primary); }
 :root[data-theme="light"] .card,
 :root[data-theme="light"] .chart-container,
 :root[data-theme="light"] .settings-panel,
-:root[data-theme="light"] .modal-card { background:#fff; color:#171717; border-color:#ddd; box-shadow:0 1px 0 rgba(0,0,0,.04); }
+:root[data-theme="light"] .modal-card { background:var(--surface-card); color:var(--text-primary); border-color:var(--border-subtle); box-shadow:0 1px 0 rgba(0,0,0,.04); }
 :root[data-theme="light"] input,
 :root[data-theme="light"] select,
 :root[data-theme="light"] textarea,
 :root[data-theme="light"] .setting-select,
-:root[data-theme="light"] .setting-input { background:#f2f2f0; color:#171717; border-color:#d0d0cc; color-scheme:light; }
+:root[data-theme="light"] .setting-input { background:var(--surface-field); color:var(--text-primary); border-color:var(--border-strong); color-scheme:light; }
 :root[data-theme="light"] .settings-btn,
 :root[data-theme="light"] .setting-row,
-:root[data-theme="light"] #tab-bar { background:rgba(255,255,255,.92); border-color:#ddd; }
-:root[data-theme="light"] .setting-btn-action { background:#e8e8e5; color:#222; }
-:root[data-theme="light"] .settings-group { background:#fafaf8; border-color:#deded9; }
+:root[data-theme="light"] #tab-bar { background:var(--surface-bar); border-color:var(--border-subtle); }
+:root[data-theme="light"] .setting-btn-action { background:var(--surface-raised); color:var(--text-primary); }
+:root[data-theme="light"] .settings-group { background:var(--surface-raised); border-color:var(--border-subtle); }
 
 /* Complete light palette. The app started dark-only, so a few individual
    components intentionally used explicit dark fills instead of tokens. Keep
    those overrides together here; light mode must never leave dark text on a
    dark surface, or white text on a white surface. */
+/* Light is "Warm": cream paper with the same grouped structure as dark. The
+   secondary and tertiary text are deliberately darker than a first pass would
+   pick - the lighter tans measured under 4.5:1 on the cream. */
 :root[data-theme="light"] {
-  --surface-page:#f5f5f3;
-  --surface-card:#ffffff;
-  --surface-raised:#f6f6f4;
-  --surface-field:#f3f3f1;
-  --border-subtle:#deded9;
-  --border-strong:#c9c9c3;
-  --text-primary:#171717;
-  --text-secondary:#62625f;
-  --text-tertiary:#656560;
-  --surface-action:#202020;
-  --text-on-action:#fff;
-  --focus-ring:#575751;
-  --shadow-card:0 1px 2px rgba(0,0,0,.05);
-  --shadow-sheet:0 24px 70px rgba(0,0,0,.18),0 1px 0 rgba(0,0,0,.04) inset;
-  --shadow-nav:0 -6px 24px rgba(0,0,0,.08);
-  --semantic-in:#327048;
-  --semantic-out:#9b3f3f;
+  color-scheme: light;
+  --surface-page:#f6f1e7;
+  --surface-card:#fffaf0;
+  --surface-raised:#f1ebdd;
+  --surface-field:#f1ebdd;
+  --surface-bar:rgba(255,250,240,.84);
+  --border-subtle:#e6dcc8;
+  --border-strong:#d3c7ad;
+  --text-primary:#1c1a16;
+  --text-secondary:#5f594d;
+  --text-tertiary:#6b6458;
+  --accent:#0062cc;
+  --accent-fill:#0062cc;
+  --shadow-card:none;
+  --shadow-sheet:0 24px 70px rgba(60,40,0,.2),0 1px 0 rgba(255,255,255,.5) inset;
+  --shadow-nav:0 10px 28px rgba(60,40,0,.14);
+  --semantic-in:#2f6b45;
+  --semantic-out:#c2412d;
 }
 :root[data-theme="light"] .card,
 :root[data-theme="light"] .chart-container,
-:root[data-theme="light"] .history-row { background:#fff; }
-:root[data-theme="light"] #priority-list { background:#fff; }
+:root[data-theme="light"] .history-row { background:var(--surface-card); }
+:root[data-theme="light"] #priority-list { background:var(--surface-card); }
 :root[data-theme="light"] .second-form,
-:root[data-theme="light"] .wallet-form { background:#f7f7f5; }
-:root[data-theme="light"] #priority-list li { background:#fff; border-color:#e4e4e0; color:#1a1a1a; }
+:root[data-theme="light"] .wallet-form { background:var(--surface-card); }
+:root[data-theme="light"] #priority-list li { background:var(--surface-card); border-color:var(--border-subtle); color:var(--text-primary); }
 :root[data-theme="light"] .second-form input,
 :root[data-theme="light"] .second-form select,
 :root[data-theme="light"] .wallet-card input,
-:root[data-theme="light"] .wallet-form input { background:#fff; border-color:#d2d2cd; color:#1a1a1a; }
-:root[data-theme="light"] .second-form select option { background:#fff; color:#1a1a1a; }
+:root[data-theme="light"] .wallet-form input { background:var(--surface-card); border-color:var(--border-strong); color:var(--text-primary); }
+:root[data-theme="light"] .second-form select option { background:var(--surface-card); color:var(--text-primary); }
 :root[data-theme="light"] .second-form input::placeholder,
 :root[data-theme="light"] .second-form select:invalid,
 :root[data-theme="light"] .date-placeholder { color:var(--text-tertiary); }
 :root[data-theme="light"] .second-form input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
 :root[data-theme="light"] .table-toggle,
 :root[data-theme="light"] thead,
-:root[data-theme="light"] .wallets-count { color:#6a6a66; border-color:#d9d9d4; }
-:root[data-theme="light"] tbody tr { border-color:#deded9; }
+:root[data-theme="light"] .wallets-count { color:var(--text-tertiary); border-color:var(--border-subtle); }
+:root[data-theme="light"] tbody tr { border-color:var(--border-subtle); }
 :root[data-theme="light"] #take-money,
 :root[data-theme="light"] #save-priority,
-:root[data-theme="light"] .actions [data-role="take-btn"] { border-color:#bdbdb8; color:#454541; }
-:root[data-theme="light"] .transfer-btn { border-color:#bdbdb8; color:#5d5d59; }
-:root[data-theme="light"] .transfer-btn:active { background:#ecece8; }
-:root[data-theme="light"] .spend-bar-track { background:#e1e1dd; }
-:root[data-theme="light"] .spend-bar-fill { background:#30302e; }
-:root[data-theme="light"] .spend-bar-limit { background:#1d1d1c; }
+:root[data-theme="light"] .actions [data-role="take-btn"] { border-color:var(--border-strong); color:var(--text-secondary); }
+:root[data-theme="light"] .transfer-btn { border-color:var(--border-strong); color:var(--text-secondary); }
+:root[data-theme="light"] .transfer-btn:active { background:var(--surface-raised); }
 :root[data-theme="light"] .spend-bar-label,
-:root[data-theme="light"] .projection-line { color:#60605c; }
+:root[data-theme="light"] .projection-line { color:var(--text-tertiary); }
 :root[data-theme="light"] .chart-head-value,
-:root[data-theme="light"] .legend-amount { color:#1a1a1a; }
-:root[data-theme="light"] .legend-item { color:#5d5d59; }
-:root[data-theme="light"] .legend-divide { border-color:#d4d4d0; }
-:root[data-theme="light"] .chart-bar-empty { background:#e2e2de; }
-:root[data-theme="light"] .lock-badge { background:#e7e7e3; border-color:#d0d0ca; color:#5d5d59; }
+:root[data-theme="light"] .legend-amount { color:var(--text-primary); }
+:root[data-theme="light"] .legend-item { color:var(--text-secondary); }
+:root[data-theme="light"] .legend-divide { border-color:var(--border-subtle); }
+:root[data-theme="light"] .chart-bar-empty { background:var(--border-subtle); }
+:root[data-theme="light"] .lock-badge { background:var(--surface-raised); border-color:var(--border-strong); color:var(--text-secondary); }
 :root[data-theme="light"] .transfer-dest-btn,
-:root[data-theme="light"] .stat-cell { background:#f4f4f1; border-color:#deded9; color:#20201e; }
+:root[data-theme="light"] .stat-cell { background:var(--surface-raised); border-color:var(--border-subtle); color:var(--text-primary); }
 :root[data-theme="light"] .transfer-dest-sub,
 :root[data-theme="light"] .stat-label,
 :root[data-theme="light"] .stat-sub,
 :root[data-theme="light"] .history-sub,
-:root[data-theme="light"] .history-meta { color:#72726d; }
-:root[data-theme="light"] .stat-value { color:#20201e; }
-:root[data-theme="light"] .history-detail { border-color:#deded9; }
-:root[data-theme="light"] .history-delete { border-color:#cacac5; color:#666661; }
-:root[data-theme="light"] .history-delete:active { background:#ecece8; }
+:root[data-theme="light"] .history-meta { color:var(--text-tertiary); }
+:root[data-theme="light"] .stat-value { color:var(--text-primary); }
+:root[data-theme="light"] .history-detail { border-color:var(--border-subtle); }
+:root[data-theme="light"] .history-delete { border-color:var(--border-strong); color:var(--text-tertiary); }
+:root[data-theme="light"] .history-delete:active { background:var(--surface-raised); }
 :root[data-theme="light"] .empty-state,
 :root[data-theme="light"] .empty-state-rich,
 :root[data-theme="light"] .chart-empty,
 :root[data-theme="light"] .trend-empty { color:var(--text-secondary); }
-:root[data-theme="light"] .empty-state-rich { border-color:#cacac5; }
-:root[data-theme="light"] .tab-btn.is-active svg { background:#e7e7e3; box-shadow:none; }
-:root[data-theme="light"] .settings-btn:active { background:#e7e7e3; color:var(--text-primary); }
-:root[data-theme="light"] .toggle-slider { background:#d5d5d0; }
-:root[data-theme="light"] .toggle input:checked + .toggle-slider { background:#202020; box-shadow:none; }
+:root[data-theme="light"] .empty-state-rich { border-color:var(--border-strong); }
+:root[data-theme="light"] .settings-btn:active { background:var(--surface-raised); color:var(--text-primary); }
+:root[data-theme="light"] .toggle-slider { background:var(--border-strong); }
+:root[data-theme="light"] .toggle input:checked + .toggle-slider { background:var(--accent-fill); box-shadow:none; }
 :root[data-theme="light"] .toggle input:checked + .toggle-slider::before { background:#fff; }
-:root[data-theme="light"] .spend-bar-projected { background:#bcbcb6; }
-:root[data-theme="light"] .activity-search-controls select option { background:#fff; color:#171717; }
+:root[data-theme="light"] .activity-search-controls select option { background:var(--surface-card); color:var(--text-primary); }
 :root[data-theme="light"] .activity-search-controls input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
-:root[data-theme="light"] .skeleton { background:linear-gradient(90deg,#e9e9e5 25%,#f3f3f0 50%,#e9e9e5 75%); background-size:220% 100%; }
 
 .wallet-settings-row small { display:block; margin-top:3px; color:var(--text-tertiary); font-size:11px; }
 .recurring-form { margin-top:14px; }
@@ -357,28 +365,28 @@ select:focus-visible {
 /* One panel is visible at a time; the rest carry `hidden`. They stay in the
    DOM so every render function finds its elements regardless of which tab is
    open - nothing needs to know about tabs. */
+/* A floating pill, detached from the screen edge. The 12px gap plus the
+   safe-area inset keeps it clear of the iPhone home indicator, and
+   syncTabBarSpace() measures from its TOP edge so the page still never parks a
+   row underneath it. */
 .tab-bar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  left: 14px;
+  right: 14px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   z-index: 40;
   display: flex;
-  max-width: 480px;
+  max-width: 452px;
   margin: 0 auto;
-  /* The extra bottom padding lifts the labels clear of the iPhone home
-     indicator, which sits inside the safe-area inset rather than below it -
-     inset alone left the words touching the bar. */
   gap: 2px;
-  padding: 7px 8px calc(16px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, rgba(15, 15, 15, 0.94), rgba(0, 0, 0, 0.97));
+  padding: 6px 8px;
+  background: var(--surface-bar);
   /* The blur is what stops content scrolling underneath from reading as a
      smear of grey behind the labels. */
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid var(--border-subtle);
-  border-bottom: none;
-  border-radius: 18px 18px 0 0;
+  border-radius: 26px;
   box-shadow: var(--shadow-nav);
 }
 
@@ -392,13 +400,11 @@ select:focus-visible {
   padding: 5px 0 4px;
   background: none;
   border: none;
-  /* Dim by default; the active tab is the only near-white one. Greyscale, so
-     brightness carries the selection the way colour would elsewhere. */
+  /* Quiet by default; the active tab takes the accent. */
   color: var(--text-tertiary);
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0;
   font-family: inherit;
   cursor: pointer;
   touch-action: manipulation;
@@ -408,20 +414,17 @@ select:focus-visible {
 }
 
 .tab-btn svg {
-  width: 28px;
-  height: 28px;
-  padding: 3px;
-  border-radius: 9px;
-  transition: background-color var(--motion-fast) ease, transform var(--motion-fast) var(--ease-native);
+  width: 26px;
+  height: 26px;
+  padding: 2px;
+  transition: transform var(--motion-fast) var(--ease-native);
 }
 
 .tab-btn.is-active {
-  color: var(--text-primary);
+  color: var(--accent);
 }
 
 .tab-btn.is-active svg {
-  background: #202020;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.045) inset;
   transform: translateY(-1px);
 }
 
@@ -637,9 +640,9 @@ select:focus-visible {
 .spend-bar-track {
   position: relative;
   width: 100%;
-  height: 6px;
-  background: #2a2a2a;
-  border-radius: 3px;
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: 2px;
   overflow: visible;
 }
 
@@ -652,7 +655,7 @@ select:focus-visible {
   position: relative;
   z-index: 1;
   height: 100%;
-  border-radius: 3px;
+  border-radius: 2px;
   width: 0%;
   transition: width var(--motion-emphasis) var(--ease-native),
               background var(--motion-emphasis) ease;
@@ -663,19 +666,19 @@ select:focus-visible {
    evenly and reads as a notch rather than part of the fill. */
 .spend-bar-limit {
   position: absolute;
-  top: -3px;
+  top: -4px;
   width: 2px;
   height: 12px;
-  background: #fff;
+  background: var(--text-primary);
   border-radius: 1px;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .spend-bar-label {
   display: block;
   margin-top: 4px;
   font-size: 11px;
-  color: #666;
+  color: var(--text-tertiary);
 }
 
 .budget-warning {
@@ -786,7 +789,7 @@ header p {
   padding:22px;
   border:1px solid var(--border-subtle);
   border-radius:var(--radius-card);
-  background:linear-gradient(145deg,#171717,#0d0d0d);
+  background:var(--surface-card);
   box-shadow:var(--shadow-card);
   margin-bottom:12px;
 }
@@ -794,7 +797,6 @@ header p {
 .setup-month p { margin:0 0 18px; color:var(--text-secondary); font-size:13px; line-height:1.5; }
 .setup-month button,
 .empty-action { min-height:44px; padding:11px 16px; border:0; border-radius:var(--radius-control); background:var(--surface-action); color:var(--text-on-action); font-weight:700; }
-:root[data-theme="light"] .setup-month { background:#fff; }
 
 /* =====================
    Summary Cards
@@ -806,8 +808,22 @@ header p {
   margin-bottom: 12px;
 }
 
-.available-card { padding:22px 20px 18px; }
-.available-card #remaining-money { font-size:clamp(34px,10vw,46px); letter-spacing:-.035em; }
+.card.available-card { padding:6px 2px 0; background:none; border:0; border-radius:0; box-shadow:none; }
+:root[data-theme="light"] .card.available-card { background:none; border:0; box-shadow:none; }
+.card.available-card > span { margin-bottom:2px; text-transform:none; letter-spacing:0; font-size:13px; font-weight:400; color:var(--text-secondary); }
+.available-card #remaining-money { max-width:100%; font-size:clamp(40px,13vw,54px); letter-spacing:-.03em; line-height:1.05; white-space:nowrap; }
+
+/* Big figures: the rounded face, with the cents set small beside the whole part.
+   textContent is unchanged ("RM 2,060.70"); only the markup around the cents
+   differs, so the count-up and everything that reads the text still work. */
+h2[data-fig],
+.chart-head-value {
+  font-family:var(--font-num);
+  font-weight:var(--num-weight);
+}
+[data-fig] small { font-size:.5em; font-weight:inherit; letter-spacing:0; }
+.available-card #remaining-money[data-size="long"] { font-size:clamp(32px,10.5vw,42px); }
+.available-card #remaining-money[data-size="xlong"] { font-size:clamp(24px,8.5vw,34px); }
 
 /* The supporting figures, inside the hero card under a hairline. Four equal
    cells on one row; each figure appears on Home exactly once. */
@@ -815,21 +831,42 @@ header p {
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
   gap:0;
-  margin:18px -4px 0;
+  margin:16px 0 0;
   padding-top:14px;
   border-top:1px solid var(--border-subtle);
 }
 .summary-cell { min-width:0; padding:4px; text-align:left; }
 .cycle-summary .summary-cell span,
 .cycle-summary .summary-cell strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.cycle-summary .summary-cell span { margin:0; color:var(--text-tertiary); font-size:11px; font-weight:650; text-transform:uppercase; letter-spacing:.08em; }
-.cycle-summary .summary-cell strong { margin-top:5px; color:var(--text-primary); font-size:13px; font-weight:650; }
+.cycle-summary .summary-cell span { margin:0; color:var(--text-tertiary); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em; }
+.cycle-summary .summary-cell strong { margin-top:4px; color:var(--text-primary); font-size:13px; font-weight:500; }
 /* Income is the one editable figure, so it is a real button - reset to look
    like its neighbours, with a dotted underline as the only "tap me" hint. */
 button.summary-cell { border:0; border-radius:8px; background:none; color:inherit; font:inherit; cursor:pointer; }
 button.summary-cell strong { text-decoration:underline dotted var(--border-strong); text-underline-offset:3px; }
 button.summary-cell:active { background:var(--surface-field); }
 .income-input { width:100%; margin-top:14px; padding:12px; border-radius:var(--radius-control); }
+
+/* =====================
+   Month rail
+===================== */
+.month-rail { margin:18px 0 0; }
+.rail-ticks { display:flex; justify-content:space-between; align-items:flex-end; height:20px; }
+.rail-ticks i {
+  display:block; width:2px; height:10px; border-radius:1px;
+  background:var(--border-strong);
+  transform-origin:bottom;
+  animation:rail-rise 480ms var(--ease-native) both;
+  animation-delay:calc(var(--i) * 12ms);
+}
+.rail-ticks i.past { background:var(--text-tertiary); opacity:.55; }
+.rail-ticks i.today { height:20px; background:var(--accent); opacity:1; }
+.rail-dots { position:relative; height:12px; margin-top:5px; }
+.rail-dots b { position:absolute; top:1px; width:7px; height:7px; margin-left:-3.5px; border-radius:50%; background:var(--text-tertiary); }
+.rail-dots b.late { background:var(--semantic-out); animation:rail-breathe 2.4s ease-in-out infinite; }
+.rail-labels { display:flex; justify-content:space-between; margin-top:2px; font-size:11px; color:var(--text-tertiary); }
+@keyframes rail-rise { from { transform:scaleY(0); } }
+@keyframes rail-breathe { 50% { opacity:.35; } }
 
 .recent-section { margin-bottom:22px; }
 .recent-activity { margin-top:10px; border:1px solid var(--border-subtle); border-radius:var(--radius-card); padding:0 var(--space-card); background:var(--surface-card); box-shadow:var(--shadow-card); }
@@ -863,7 +900,7 @@ button.summary-cell:active { background:var(--surface-field); }
 .section-note { margin:-6px 0 12px; color:var(--text-secondary); font-size:12px; line-height:1.45; }
 
 .card {
-  background: linear-gradient(145deg, #141414, var(--surface-card));
+  background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
   padding: var(--space-card);
@@ -957,7 +994,7 @@ h3 {
   right: 0;
   bottom: 0;
   width: 100%;
-  background: #2e2e2e;
+  background: var(--danger-fill);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -965,7 +1002,7 @@ h3 {
   color: #fff;
   font-size: 14px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 /* The sliding layer. background and z-index are what make the trick work:
@@ -1021,9 +1058,9 @@ h3 {
   padding: 12px;
   margin-bottom: 10px;
   background: var(--surface-field);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  color: #fff;
+  color: var(--text-primary);
   font-size: 15px;
   -webkit-appearance: none;
   appearance: none;
@@ -1038,23 +1075,23 @@ h3 {
 }
 
 .second-form select option {
-  background: #1a1a1a;
-  color: #fff;
+  background: var(--surface-card);
+  color: var(--text-primary);
 }
 
 .second-form input::placeholder,
 .second-form select:invalid {
-  color: #777;
+  color: var(--text-tertiary);
 }
 
 .second-form input:focus,
 .second-form select:focus {
   outline: none;
-  border-color: #3a3a3a;
+  border-color: var(--accent);
 }
 
 .second-form .input-error {
-  border-color: #e8e8e8;
+  border-color: var(--semantic-out);
   animation: shake var(--motion-standard) ease;
 }
 
@@ -1081,7 +1118,7 @@ h3 {
   display: none;
   align-items: center;
   padding-left: 13px;
-  color: #777;
+  color: var(--text-tertiary);
   font-size: 15px;
   pointer-events: none;
 }
@@ -1164,7 +1201,7 @@ h3 {
 .actions button {
   flex: 1;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   border: none;
   font-size: 15px;
   font-weight: 600;
@@ -1178,8 +1215,8 @@ h3 {
 
 #take-money {
   background: transparent;
-  border: 1px solid #333;
-  color: #b0b0b0;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
 }
 
 .actions button:active {
@@ -1284,7 +1321,7 @@ td {
    pickers grow with the number of wallets, and on a short screen with the
    keyboard up they must scroll internally rather than overflow the card. */
 .modal-card {
-  background: linear-gradient(155deg, var(--surface-raised), #101010 70%);
+  background: var(--surface-card);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sheet);
   padding: 20px;
@@ -1720,10 +1757,10 @@ body.tutorial-active {
   width: 100%;
   margin-top: 8px;
   padding: 10px;
-  border-radius: 12px;
-  border: 1px dashed #3a3a3a;
+  border-radius: var(--radius-control);
+  border: 1px dashed var(--border-strong);
   background: none;
-  color: #888;
+  color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
   min-height:44px;
@@ -1893,24 +1930,24 @@ body.tutorial-active {
   width: 100%;
   margin-top: 8px;
   padding: 10px;
-  border-radius: 12px;
-  border: 1px dashed #3a3a3a;
+  border-radius: var(--radius-control);
+  border: 1px dashed var(--border-strong);
   background: none;
-  color: #888;
+  color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
   min-height:44px;
 }
 
 .copy-last-btn:active {
-  background: #1a1a1a;
+  background: var(--surface-field);
 }
 
 /* Save Priority */
 #save-priority {
   background: transparent;
-  border: 1px solid #333;
-  color: #b0b0b0;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
 }
 
 /* =====================
@@ -1922,7 +1959,7 @@ body.tutorial-active {
 }
 
 .chart-container {
-  background: linear-gradient(145deg, #141414, var(--surface-card));
+  background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
   padding: var(--space-card);
@@ -2121,7 +2158,7 @@ body.tutorial-active {
 }
 
 .history-row {
-  background: linear-gradient(145deg, #141414, var(--surface-card));
+  background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
   padding: 14px var(--space-card);
@@ -2359,8 +2396,8 @@ body.tutorial-active {
   top: 0;
   height: 100%;
   width: 0%;
-  background: #4a4a4a;
-  border-radius: 3px;
+  background: var(--border-strong);
+  border-radius: 2px;
   z-index: 0;
   transition: width var(--motion-emphasis) var(--ease-native);
 }
@@ -2371,7 +2408,7 @@ body.tutorial-active {
   margin: 4px 0 0;
   font-size: 11px;
   line-height: 1.5;
-  color: #777;
+  color: var(--text-tertiary);
   display: flex;
   flex-wrap: wrap;
   gap: 0 6px;
@@ -2439,7 +2476,7 @@ body.tutorial-active {
 .app-loading { position:fixed; z-index:10000; inset:0; padding:max(28px,env(safe-area-inset-top)) 18px 24px; background:var(--surface-page); transition:opacity var(--motion-fast) ease; }
 .app-loading.is-ready { opacity:0; pointer-events:none; }
 .loading-shell { max-width:560px; margin:0 auto; }
-.skeleton { display:block; border-radius:10px; background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%); background-size:220% 100%; animation:skeleton-shift 900ms linear infinite; }
+.skeleton { display:block; border-radius:10px; background:linear-gradient(90deg,var(--surface-card) 25%,var(--surface-raised) 50%,var(--surface-card) 75%); background-size:220% 100%; animation:skeleton-shift 900ms linear infinite; }
 .skeleton-title { width:42%; height:23px; }
 .skeleton-subtitle { width:28%; height:12px; margin-top:10px; }
 .loading-cards { display:grid; grid-template-columns:1fr; gap:12px; margin-top:32px; }
@@ -2562,11 +2599,11 @@ body.tutorial-active {
 .tab-motion-indicator {
   position:absolute;
   z-index:2;
-  bottom:calc(4px + env(safe-area-inset-bottom, 0px));
+  bottom:3px;
   left:0;
-  height:2px;
+  height:3px;
   border-radius:999px;
-  background:var(--text-primary);
+  background:var(--accent);
   pointer-events:none;
   transition:transform var(--motion-emphasis) var(--ease-spring), width var(--motion-fast) var(--ease-native);
 }
@@ -2646,6 +2683,8 @@ body.tutorial-active {
   .settings-panel:not(.hidden) .setting-note,
   .wallet-card.card-pulse { animation:none; }
   .tab-motion-indicator { transition:none; }
+  .rail-ticks i, .rail-dots b.late { animation:none; }
+  .bills-progress-bar i { transition:none; }
   .chart-segment-enter { transform:none; }
   .chart-legend-enter { opacity:1; transform:none; }
   .settings-modal:not(.hidden) .setting-row,
@@ -2786,26 +2825,29 @@ body.tutorial-active {
 /* Four figures do not fit one row on a phone without truncating, so they
    sit two by two there. */
 @media (max-width:520px) {
-  .cycle-summary { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:10px; }
+  .cycle-summary { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:12px; }
   .cycle-summary .summary-cell strong { font-size:15px; }
+  .cycle-summary .summary-cell:nth-child(even) { padding-left:14px; border-left:1px solid var(--border-subtle); }
 }
 
 /* Spend bar brightness steps (setSpendLevel in app.js). Dark brightens toward
    white; light darkens toward black, so the last step never disappears into
    the pale track. */
-.spend-bar-fill[data-level="low"] { background:#6f6f6f; }
-.spend-bar-fill[data-level="mid"] { background:#b0b0b0; }
-.spend-bar-fill[data-level="high"] { background:#ffffff; }
-.spend-bar-label.is-high { color:#e8e8e8; }
-:root[data-theme="light"] .spend-bar-fill[data-level="low"] { background:#a3a39e; }
-:root[data-theme="light"] .spend-bar-fill[data-level="mid"] { background:#62625e; }
-:root[data-theme="light"] .spend-bar-fill[data-level="high"] { background:#1d1d1c; }
-:root[data-theme="light"] .spend-bar-label.is-high { color:#1d1d1c; }
+/* Three steps of the theme's own text colour over its page colour, so dark
+   brightens toward white and light darkens toward black without a separate
+   rule per theme. The plain hex first is the fallback for engines without
+   color-mix. */
+.spend-bar-fill[data-level="low"] { background:#6f6f6f; background:color-mix(in srgb, var(--text-primary) 45%, var(--surface-page)); }
+.spend-bar-fill[data-level="mid"] { background:#b0b0b0; background:color-mix(in srgb, var(--text-primary) 72%, var(--surface-page)); }
+.spend-bar-fill[data-level="high"] { background:var(--text-primary); }
+.spend-bar-label.is-high { color:var(--text-primary); }
 
 /* =====================
    Bill rows
 ===================== */
-.bills-progress { margin:-6px 0 12px; color:var(--text-secondary); font-size:12px; }
+.bills-progress { margin:-6px 0 8px; color:var(--text-secondary); font-size:12px; }
+.bills-progress-bar { height:4px; margin:0 0 14px; border-radius:2px; background:var(--border-subtle); overflow:hidden; }
+.bills-progress-bar i { display:block; height:100%; width:0; border-radius:2px; background:var(--accent); transition:width 700ms var(--ease-spring); }
 .bills-heading-row + .section-note.hidden + .bills-progress { margin-top:-4px; }
 
 #priority-list li:not(.empty-state-rich) { min-height:58px; padding:8px 0; gap:12px; }
@@ -2814,7 +2856,10 @@ body.tutorial-active {
    so the row does not move. */
 .bill-tick { display:grid; place-items:center; flex:0 0 auto; width:44px; height:44px; margin:-9px; cursor:pointer; }
 .bill-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
-.bill-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; font-weight:600; color:var(--text-primary); }
+.bill-name { position:relative; align-self:flex-start; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; font-weight:600; color:var(--text-primary); }
+/* The strike-through is a line that grows across the name when the bill is
+   paid, rather than appearing all at once. */
+.bill-name::after { content:""; position:absolute; left:0; top:55%; width:0; height:1.5px; background:currentColor; transition:width 320ms var(--ease-native); }
 .bill-meta { color:var(--text-tertiary); font-size:12px; }
 .bill-amount { flex:0 0 auto; font-size:15px; font-weight:650; color:var(--text-primary); }
 
@@ -2833,7 +2878,7 @@ body.tutorial-active {
   border-radius:50%;
   background:transparent;
   cursor:pointer;
-  transition:background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--ease-native);
+  transition:background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform 280ms var(--ease-spring);
 }
 .bill-check::after {
   content:"";
@@ -2844,7 +2889,7 @@ body.tutorial-active {
   transform:translateY(-1px) rotate(-45deg) scale(0);
   transition:transform var(--motion-emphasis) var(--ease-spring);
 }
-.bill-check:checked { background:var(--surface-action); border-color:var(--surface-action); }
+.bill-check:checked { background:var(--surface-action); border-color:var(--surface-action); transform:scale(1.1); }
 .bill-check:checked::after { transform:translateY(-1px) rotate(-45deg) scale(1); }
 .bill-check:active { transform:scale(.9); }
 
@@ -2853,19 +2898,17 @@ body.tutorial-active {
 .bill-name,
 .bill-amount { transition:color var(--motion-standard) ease; }
 #priority-list li.is-paid .bill-name,
-#priority-list li.is-paid .bill-amount {
-  color:var(--text-tertiary);
-  text-decoration:line-through;
-  text-decoration-color:var(--border-strong);
-}
+#priority-list li.is-paid .bill-amount { color:var(--text-tertiary); }
+#priority-list li.is-paid .bill-name::after { width:100%; }
 #priority-list li.is-paid .bill-amount { font-weight:600; }
 
 @media (prefers-reduced-motion: reduce) {
   .bill-check,
-  .bill-check::after { transition:none; }
+  .bill-check::after,
+  .bill-name::after { transition:none; }
 }
 /* The light theme gives every input a field fill; the tick is not a field. */
-:root[data-theme="light"] .bill-check { background:transparent; border-color:#c9c9c3; }
+:root[data-theme="light"] .bill-check { background:transparent; border-color:var(--border-strong); }
 :root[data-theme="light"] .bill-check:checked { background:var(--surface-action); border-color:var(--surface-action); }
 
 /* =====================
@@ -2933,7 +2976,7 @@ table.day-list tr.history-page-control > td { display: block; }
   margin-bottom: 12px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
-  background: linear-gradient(145deg, #171717, #0d0d0d);
+  background: var(--surface-card);
   box-shadow: var(--shadow-card);
 }
 .backup-reminder h2 { margin: 5px 0 7px; font-size: 20px; letter-spacing: -.02em; }
@@ -2977,7 +3020,7 @@ table.day-list tr.history-page-control > td { display: block; }
   background:var(--surface-field);
   border:1px solid var(--border-strong);
   border-radius:var(--radius-control);
-  color:#b0b0b0;
+  color:var(--text-secondary);
   font-size:12px;
   font-weight:600;
   cursor:pointer;
@@ -2999,18 +3042,11 @@ table.day-list tr.history-page-control > td { display: block; }
 .category-pick.is-selected {
   border-color:var(--pick-color);
   background:color-mix(in srgb, var(--pick-color) 22%, var(--surface-field));
-  color:#fff;
+  color:var(--text-primary);
 }
 .category-pick:focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; }
-.category-picks.input-error .category-pick { border-color:#e8e8e8; }
+.category-picks.input-error .category-pick { border-color:var(--semantic-out); }
 .category-picks.input-error { animation:shake var(--motion-standard) ease; }
-:root[data-theme="light"] .category-pick { background:#fff; border-color:#d2d2cd; color:#4a4a46; }
-:root[data-theme="light"] .category-pick.is-selected {
-  border-color:var(--pick-color);
-  background:color-mix(in srgb, var(--pick-color) 16%, #fff);
-  color:#1a1a1a;
-}
-:root[data-theme="light"] .category-picks.input-error .category-pick { border-color:#1a1a1a; }
 
 /* Set by ui-helpers.js while a dialog or sheet is open: the page behind it is
    pinned so it cannot scroll (iOS ignores overflow:hidden for touch). */

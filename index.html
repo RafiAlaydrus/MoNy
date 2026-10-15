@@ -67,7 +67,7 @@
       const theme = saved.theme === "light" || saved.theme === "dark" ? saved.theme
         : (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
       document.documentElement.dataset.theme = theme;
-      document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f5f5f3" : "#000000";
+      document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f6f1e7" : "#000000";
       document.querySelector('meta[name="color-scheme"]').content = theme;
     } catch {}
   </script>
@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.51.0</div>
+            <div class="setting-version">v1.52.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -250,7 +250,7 @@
              hole, which meant it shrank along with the ring. -->
         <div class="chart-head">
           <span class="chart-head-label">Total spent</span>
-          <strong id="chart-total" class="chart-head-value">&mdash;</strong>
+          <strong id="chart-total" class="chart-head-value" data-fig>&mdash;</strong>
         </div>
 
         <!-- One segment per row below, in the same order. role="img" with a
@@ -279,7 +279,7 @@
            budget-limit message, with overspend taking precedence. -->
       <div class="card available-card">
         <span>Available</span>
-        <h2 id="remaining-money">RM 0</h2>
+        <h2 id="remaining-money" data-fig>RM 0</h2>
         <div class="spend-bar-wrapper">
           <div class="spend-bar-track">
             <!-- Projected fill sits BEHIND the real one and reaches further
@@ -302,6 +302,18 @@
           <p id="daily-line" class="projection-line hidden"></p>
         </div>
         <p id="budget-warning" class="budget-warning hidden"></p>
+
+        <!-- THE MONTH RAIL
+             One tick per day of this cycle: days gone are dim, today stands
+             tall in the accent, days to come are faint. A dot under a tick is
+             an unpaid bill due that day (red once overdue). Drawn by
+             renderRail(); purely a picture of the calendar, it holds no
+             state and is hidden in endless mode and before income is set. -->
+        <div id="month-rail" class="month-rail hidden" role="img" aria-label="Where today sits in this cycle">
+          <div id="rail-ticks" class="rail-ticks"></div>
+          <div id="rail-dots" class="rail-dots"></div>
+          <div class="rail-labels"><span id="rail-start"></span><span id="rail-end"></span></div>
+        </div>
 
         <!-- The supporting figures live inside the hero card as one compact
              row, so Home shows each number exactly once. Income is the only
@@ -403,6 +415,7 @@
       <p id="bills-lock-note" class="section-note hidden">Prevents accidental changes. You can unlock them anytime.</p>
       <!-- "2 of 3 paid · RM 200.00 left". Kept in step by updateBillsProgress(). -->
       <p id="bills-progress" class="bills-progress hidden" aria-live="polite"></p>
+      <div id="bills-progress-bar" class="bills-progress-bar hidden" aria-hidden="true"><i></i></div>
 
       <!-- PRIORITY FORM - hidden entirely once locked.
            These three category values are fixed rather than free text because

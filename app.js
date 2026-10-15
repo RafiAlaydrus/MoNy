@@ -904,8 +904,9 @@ function fitCanvas(canvas, ctx) {
 
 // Only the chart and its legend use color - the rest of the app stays monochrome
 /* CHART PALETTE
-   Six hues, in a fixed order, validated against the #111 chart surface rather
-   than picked by eye: every adjacent pair clears the colour-blind separation
+   Seven hues, in a fixed order, checked by script against both card surfaces
+   (the dark #1c1c1e and the Warm #fffaf0) at 3:1 or better, rather than picked
+   by eye. They were first validated against the old #111 surface: every adjacent pair clears the colour-blind separation
    target (worst pair 8.4, target 8) and the normal-vision floor (worst 19.3,
    floor 15), all six sit in one lightness band, and all six clear 3:1 contrast
    against the card behind them. The old set failed that last part in places
@@ -918,10 +919,10 @@ const CHART_SERIES = [
   "#3987e5", // blue
   "#d95926", // orange
   "#199e70", // aqua
-  "#c98500", // yellow
+  "#b87a00", // yellow (deepened so it keeps 3:1 on the cream card too)
   "#d55181", // magenta
   "#008300", // green
-  "#9085e9", // violet
+  "#8478e2", // violet (likewise)
 ];
 
 /* WHICH ENTITY GETS WHICH HUE
@@ -1819,6 +1820,11 @@ function updateBillsProgress() {
   if (!line) return;
   const bills = data.priority || [];
   line.classList.toggle("hidden", bills.length === 0);
+  const bar = document.getElementById("bills-progress-bar");
+  if (bar) {
+    bar.classList.toggle("hidden", bills.length === 0);
+    bar.firstElementChild.style.width = `${bills.length ? (bills.filter(b => b.paid).length / bills.length) * 100 : 0}%`;
+  }
   if (!bills.length) return;
   const paid = bills.filter(b => b.paid).length;
   const left = moneyValue(unpaidPriorityOf(data));
@@ -2417,7 +2423,7 @@ function buildWalletSection(wallet) {
     <h3 class="wallet-section-title">${esc(wallet.name)}</h3>
     <div class="card wallet-card" data-role="card">
       <span data-role="budget-label">${esc(wallet.name)} Balance</span>
-      <h2 data-role="balance">${esc(cur())} 0</h2>
+      <h2 data-role="balance" data-fig>${esc(cur())} 0</h2>
       <input type="number" inputmode="decimal" data-role="budget-input" placeholder="Set budget (${esc(cur())})" class="hidden" />
       <p class="budget-hint hidden" data-role="budget-hint"></p>
       <div class="spend-bar-wrapper hidden" data-role="bar-wrapper">
@@ -3432,12 +3438,33 @@ function getMainRemaining() {
 // cancellation token live on the element, so any number of cards can use this
 // independently - a freshly rendered element simply has no previous value and
 // is set instantly.
+/* A big figure with its cents set small: "RM 2,060<small>.70</small>". Only
+   elements marked data-fig get this; its textContent is exactly what the plain
+   write would have produced, so nothing that reads the text can tell. */
+function moneyFigureHtml(value) {
+  const text = fmt(value);
+  const dot = text.lastIndexOf(".");
+  return dot === -1
+    ? `${esc(cur())} ${text}`
+    : `${esc(cur())} ${text.slice(0, dot)}<small>${text.slice(dot)}</small>`;
+}
+
+function setMoneyText(el, value) {
+  if (el.hasAttribute("data-fig")) {
+    el.innerHTML = moneyFigureHtml(value);
+    // Long sums step down in size (see style.css) so an eight-digit figure
+    // still fits the screen instead of pushing the page sideways.
+    const length = el.textContent.length;
+    el.dataset.size = length > 16 ? "xlong" : length > 12 ? "long" : "";
+  } else el.textContent = `${cur()} ${fmt(value)}`;
+}
+
 function animateMoneyTo(el, to) {
   const from = el._shownValue;
   el._shownValue = to;
 
   if (from === undefined || from === null || from === to || prefersReducedMotion()) {
-    el.textContent = `${cur()} ${fmt(to)}`;
+    setMoneyText(el, to);
     return;
   }
 
@@ -3462,7 +3489,7 @@ function animateMoneyTo(el, to) {
     if (ZERO_DECIMAL_CURRENCIES.has(cur()) && Number.isInteger(moneyValue(from)) && Number.isInteger(moneyValue(to))) {
       frame = Math.round(frame);
     }
-    el.textContent = `${cur()} ${fmt(frame)}`;
+    setMoneyText(el, frame);
     if (p < 1) requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
@@ -3747,6 +3774,7 @@ function calculateRemaining(skipChart = false) {
   updateBillsProgress();
   renderProjection();
   renderDailyLine();
+  renderRail();
   renderDueSoon();
   renderUnpaidCarry();
   renderActivityFinder();
@@ -3766,7 +3794,7 @@ function calculateRemaining(skipChart = false) {
      carried money look like it had vanished all over again. */
   if (!hasIncome) {
     remainingMoneyEl._shownValue = 0;
-    remainingMoneyEl.textContent = `${cur()} ${fmt(0)}`;
+    setMoneyText(remainingMoneyEl, 0);
     chartSection?.classList.add("hidden");
     return;
   }
@@ -4191,12 +4219,63 @@ document.getElementById("unpaid-carry-add").addEventListener("click", () => {
   showNotice(`${added.length} ${added.length === 1 ? "bill" : "bills"} added to this cycle`);
 });
 
+/* The month rail: one tick per day of this cycle, today in the accent, and a
+   dot under each tick that has an unpaid bill due. A picture of the calendar
+   and the bills' due dates, nothing more - it keeps no state of its own.
+
+   The ticks are only rebuilt when the cycle or today changes (so the rise-in
+   plays once, not on every edit); the dots are cheap and redrawn every time. */
+function renderRail() {
+  const rail = document.getElementById("month-rail");
+  if (!rail) return;
+  if (settings.cycleEnabled === false || !data.cycleStart || !data.cycleNext || monthIsUnset(data)) {
+    rail.classList.add("hidden");
+    return;
+  }
+  const first = dayIndex(data.cycleStart);
+  const days = dayIndex(data.cycleNext) - first;
+  if (!(days >= 2)) { rail.classList.add("hidden"); return; }
+
+  const today = dayIndex(todayString());
+  const todayAt = Math.min(Math.max(today - first, 0), days - 1);
+  const ticks = document.getElementById("rail-ticks");
+  const key = `${data.cycleStart}|${days}|${todayAt}`;
+  if (ticks._key !== key) {
+    ticks._key = key;
+    let html = "";
+    for (let i = 0; i < days; i++) {
+      html += `<i class="${i < todayAt ? "past" : i === todayAt ? "today" : ""}" style="--i:${i}"></i>`;
+    }
+    ticks.innerHTML = html;
+  }
+
+  // One dot per day with an unpaid bill; red when any of that day's bills is overdue.
+  const marks = new Map();
+  (data.priority || []).forEach(bill => {
+    if (bill.paid || !isValidYmd(bill.due)) return;
+    const at = dayIndex(bill.due) - first;
+    if (at < 0 || at >= days) return;
+    marks.set(at, marks.get(at) || dayIndex(bill.due) < today);
+  });
+  document.getElementById("rail-dots").innerHTML = [...marks].map(([at, late]) =>
+    `<b class="${late ? "late" : ""}" style="left:calc(${at} * (100% - 2px) / ${days - 1} + 1px)"></b>`).join("");
+
+  const label = date => date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const end = new Date(`${data.cycleNext}T00:00:00`);
+  end.setDate(end.getDate() - 1);
+  document.getElementById("rail-start").textContent = label(new Date(`${data.cycleStart}T00:00:00`));
+  document.getElementById("rail-end").textContent = label(end);
+  rail.setAttribute("aria-label", `Day ${todayAt + 1} of ${days} in this cycle`);
+  rail.classList.remove("hidden");
+}
+
 /* What changes with the calendar alone. Run when the app returns to the
    foreground, so a phone left open overnight does not keep yesterday's "due in
    3 days" or yesterday's days-left count. Narrow on purpose - it rebuilds none
    of the lists and so cannot disturb anything half typed. */
 function refreshDateDriven() {
   renderDailyLine();
+  renderRail();
   renderDueSoon();
   priorityList.querySelectorAll("li").forEach(li => {
     if (li._bill) li.querySelector(".bill-meta").innerHTML = billMetaHtml(li._bill);
@@ -4406,7 +4485,7 @@ const systemTheme = typeof matchMedia === "function" ? matchMedia("(prefers-colo
 function applyTheme() {
   const theme = settings.theme === "system" ? (systemTheme?.matches ? "light" : "dark") : settings.theme;
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f5f5f3" : "#000000";
+  document.querySelector('meta[name="theme-color"]').content = theme === "light" ? "#f6f1e7" : "#000000";
   document.querySelector('meta[name="color-scheme"]').content = theme;
 }
 themeSelect.value = settings.theme;
@@ -5618,9 +5697,12 @@ renderBackupReminder();
 function syncTabBarSpace() {
   const bar = document.getElementById("tab-bar");
   if (!bar) return;
-  const h = bar.getBoundingClientRect().height;
-  if (!h) return;
-  document.documentElement.style.setProperty("--tab-bar-space", `${Math.round(h + 8)}px`);
+  const rect = bar.getBoundingClientRect();
+  if (!rect.height) return;
+  /* The bar floats above the bottom edge, so what the page has to clear is the
+     distance from the bar's TOP to the bottom of the screen, not the bar's own
+     height - that distance already includes the gap and the safe-area inset. */
+  document.documentElement.style.setProperty("--tab-bar-space", `${Math.round(window.innerHeight - rect.top + 12)}px`);
 }
 
 /* =========================

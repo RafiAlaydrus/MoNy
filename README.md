@@ -157,6 +157,10 @@ still reached from the icons in the header, on any tab.
   both your main balance and every wallet
 - **Projected balance** — see what you'll have left once every unpaid bill
   is paid
+- **Quiet Ledger design** — a calmer, more native look: a true-black dark
+  mode and a warm cream light mode, one blue accent, soft corners, rounded
+  figures, a floating tab bar, and a **month rail** on Home (one tick per day
+  of the cycle, today highlighted, a dot under each unpaid bill's due day)
 - **Safe to spend per day** — what you can spend each remaining day once
   your unpaid bills are covered (rounded down, hidden when there's nothing
   left after bills)
