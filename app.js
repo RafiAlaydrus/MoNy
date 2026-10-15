@@ -93,6 +93,10 @@ function save(key, value) {
    caught in one place instead of silently dropping data at 36 call sites. */
 function saveData() { if (moneyBatch) return true; const ok = save(STORAGE_KEY, data); if (ok && snapshotReady) saveSnapshot(); return ok; }
 function saveSettings() { if (moneyBatch) return true; const ok = save(SETTINGS_KEY, settings); if (ok && snapshotReady) saveSnapshot(); return ok; }
+/* For view preferences only (open tab, collapsed tables). Nothing the recovery
+   copy exists to protect has changed, so it is not rewritten - a tab tap or an
+   app launch used to re-serialise the whole archive for nothing. */
+function saveUiSettings() { if (moneyBatch) return true; return save(SETTINGS_KEY, settings); }
 function saveArchive() { const ok = save(ARCHIVE_KEY, archive); if (ok && snapshotReady) saveSnapshot(); return ok; }
 
 function commitStateChanges(changes) {
@@ -1217,7 +1221,7 @@ function buildTableToggle(key, table) {
 
   bar.addEventListener("click", () => {
     settings.collapsed[key] = !settings.collapsed[key];
-    saveSettings();
+    saveUiSettings();
     apply();
   });
 
@@ -5432,7 +5436,7 @@ function showTab(name, scroll = true, updateRoute = true) {
   syncTabMotionIndicator();
 
   settings.activeTab = name;
-  saveSettings();
+  saveUiSettings();
   if (updateRoute) writeRoute(name);
 
   if (scroll && previousName !== name) {
@@ -5468,6 +5472,10 @@ window.addEventListener("resize", syncTabMotionIndicator, { passive: true });
 const initialTabRoute = ["home", "bills", "spending", "wallets"].includes(routeName())
   ? routeName()
   : settings.activeTab;
+/* showTab no longer writes the recovery copy, which this launch used to do as a
+   side effect. Keep that guarantee for a first run: a copy exists from the
+   start, and is only created here when there is none. */
+if (localStorage.getItem(SNAPSHOT_KEY) === null) saveSnapshot();
 showTab(initialTabRoute, false, false);
 
 /* =========================
@@ -5811,10 +5819,17 @@ function deleteArchivedMonth(key) {
   });
 }
 
-// Total app storage across all keys
+/* Everything this origin has stored, because the ~5 MB limit is shared by all
+   of it: the recovery copy, the pre-import/reset copy and any set-aside corrupt
+   value take real space even though they are not live records. Counting only
+   the live keys made the figure under-report. */
 function totalStorageBytes() {
-  return bytesOfKey(STORAGE_KEY) + bytesOfKey(SETTINGS_KEY) +
-    bytesOfKey(BACKUP_PRIORITY_KEY) + bytesOfKey(ARCHIVE_KEY) + bytesOfKey(ENDLESS_ARCHIVE_KEY);
+  let total = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key !== null) total += bytesOfString(key) + bytesOfKey(key);
+  }
+  return total;
 }
 
 function buildEndlessHistoryRow(entry, index) {
