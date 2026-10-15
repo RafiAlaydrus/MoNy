@@ -81,6 +81,7 @@
   --chart-remaining:#5c5c5c;
   --chart-in-wallets:#b4b4b4;
   --chart-bar:#8a8a8a;
+  --chart-peak:#ffffff;
   --scrim:rgba(0, 0, 0, 0.72);
   --scrim-strong:rgba(0, 0, 0, 0.78);
 }
@@ -134,13 +135,14 @@
   --bar-high:#5a4c33;
   --chart-remaining:#cfc3a3;
   --chart-in-wallets:#a39470;
-  --chart-bar:#a39470;
+  --chart-bar:#948664;
+  --chart-peak:#6f5f3c;
   --scrim:rgba(58, 50, 38, 0.42);
   --scrim-strong:rgba(58, 50, 38, 0.55);
 }
 :root[data-theme="light"] .card,
 :root[data-theme="light"] .chart-container,
-:root[data-theme="light"] .history-row { background:var(--surface-card); }
+:root[data-theme="light"] .history-row { background:none; }
 :root[data-theme="light"] #priority-list { background:var(--surface-card); }
 :root[data-theme="light"] .second-form,
 :root[data-theme="light"] .wallet-form { background:var(--surface-card); }
@@ -171,8 +173,7 @@
 :root[data-theme="light"] .legend-divide { border-color:var(--border-subtle); }
 :root[data-theme="light"] .chart-bar-empty { background:var(--border-subtle); }
 :root[data-theme="light"] .lock-badge { background:var(--surface-raised); border-color:var(--border-strong); color:var(--text-secondary); }
-:root[data-theme="light"] .transfer-dest-btn,
-:root[data-theme="light"] .stat-cell { background:var(--surface-raised); border-color:var(--border-subtle); color:var(--text-primary); }
+:root[data-theme="light"] .transfer-dest-btn { background:var(--surface-raised); border-color:var(--border-subtle); color:var(--text-primary); }
 :root[data-theme="light"] .transfer-dest-sub,
 :root[data-theme="light"] .stat-label,
 :root[data-theme="light"] .stat-sub,
@@ -300,7 +301,7 @@ select:focus-visible {
   gap: 12px;
   padding: 12px 12px 12px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   background: var(--surface-raised);
   box-shadow: var(--shadow-sheet);
   backdrop-filter: blur(18px);
@@ -313,7 +314,7 @@ select:focus-visible {
 .update-banner span { display: block; }
 .update-banner strong { color: var(--text-primary); font-size: 13px; }
 .update-banner span { margin-top: 2px; color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
-.update-banner button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 9px; background: var(--surface-action); color: var(--text-on-action); font-size: 12px; font-weight: 700; }
+.update-banner button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: var(--radius-control); background: var(--surface-action); color: var(--text-on-action); font-size: 12px; font-weight: 700; }
 .update-banner .update-dismiss { width: 44px; padding: 0; background: transparent; color: var(--text-secondary); font-size: 0; }
 .update-banner .update-dismiss::before { content: "×"; font-size: 21px; font-weight: 400; }
 
@@ -511,7 +512,7 @@ select:focus-visible {
   padding: 0;
   cursor: pointer;
   touch-action: manipulation;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   color: var(--text-tertiary);
   -webkit-tap-highlight-color: transparent;
   transition: color var(--motion-fast) ease,
@@ -864,7 +865,7 @@ h2[data-fig],
 .cycle-summary .summary-cell strong { margin-top:4px; color:var(--text-primary); font-size:13px; font-weight:500; }
 /* Income is the one editable figure, so it is a real button - reset to look
    like its neighbours, with a dotted underline as the only "tap me" hint. */
-button.summary-cell { border:0; border-radius:8px; background:none; color:inherit; font:inherit; cursor:pointer; }
+button.summary-cell { border:0; border-radius:var(--radius-control); background:none; color:inherit; font:inherit; cursor:pointer; }
 button.summary-cell strong { text-decoration:underline dotted var(--border-strong); text-underline-offset:3px; }
 button.summary-cell:active { background:var(--surface-field); }
 .income-input { width:100%; margin-top:14px; padding:12px; border-radius:var(--radius-control); }
@@ -1668,7 +1669,7 @@ body.tutorial-active {
   transform: translateX(-50%);
   background: var(--surface-raised);
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   padding: 12px 16px;
   display: flex;
   align-items: center;
@@ -1694,7 +1695,7 @@ body.tutorial-active {
 #undo-btn {
   background: none;
   border: none;
-  color: var(--text-primary);
+  color: var(--accent);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -1753,15 +1754,21 @@ body.tutorial-active {
 }
 
 .wallet-card {
+  position: relative;
+  overflow: hidden;
   cursor: pointer;
   margin-bottom: 12px;
 }
+/* A 3px accent edge, the mark of a wallet card. */
+.wallet-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent); }
+.card.wallet-card > span { text-transform:none; letter-spacing:0; font-size:13px; font-weight:400; color:var(--text-secondary); }
+.wallet-card h2[data-fig] { font-size:34px; letter-spacing:-.02em; margin-top:2px; }
 
 .wallet-card input {
   width: 100%;
   margin-top: 10px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .wallet-form {
@@ -1808,7 +1815,7 @@ body.tutorial-active {
   text-align: left;
   background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 12px 14px;
   color: var(--text-primary);
   font-size: 14px;
@@ -1900,7 +1907,7 @@ body.tutorial-active {
   background: var(--surface-field);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: 8px 10px;
   font-size: 13px;
 }
@@ -1915,7 +1922,7 @@ body.tutorial-active {
   background: none;
   border: 1px solid var(--border-strong);
   color: var(--text-tertiary);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   width: 44px;
   height: 44px;
   cursor: pointer;
@@ -2120,10 +2127,10 @@ body.tutorial-active {
 }
 
 .history-header-left h1 {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   margin: 0;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.02em;
 }
 
 /* Explicit height because fitCanvas() rewrites this canvas's height ATTRIBUTE
@@ -2136,22 +2143,28 @@ body.tutorial-active {
   height: 190px;
 }
 
+/* The three figures sit in one hairline row - the same as Home's stat row -
+   instead of three boxes inside the chart card. */
 .stat-grid {
   width: 100%;
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .stat-cell {
-  flex: 1;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-control);
-  padding: 10px 6px;
-  text-align: center;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 0 12px;
+  text-align: left;
   min-width:0;
   overflow-wrap:anywhere;
 }
+.stat-cell + .stat-cell { border-left: 1px solid var(--border-subtle); }
+.stat-cell:first-child { padding-left: 0; }
 
 .stat-label {
   display: block;
@@ -2163,8 +2176,9 @@ body.tutorial-active {
 }
 
 .stat-value {
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: var(--num-weight);
   color: var(--text-primary);
 }
 
@@ -2183,14 +2197,24 @@ body.tutorial-active {
   margin: 0;
 }
 
-.history-row {
+/* Past months are one grouped list - rows with hairlines between them - not a
+   stack of separate cards. :has() keeps the empty state out of the group. */
+#history-list:has(.history-row) {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
-  padding: 14px var(--space-card);
-  margin-bottom: 12px;
-  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
+.history-row {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 14px var(--space-card);
+  margin: 0;
+  box-shadow: none;
+}
+.history-row + .history-row { border-top: 1px solid var(--border-subtle); }
+.history-row-main > div:first-child { min-width: 0; flex: 1; }
 
 .history-row-main {
   display: flex;
@@ -2219,16 +2243,17 @@ body.tutorial-active {
 }
 
 .history-remaining {
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: var(--num-weight);
 }
 
 .history-delete {
   background: none;
-  border: 1px solid var(--border-strong);
+  border: 0;
   color: var(--text-tertiary);
-  border-radius: 8px;
-  width: 44px;
+  border-radius: var(--radius-control);
+  width: 40px;
   height: 44px;
   cursor: pointer;
   font-size: 13px;
@@ -2257,14 +2282,16 @@ body.tutorial-active {
 .endless-entry-list .legend-left { flex-direction:column; align-items:flex-start; gap:2px; }
 .endless-entry-list .legend-amount { white-space:nowrap; }
 
+/* Destructive, so it is an outlined red-text button - never the filled accent
+   that every safe primary action wears. */
 .delete-all-btn {
   width: 100%;
-  margin-top: 4px;
+  margin-top: 12px;
   padding: 12px;
-  border-radius: 12px;
-  border: none;
-  background: var(--surface-action);
-  color: var(--text-on-action);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--semantic-out);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -2495,19 +2522,19 @@ body.tutorial-active {
 .activity-result-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .activity-result-meta, .activity-result-date { color:var(--text-tertiary); font-size:11px; }
 .activity-result-amount, .activity-result-date { text-align:right; }
-.empty-state-rich { padding:22px 16px; border:1px dashed var(--border-subtle); border-radius:14px; color:var(--text-tertiary); text-align:center; }
+.empty-state-rich { padding:22px 16px; border:1px dashed var(--border-subtle); border-radius:var(--radius-control); color:var(--text-tertiary); text-align:center; }
 .empty-state-rich strong { display:block; margin-bottom:5px; color:var(--text-primary); }
 .empty-state-rich p { margin:0; font-size:12px; line-height:1.5; }
 
 .app-loading { position:fixed; z-index:10000; inset:0; padding:max(28px,env(safe-area-inset-top)) 18px 24px; background:var(--surface-page); transition:opacity var(--motion-fast) ease; }
 .app-loading.is-ready { opacity:0; pointer-events:none; }
 .loading-shell { max-width:560px; margin:0 auto; }
-.skeleton { display:block; border-radius:10px; background:linear-gradient(90deg,var(--surface-card) 25%,var(--surface-raised) 50%,var(--surface-card) 75%); background-size:220% 100%; animation:skeleton-shift 900ms linear infinite; }
+.skeleton { display:block; border-radius:var(--radius-control); background:linear-gradient(90deg,var(--surface-card) 25%,var(--surface-raised) 50%,var(--surface-card) 75%); background-size:220% 100%; animation:skeleton-shift 900ms linear infinite; }
 .skeleton-title { width:42%; height:23px; }
 .skeleton-subtitle { width:28%; height:12px; margin-top:10px; }
 .loading-cards { display:grid; grid-template-columns:1fr; gap:12px; margin-top:32px; }
-.skeleton-card { height:122px; border-radius:18px; }
-.skeleton-block { height:150px; margin-top:18px; border-radius:18px; }
+.skeleton-card { height:122px; border-radius:var(--radius-card); }
+.skeleton-block { height:150px; margin-top:18px; border-radius:var(--radius-card); }
 @keyframes skeleton-shift { to { background-position:-220% 0; } }
 @media (max-width:380px) {
   :root { --space-page:16px; --space-card:14px; }
@@ -2536,8 +2563,6 @@ body.tutorial-active {
   .setting-row { gap:8px; }
   .backup-row { align-items:flex-start; }
   .backup-row > :last-child { max-width:55%; text-align:right; }
-  .history-row-main { flex-wrap:wrap; }
-  .history-right { margin-left:auto; }
 }
 
 /* Tablet: use the extra width for comparisons while keeping forms at a
@@ -2968,16 +2993,29 @@ table.day-list .day-row th {
 
 table.day-list tbody tr:not(.day-row):not(.history-page-control):not(.empty-row) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "name amount" "meta amount";
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-areas: "tile name amount" "tile meta amount";
   align-items: center;
-  column-gap: 14px;
+  column-gap: 12px;
   padding: 11px 0;
   /* Opaque, so the row still covers what is behind it while swiping. */
   background: var(--surface-card);
 }
 table.day-list tbody tr:not(.day-row) + tr:not(.day-row):not(.history-page-control) {
   border-top: 1px solid var(--border-subtle);
+}
+/* A round tile in the entry's category colour (the one the chart gives it), so
+   a list reads by colour before it is read by word. Rows with no category of
+   their own - transfers, the carried-forward line - get a neutral tile. */
+table.day-list tbody tr:not(.day-row):not(.history-page-control):not(.empty-row)::before {
+  content: "";
+  grid-area: tile;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--surface-field);
+  background: radial-gradient(circle, var(--cat, var(--text-tertiary)) 0 4.5px, transparent 5px),
+              color-mix(in srgb, var(--cat, var(--text-tertiary)) 16%, transparent);
 }
 table.day-list td { padding: 0; }
 table.day-list .cell-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }

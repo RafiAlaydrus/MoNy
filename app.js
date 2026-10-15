@@ -2190,6 +2190,8 @@ function buildWalletItemRow(item, wallet, tbody, section) {
   const kind = item.type === "take" ? "Spent" : item.type === "add" ? "Added from balance"
     : item.type === "in" ? "Transfer in" : "Transfer out";
   row._item = item;
+  // A wallet's entries wear the wallet's own chart colour.
+  if (wallet) row.style.setProperty("--cat", walletColor(allWallets().findIndex(w => w.id === wallet.id)));
   row.innerHTML = `
     <td class="cell-name">${label}</td>
     <td class="cell-meta">${kind}</td>
@@ -3113,6 +3115,7 @@ function buildSecondChoiceRow(item) {
     : "";
 
   row._item = item;
+  if (!isTransferEntry(item)) row.style.setProperty("--cat", categoryColor(item.category));
   row.innerHTML = `
     <td class="cell-name">${esc(item.name)}${mark}</td>
     <td class="cell-meta">${esc(item.category)}</td>
@@ -5836,9 +5839,10 @@ const deleteArchiveBtn = document.getElementById("delete-archive-btn");
 
 // Formats a byte count for display
 function fmtBytes(b) {
-  if (b < 1024) return `${b} B`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
-  return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+  // Non-breaking space: a unit must never wrap onto a line of its own.
+  if (b < 1024) return `${b}\u00a0B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)}\u00a0KB`;
+  return `${(b / (1024 * 1024)).toFixed(2)}\u00a0MB`;
 }
 
 // localStorage stores UTF-16, so ~2 bytes per character
@@ -5972,11 +5976,20 @@ function drawTrendChart(entries) {
     if (e.live) {
       trendCtx.fillStyle = tok("--chart-remaining");
     } else if (e.spent === maxArchived && maxArchived > 0) {
-      trendCtx.fillStyle = tok("--text-primary");
+      trendCtx.fillStyle = tok("--chart-peak");
     } else {
       trendCtx.fillStyle = tok("--chart-bar");
     }
-    trendCtx.fillRect(x, y, barW, h);
+    /* Soft top corners like the rest of the UI; plain rect where roundRect
+       is missing (older engines). */
+    if (trendCtx.roundRect && h > 0) {
+      const r = Math.min(6, h / 2, barW / 2);
+      trendCtx.beginPath();
+      trendCtx.roundRect(x, y, barW, h, [r, r, 0, 0]);
+      trendCtx.fill();
+    } else {
+      trendCtx.fillRect(x, y, barW, h);
+    }
 
     /* Month name under the axis, centred on the bar. */
     trendCtx.fillStyle = tok("--text-tertiary");
