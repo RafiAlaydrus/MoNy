@@ -1078,8 +1078,8 @@ function renderAllCategoryOptions() {
    that the bar reads as "the coloured part is what you spent" - the old chart
    gave Remaining a full blue slice inside a ring captioned "total spent",
    which is two different questions answered in one mark. */
-const CHART_IN_WALLETS_COLOR = "#b4b4b4";
-const CHART_REMAINING_COLOR = "#5c5c5c";
+const CHART_IN_WALLETS_COLOR = "var(--chart-in-wallets)";
+const CHART_REMAINING_COLOR = "var(--chart-remaining)";
 
 // A status, not a series - it gets a colour of its own that no category uses.
 const CHART_OVERSPENT_COLOR = "#e66767";
@@ -5928,11 +5928,13 @@ function drawTrendChart(entries) {
   const baseY = H - padBottom;
 
   trendCtx.clearRect(0, 0, W, H);
-  const light = document.documentElement.dataset.theme === "light";
+  // The theme's own tokens, so the canvas follows light/dark like everything else.
+  const rootStyle = getComputedStyle(document.documentElement);
+  const tok = name => rootStyle.getPropertyValue(name).trim();
 
   /* Baseline. The 0.5 offset puts a 1px stroke on a whole pixel instead of
      straddling two, which would render as a soft 2px grey smear. */
-  trendCtx.strokeStyle = light ? "#d4d4cf" : "#2a2a2a";
+  trendCtx.strokeStyle = tok("--border-strong");
   trendCtx.lineWidth = 1;
   trendCtx.beginPath();
   trendCtx.moveTo(padSide, baseY + 0.5);
@@ -5968,16 +5970,16 @@ function drawTrendChart(entries) {
        The maxArchived > 0 guard stops every bar going white in a history
        where nothing has been spent at all. */
     if (e.live) {
-      trendCtx.fillStyle = light ? "#a0a09b" : "#4a4a4a";
+      trendCtx.fillStyle = tok("--chart-remaining");
     } else if (e.spent === maxArchived && maxArchived > 0) {
-      trendCtx.fillStyle = light ? "#20201e" : "#ffffff";
+      trendCtx.fillStyle = tok("--text-primary");
     } else {
-      trendCtx.fillStyle = "#8a8a8a";
+      trendCtx.fillStyle = tok("--chart-bar");
     }
     trendCtx.fillRect(x, y, barW, h);
 
     /* Month name under the axis, centred on the bar. */
-    trendCtx.fillStyle = light ? "#60605c" : "#999";
+    trendCtx.fillStyle = tok("--text-tertiary");
     trendCtx.font = "11px -apple-system, sans-serif";
     trendCtx.textAlign = "center";
     trendCtx.textBaseline = "top";
@@ -5986,7 +5988,7 @@ function drawTrendChart(entries) {
     /* Value labels only when there is room. Past six bars the slots are
        narrower than the text and the numbers collide into a grey smudge. */
     if (entries.length <= 6) {
-      trendCtx.fillStyle = light ? "#60605c" : (e.live ? "#999" : "#aaa");
+      trendCtx.fillStyle = tok("--text-tertiary");
       trendCtx.font = "10px -apple-system, sans-serif";
       trendCtx.textBaseline = "bottom";
       trendCtx.fillText(fmtWhole(e.spent), x + barW / 2, y - 4);
