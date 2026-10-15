@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.50.3</div>
+            <div class="setting-version">v1.51.0</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -297,6 +297,9 @@
             <span id="spend-bar-label" class="spend-bar-label">0% spent</span>
             <span id="projection-line" class="projection-line hidden"></span>
           </p>
+          <!-- What can be spent each remaining day once unpaid bills are
+               covered. A forecast like the projection above, not a balance. -->
+          <p id="daily-line" class="projection-line hidden"></p>
         </div>
         <p id="budget-warning" class="budget-warning hidden"></p>
 
@@ -346,6 +349,28 @@
       </div>
     </section>
 
+    <!-- Bills that were still unpaid when the last cycle closed. Built by
+         renderUnpaidCarry(); reuses the backup reminder's card. -->
+    <section id="unpaid-carry" class="backup-reminder hidden" aria-labelledby="unpaid-carry-title">
+      <span class="section-eyebrow">Last cycle</span>
+      <h2 id="unpaid-carry-title"></h2>
+      <p id="unpaid-carry-text"></p>
+      <div class="backup-reminder-actions">
+        <button id="unpaid-carry-add" class="primary" type="button">Add to this cycle</button>
+        <button id="unpaid-carry-dismiss" type="button">Dismiss</button>
+      </div>
+    </section>
+
+    <!-- Unpaid bills due within a week, or already overdue. Built by
+         renderDueSoon() with the same rows as Recent Activity. -->
+    <section id="due-soon-section" class="recent-section hidden" aria-labelledby="due-soon-title">
+      <div class="section-heading-row">
+        <div><span class="section-eyebrow">Coming up</span><h3 id="due-soon-title">Due soon</h3></div>
+        <button id="due-soon-view-all" class="text-button" type="button">View all</button>
+      </div>
+      <div id="due-soon-list" class="recent-activity" aria-live="polite"></div>
+    </section>
+
     <section id="recent-section" class="recent-section hidden" aria-labelledby="recent-title">
       <div class="section-heading-row">
         <div><span class="section-eyebrow">Latest</span><h3 id="recent-title">Recent Activity</h3></div>
@@ -391,6 +416,12 @@
           <option value="" disabled selected>Category</option>
         </select>
         <input id="pb-amount" type="number" inputmode="decimal" placeholder="Amount (RM)" />
+        <!-- Optional. Same overlaid-placeholder field as the Spending date,
+             for the same reason: iOS renders an empty date input blank. -->
+        <div class="date-field">
+          <input id="pb-due" type="date" class="is-empty" aria-label="Due date, optional" />
+          <span class="date-placeholder">Due date (Optional)</span>
+        </div>
 
         <!-- Filled button = primary action, outlined = secondary. The app is
              greyscale, so shape carries the emphasis instead of colour. -->
@@ -819,6 +850,8 @@
         <select id="recurring-type"><option value="bill">Bill</option><option value="expense">Expense</option><option value="income">Income</option></select>
         <select id="recurring-category" aria-label="Category"></select>
         <input id="recurring-amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="Amount" />
+        <!-- Bills only: the day of the cycle the bill is due, 1-31. -->
+        <input id="recurring-due" class="hidden" type="number" inputmode="numeric" min="1" max="31" step="1" placeholder="Due day, 1-31 (optional)" aria-label="Due day of the month, optional" />
       </div>
       <div class="modal-actions">
         <button id="add-recurring" type="button">Add recurring</button>

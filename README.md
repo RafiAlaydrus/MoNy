@@ -157,6 +157,13 @@ still reached from the icons in the header, on any tab.
   both your main balance and every wallet
 - **Projected balance** — see what you'll have left once every unpaid bill
   is paid
+- **Safe to spend per day** — what you can spend each remaining day once
+  your unpaid bills are covered (rounded down, hidden when there's nothing
+  left after bills)
+- **Bill due dates** — an optional due date on each bill, a **Due soon**
+  card on Home, and a red **Overdue** note once it passes
+- **Unpaid bills from last cycle** — a Home card offers to add them to the
+  new cycle
 - **Tap any entry to edit it** — bills, wallet transactions, Second choice
   entries
 - **Custom categories** — add, rename and remove the categories both entry
@@ -218,11 +225,25 @@ loan payments, whatever recurs.
 
 1. Open the **Bills** tab.
 2. Fill in the three fields: **Bill name**, the **category** dropdown, and
-   **Amount**.
+   **Amount**. You can also set an optional **Due date**.
 3. Tap **"Add Priority Bill"**.
 
 The bill appears in the list below, unchecked. Adding a bill does **not**
 deduct anything from your balance yet — only ticking it off does.
+
+### Due dates
+
+A bill with a due date shows it under its name — "Due in 3 days", "Due
+tomorrow", or "Overdue 2 days" once it has passed (in red). Ticking the bill
+paid clears the overdue warning. Bills keep the order you added them; nothing
+is re-sorted.
+
+On **Home**, a **Due soon** card lists up to three unpaid bills due within a
+week (or already overdue), soonest first. **View all** opens the Bills tab.
+
+When a new cycle starts, a **recurring bill** with a due day lands on that day
+of the new cycle, and **"Copy Last Priority"** keeps each bill's due day too.
+A due day of 31 falls on the last day of a shorter month.
 
 ### Mark a bill as paid
 
@@ -256,6 +277,15 @@ can lock it again afterwards.
 If your Priority list is empty and not locked, a **"Copy Last Priority"**
 button appears below the list. Tap it to pull in the exact bill list from
 last month instead of retyping everything (paid ticks reset to unpaid).
+
+### Bills you didn't pay last cycle
+
+If bills were still unpaid when the last cycle closed, Home shows a **Last
+cycle** card with the names and total. Tap **Add to this cycle** to bring them
+in as unpaid bills — any bill whose name is already on your list is skipped,
+so a recurring bill is never added twice. If your bills are locked, the card
+asks you to unlock them first. **Dismiss** hides it for that cycle. Nothing
+is deducted until you tick a bill paid.
 
 ---
 

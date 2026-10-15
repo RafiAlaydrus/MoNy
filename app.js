@@ -611,7 +611,12 @@ function applyRecurringTransactions(target) {
   (settings.recurring || []).forEach(template => {
     if (!template || !template.name || !(Number(template.amount) > 0)) return;
     const item = { name: template.name, category: template.category || "Others", amount: Number(template.amount), date: `${target.cycleStart}T12:00:00.000Z` };
-    if (template.type === "bill") target.priority.push({ ...item, paid: false });
+    if (template.type === "bill") {
+      const bill = { ...item, paid: false };
+      const day = Number(template.dueDay);
+      if (Number.isInteger(day) && day >= 1 && day <= 31) bill.due = dueDateInCycle(target.cycleStart, day);
+      target.priority.push(bill);
+    }
     else target.secondChoice.push({ ...item, type: template.type === "income" ? "add" : "take", newMoney: template.type === "income" });
   });
 }
@@ -1561,6 +1566,8 @@ function editPriorityBill(bill) {
   const pbAmount = document.getElementById("pb-amount");
   const root = document.getElementById("priority-form");
 
+  const pbDue = document.getElementById("pb-due");
+
   pbName.value = bill.name;
   /* Re-offer the bill's own category even if it has since been removed from
      the list, marked "(removed)". Without this the select would fall back to
@@ -1568,6 +1575,8 @@ function editPriorityBill(bill) {
      recategorise the bill. */
   renderCategoryOptions(pbCategory, "priority", bill.category);
   pbAmount.value = bill.amount;
+  pbDue.value = isValidYmd(bill.due) ? bill.due : "";
+  pbDue.classList.toggle("is-empty", !pbDue.value);
 
   editing = {
     item: bill, root,
@@ -1575,11 +1584,14 @@ function editPriorityBill(bill) {
       pbName.value = "";
       renderCategoryOptions(pbCategory, "priority");
       pbAmount.value = "";
+      pbDue.value = "";
+      pbDue.classList.add("is-empty");
     },
     save() {
       const name = pbName.value.trim();
       const category = pbCategory.value;
       const amount = inputAmount(pbAmount);
+      const due = pbDue.value;
       const fields = [
         { el: pbName, valid: !!name },
         { el: pbCategory, valid: !!category },
@@ -1596,6 +1608,7 @@ function editPriorityBill(bill) {
         bill.name = name;
         bill.category = category;
         bill.amount = amount;
+        if (due) bill.due = due; else delete bill.due;
         saveData();
         renderPriority();
         calculateRemaining();
@@ -1610,6 +1623,16 @@ function editPriorityBill(bill) {
   };
   setFormEditing(root, true);
   pbName.focus();
+}
+
+/* The grey line under a bill's name: its category, and when it is due.
+   Rebuilt from the bill itself (not cached text) so ticking a bill paid, or
+   the day changing, always shows the right wording. */
+function billMetaHtml(bill) {
+  const info = bill.due ? dueInfo(bill.due, !!bill.paid) : null;
+  return esc(bill.category) + (info
+    ? ` · <span class="bill-due${info.overdue ? " is-overdue" : ""}">${esc(info.text)}</span>`
+    : "");
 }
 
 function buildPriorityItem(bill) {
@@ -1633,11 +1656,12 @@ function buildPriorityItem(bill) {
       </label>
       <span class="bill-text">
         <span class="bill-name">${esc(bill.name)}</span>
-        <span class="bill-meta">${esc(bill.category)}</span>
+        <span class="bill-meta">${billMetaHtml(bill)}</span>
       </span>
     </div>
     <strong class="bill-amount">${esc(cur())} ${fmt(bill.amount)}</strong>
   `;
+  li._bill = bill;
 
   /* Tapping the row opens it for editing. The checkbox and its label own their
      own clicks - makeRowEditable ignores anything originating in a control -
@@ -1653,6 +1677,8 @@ function buildPriorityItem(bill) {
       if (bill.paid) bill.paidAt = new Date().toISOString();
       else delete bill.paidAt;
       li.classList.toggle("is-paid", bill.paid);
+      // A bill that is now paid is no longer overdue.
+      li.querySelector(".bill-meta").innerHTML = billMetaHtml(bill);
       haptic(bill.paid ? 12 : 6);
       saveData();
       calculateRemaining();
@@ -1896,6 +1922,7 @@ addPriorityBtn.addEventListener("click", () => {
   const pbName = document.getElementById("pb-name");
   const pbCategory = document.getElementById("pb-category");
   const pbAmount = document.getElementById("pb-amount");
+  const pbDue = document.getElementById("pb-due");
 
   const name = pbName.value.trim();
   const category = pbCategory.value;
@@ -1914,13 +1941,17 @@ addPriorityBtn.addEventListener("click", () => {
   });
   if (hasError) return;
 
-  data.priority.push({ name, category, amount, paid: false, date: new Date().toISOString() });
+  const newBill = { name, category, amount, paid: false, date: new Date().toISOString() };
+  if (pbDue.value) newBill.due = pbDue.value;
+  data.priority.push(newBill);
   if (!saveData()) { data.priority.pop(); return; }
 
   pbName.value = "";
   pbCategory.selectedIndex = 0;
   syncCategoryChips(pbCategory);
   pbAmount.value = "";
+  pbDue.value = "";
+  pbDue.classList.add("is-empty");
   fields.forEach(f => f.el.classList.remove("input-error"));
 
   const emptyItem = priorityList.querySelector(".empty-state, .empty-state-rich");
@@ -1950,13 +1981,19 @@ function updateCopyLastBtn() {
 }
 
 copyLastBtn.addEventListener("click", () => {
-  data.priority = backupPriority.map(b => ({
-    name: b.name,
-    category: b.category,
-    amount: b.amount,
-    paid: false,
-    date: new Date().toISOString()
-  }));
+  data.priority = backupPriority.map(b => {
+    const bill = {
+      name: b.name,
+      category: b.category,
+      amount: b.amount,
+      paid: false,
+      date: new Date().toISOString()
+    };
+    // The due DAY carries over, landing on its date in this cycle.
+    const due = carriedDue(b, data.cycleStart);
+    if (due) bill.due = due;
+    return bill;
+  });
   saveData();
   copyLastBtn.classList.add("hidden");
   renderPriority();
@@ -3709,6 +3746,9 @@ function calculateRemaining(skipChart = false) {
   renderBackupReminder();
   updateBillsProgress();
   renderProjection();
+  renderDailyLine();
+  renderDueSoon();
+  renderUnpaidCarry();
   renderActivityFinder();
   renderRecentActivity();
 
@@ -3977,10 +4017,198 @@ function renderChart() {
 
 
 /* =========================
+   DUE DATES, DAILY LINE, UNPAID CARRY
+
+   Three read-mostly features that never move money: a due date is a label on a
+   bill, the daily figure is a forecast, and carrying an unpaid bill forward
+   adds an UNPAID bill (no balance changes until it is ticked). They sit before
+   INITIAL RENDER because calculateRemaining() first runs there, so the
+   constants below must already exist.
+========================= */
+
+const DUE_SOON_DAYS = 7;
+const DUE_SOON_MAX = 3;
+const UNPAID_DISMISSED_KEY = "mony-unpaid-dismissed";
+
+// Whole days since 1970 for a YYYY-MM-DD string. UTC, so a daylight-saving
+// change can never make a day 23 or 25 hours long.
+function dayIndex(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000;
+}
+
+/* How a bill's due date reads today. Unpaid bills count down and then turn
+   "Overdue"; a paid bill just shows its date, because it is no longer owed. */
+function dueInfo(due, paid) {
+  if (!isValidYmd(due)) return null;
+  const today = todayString();
+  const days = dayIndex(due) - dayIndex(today);
+  const [y, m, d] = due.split("-").map(Number);
+  const date = new Date(y, m - 1, d).toLocaleDateString("en-GB",
+    y === Number(today.slice(0, 4))
+      ? { day: "numeric", month: "short" }
+      : { day: "numeric", month: "short", year: "numeric" });
+  if (paid) return { text: `Due ${date}`, overdue: false, days };
+  if (days < 0) return { text: `Overdue ${-days} ${days === -1 ? "day" : "days"}`, overdue: true, days };
+  if (days === 0) return { text: "Due today", overdue: false, days };
+  if (days === 1) return { text: "Due tomorrow", overdue: false, days };
+  if (days < 7) return { text: `Due in ${days} days`, overdue: false, days };
+  return { text: `Due ${date}`, overdue: false, days };
+}
+
+/* Where a due DAY (1-31) falls inside the cycle that starts on `cycleStart`:
+   that day of the start month if it has not passed yet, otherwise of the next
+   month. Both helpers come from money.js and already clamp, so a due day of 31
+   becomes the 28th in February. */
+function dueDateInCycle(cycleStart, day) {
+  const [y, m] = cycleStart.split("-").map(Number);
+  const inStartMonth = cycleStartInMonth(y, m, day);
+  return inStartMonth >= cycleStart ? inStartMonth : nextCycleStartOf(cycleStart, day);
+}
+
+// A bill copied into a new cycle keeps its due DAY, not last cycle's date.
+function carriedDue(bill, cycleStart) {
+  if (!isValidYmd(bill.due)) return undefined;
+  return dueDateInCycle(cycleStart, Number(bill.due.slice(8, 10)));
+}
+
+/* Safe to spend per day: what is left once every unpaid bill is covered, spread
+   over the days that remain, today included. Rounded DOWN, so it can only ever
+   understate. Hidden when there is nothing safe to show - no cycle end in
+   endless mode, no income yet, or nothing left after bills (the overspent
+   warnings already say that). */
+function renderDailyLine() {
+  const line = document.getElementById("daily-line");
+  if (!line) return;
+  if (settings.cycleEnabled === false || !data.cycleNext || monthIsUnset(data)) {
+    line.classList.add("hidden");
+    return;
+  }
+  const projected = moneyValue(projectedRemainingOf(data, allWallets()));
+  const days = daysRemainingInCycle();
+  const perDay = ZERO_DECIMAL_CURRENCIES.has(cur())
+    ? Math.floor(projected / days)
+    : Math.floor(moneyCents(projected) / days) / 100;
+  if (projected <= 0 || perDay <= 0) {
+    line.classList.add("hidden");
+    return;
+  }
+  line.textContent = days === 1
+    ? `${cur()} ${fmt(projected)} left today · last day`
+    : `${cur()} ${fmt(perDay)} a day · ${days} days left`;
+  line.classList.remove("hidden");
+}
+
+// Unpaid bills due within a week (or already overdue), soonest first.
+function renderDueSoon() {
+  const section = document.getElementById("due-soon-section");
+  const list = document.getElementById("due-soon-list");
+  if (!section || !list) return;
+  const limit = dayIndex(todayString()) + DUE_SOON_DAYS;
+  const bills = (data.priority || [])
+    .filter(b => !b.paid && isValidYmd(b.due) && dayIndex(b.due) <= limit)
+    .sort((a, b) => a.due.localeCompare(b.due))
+    .slice(0, DUE_SOON_MAX);
+  // Same rule as Recent Activity: nothing on Home until the month has income.
+  const show = bills.length > 0 && !monthIsUnset(data);
+  section.classList.toggle("hidden", !show);
+  if (!show) { list.innerHTML = ""; return; }
+  list.innerHTML = bills.map(bill => {
+    const info = dueInfo(bill.due, false);
+    return `
+    <div class="recent-row">
+      <div class="recent-main"><strong>${esc(bill.name)}</strong><span>${esc(bill.category)}</span></div>
+      <div class="recent-side"><strong>${esc(cur())} ${fmt(bill.amount)}</strong><span class="${info.overdue ? "is-overdue" : ""}">${esc(info.text)}</span></div>
+    </div>`;
+  }).join("");
+}
+
+const dueSoonViewAll = document.getElementById("due-soon-view-all");
+if (dueSoonViewAll) dueSoonViewAll.addEventListener("click", () => showTab("bills"));
+
+/* Bills that were still unpaid when the newest archived cycle closed, minus any
+   whose name is already on this cycle's list - so a recurring bill, or "Copy
+   last cycle's bills", never produces a duplicate or a pointless card. Null
+   when there is nothing to offer. */
+function unpaidCarryCandidates() {
+  if (settings.cycleEnabled === false) return null;
+  const keys = sortedArchiveKeys();
+  if (!keys.length) return null;
+  const key = keys[keys.length - 1];
+  let dismissed = "";
+  try { dismissed = localStorage.getItem(UNPAID_DISMISSED_KEY) || ""; } catch (_) { /* a notice only */ }
+  if (dismissed === key) return null;
+  const closed = normalizeArchiveEntry(archive[key]);
+  const have = new Set((data.priority || []).map(b => String(b.name).trim().toLowerCase()));
+  const missing = ((closed.data && closed.data.priority) || [])
+    .filter(b => !b.paid && !have.has(String(b.name).trim().toLowerCase()));
+  return missing.length ? { key, missing } : null;
+}
+
+function rememberUnpaidDismissed(key) {
+  try { localStorage.setItem(UNPAID_DISMISSED_KEY, key); } catch (_) { /* a notice only */ }
+}
+
+function renderUnpaidCarry() {
+  const card = document.getElementById("unpaid-carry");
+  if (!card) return;
+  const found = unpaidCarryCandidates();
+  card.classList.toggle("hidden", !found);
+  if (!found) return;
+  const { key, missing } = found;
+  const total = moneyValue(missing.reduce((sum, b) => sum + Number(b.amount), 0));
+  const names = missing.slice(0, 3).map(b => b.name).join(", ") + (missing.length > 3 ? ` and ${missing.length - 3} more` : "");
+  document.getElementById("unpaid-carry-title").textContent =
+    `${missing.length} unpaid ${missing.length === 1 ? "bill" : "bills"} last cycle`;
+  document.getElementById("unpaid-carry-text").textContent =
+    `${names} ${missing.length === 1 ? "was" : "were"} not paid when ${monthLabel(key)} closed (${cur()} ${fmt(total)}).` +
+    (data.priorityLocked ? " Unlock Bills to add them to this cycle." : "");
+  // A locked list is never bypassed: the lock exists to stop unplanned edits.
+  document.getElementById("unpaid-carry-add").classList.toggle("hidden", !!data.priorityLocked);
+}
+
+document.getElementById("unpaid-carry-dismiss").addEventListener("click", () => {
+  const found = unpaidCarryCandidates();
+  if (found) rememberUnpaidDismissed(found.key);
+  renderUnpaidCarry();
+});
+
+document.getElementById("unpaid-carry-add").addEventListener("click", () => {
+  const found = unpaidCarryCandidates();
+  if (!found || data.priorityLocked) return;
+  const added = found.missing.map(b => {
+    const bill = { name: b.name, category: b.category, amount: b.amount, paid: false, date: new Date().toISOString() };
+    const due = carriedDue(b, data.cycleStart);
+    if (due) bill.due = due;
+    return bill;
+  });
+  data.priority.push(...added);
+  if (!saveData()) { data.priority.splice(-added.length); return; }
+  rememberUnpaidDismissed(found.key);
+  renderPriority();
+  updateCopyLastBtn();
+  calculateRemaining();
+  showNotice(`${added.length} ${added.length === 1 ? "bill" : "bills"} added to this cycle`);
+});
+
+/* What changes with the calendar alone. Run when the app returns to the
+   foreground, so a phone left open overnight does not keep yesterday's "due in
+   3 days" or yesterday's days-left count. Narrow on purpose - it rebuilds none
+   of the lists and so cannot disturb anything half typed. */
+function refreshDateDriven() {
+  renderDailyLine();
+  renderDueSoon();
+  priorityList.querySelectorAll("li").forEach(li => {
+    if (li._bill) li.querySelector(".bill-meta").innerHTML = billMetaHtml(li._bill);
+  });
+}
+
+/* =========================
    INITIAL RENDER
 ========================= */
 
 wireDateInput(scDate);
+wireDateInput(document.getElementById("pb-due"));
 renderCurrencyPlaceholders();
 
 const scTableEl = scTable.closest("table");
@@ -4741,12 +4969,14 @@ function renderRecurringCategoryOptions() {
   const keep = select.value;
   const list = type.value === "bill" ? "priority" : "secondChoice";
   renderCategoryOptions(select, list, (settings.categories[list] || []).includes(keep) ? keep : undefined);
+  // A due day only means something for a bill.
+  document.getElementById("recurring-due").classList.toggle("hidden", type.value !== "bill");
 }
 
 function renderRecurring() {
   renderRecurringCategoryOptions();
   recurringList.innerHTML = settings.recurring.length
-    ? settings.recurring.map((item, index) => `<div class="wallet-settings-row"><span>${esc(item.name)}<small>${esc(item.type)} · ${esc(item.category || "Others")} · ${esc(cur())} ${fmt(item.amount)}</small></span><button data-recurring-delete="${index}" aria-label="Remove ${esc(item.name)}">✕</button></div>`).join("")
+    ? settings.recurring.map((item, index) => `<div class="wallet-settings-row"><span>${esc(item.name)}<small>${esc(item.type)} · ${esc(item.category || "Others")} · ${esc(cur())} ${fmt(item.amount)}${item.dueDay ? ` · due day ${esc(item.dueDay)}` : ""}</small></span><button data-recurring-delete="${index}" aria-label="Remove ${esc(item.name)}">✕</button></div>`).join("")
     : '<p class="setting-note">No recurring transactions yet.</p>';
   recurringList.querySelectorAll("[data-recurring-delete]").forEach(btn => btn.addEventListener("click", () => {
     const index = Number(btn.dataset.recurringDelete);
@@ -4776,9 +5006,16 @@ document.getElementById("add-recurring").addEventListener("click", () => {
   const type = document.getElementById("recurring-type");
   const category = document.getElementById("recurring-category");
   const amount = document.getElementById("recurring-amount");
-  if (!name.value.trim() || !isValidAmount(inputAmount(amount))) { name.classList.toggle("input-error", !name.value.trim()); amount.classList.toggle("input-error", !isValidAmount(inputAmount(amount))); return; }
-  settings.recurring.push({ name: name.value.trim(), type: type.value, category: category.value || "Others", amount: inputAmount(amount) });
-  saveSettings(); name.value = amount.value = ""; renderRecurring();
+  const dueInput = document.getElementById("recurring-due");
+  // Optional, bills only. When given it must be a whole day of the month.
+  const dueDay = type.value === "bill" && dueInput.value.trim() !== "" ? Number(dueInput.value) : undefined;
+  const dueBad = dueDay !== undefined && !(Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31);
+  dueInput.classList.toggle("input-error", dueBad);
+  if (!name.value.trim() || !isValidAmount(inputAmount(amount)) || dueBad) { name.classList.toggle("input-error", !name.value.trim()); amount.classList.toggle("input-error", !isValidAmount(inputAmount(amount))); return; }
+  const template = { name: name.value.trim(), type: type.value, category: category.value || "Others", amount: inputAmount(amount) };
+  if (dueDay !== undefined) template.dueDay = dueDay;
+  settings.recurring.push(template);
+  saveSettings(); name.value = amount.value = dueInput.value = ""; renderRecurring();
 });
 
 const backupStatus = document.getElementById("backup-status");
@@ -4910,6 +5147,7 @@ function validateBillList(list, scope) {
     !isRecord(b) || !isNonEmptyString(b.name) ||
     !isNonEmptyString(b.category) || !isFiniteAmount(b.amount) ||
     (b.paid !== undefined && typeof b.paid !== "boolean") ||
+    (b.due !== undefined && !isValidYmd(b.due)) ||
     !isValidStoredDate(b.date) ||
     (b.paidAt !== undefined && !isValidStoredDate(b.paidAt))
   );
@@ -5087,6 +5325,7 @@ function validateSettings(settings) {
   if (settings.recurring !== undefined && (!Array.isArray(settings.recurring) || settings.recurring.some(item =>
     !isRecord(item) || !isNonEmptyString(item.name) ||
     !["bill", "expense", "income"].includes(item.type) || !isFiniteAmount(item.amount) ||
+    (item.dueDay !== undefined && !(Number.isInteger(item.dueDay) && item.dueDay >= 1 && item.dueDay <= 31)) ||
     (item.category !== undefined && !isNonEmptyString(item.category))
   ))) {
     return "That file's recurring transactions are malformed.";
@@ -6872,10 +7111,10 @@ function checkCycleRollover() {
    matters is the user coming back to it. `pageshow` covers a restore from
    the back-forward cache, which fires no visibilitychange. */
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") checkCycleRollover();
+  if (document.visibilityState === "visible" && !checkCycleRollover()) refreshDateDriven();
 });
-window.addEventListener("pageshow", () => { checkCycleRollover(); });
-window.addEventListener("focus", () => { checkCycleRollover(); });
+window.addEventListener("pageshow", () => { if (!checkCycleRollover()) refreshDateDriven(); });
+window.addEventListener("focus", () => { if (!checkCycleRollover()) refreshDateDriven(); });
 
 // Check before an action, not only on foreground: midnight can arrive while
 // the app is being used. The triggering action is stopped so it cannot land

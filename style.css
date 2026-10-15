@@ -849,6 +849,13 @@ button.summary-cell:active { background:var(--surface-field); }
 .recent-activity .empty-state-rich { margin:var(--space-card) 0; }
 .empty-action { margin-top:14px; font-size:12px; }
 
+/* Sits under the "After bills" line, so it reads in the same tone. */
+#daily-line { color:var(--text-tertiary); }
+
+/* A bill that is past its due date. Same muted red the overspent warning uses. */
+.bill-due.is-overdue,
+.recent-side span.is-overdue { color:var(--semantic-out); }
+
 .amount-in { color:var(--semantic-in) !important; }
 .amount-out { color:var(--text-primary); }
 .budget-warning:not(.hidden),
