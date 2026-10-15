@@ -395,7 +395,7 @@ select:focus-visible {
   /* Dim by default; the active tab is the only near-white one. Greyscale, so
      brightness carries the selection the way colour would elsewhere. */
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -520,7 +520,7 @@ select:focus-visible {
 .settings-modal-actions { margin-top:18px; }
 .settings-group { margin:0; padding:16px; border:1px solid var(--border-subtle); border-radius:var(--radius-card); background:rgba(255,255,255,.018); }
 .settings-group + .settings-group { margin-top:12px; }
-.settings-group h4 { margin:0 0 13px; color:var(--text-tertiary); font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+.settings-group h4 { margin:0 0 13px; color:var(--text-tertiary); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
 .settings-group .setting-row + .setting-row { margin-top:12px; }
 .settings-group .setting-note { margin:7px 0 0; }
 .settings-group .setting-note + .setting-row { margin-top:10px; }
@@ -822,7 +822,7 @@ header p {
 .summary-cell { min-width:0; padding:4px; text-align:left; }
 .cycle-summary .summary-cell span,
 .cycle-summary .summary-cell strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.cycle-summary .summary-cell span { margin:0; color:var(--text-tertiary); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.08em; }
+.cycle-summary .summary-cell span { margin:0; color:var(--text-tertiary); font-size:11px; font-weight:650; text-transform:uppercase; letter-spacing:.08em; }
 .cycle-summary .summary-cell strong { margin-top:5px; color:var(--text-primary); font-size:13px; font-weight:650; }
 /* Income is the one editable figure, so it is a real button - reset to look
    like its neighbours, with a dotted underline as the only "tap me" hint. */
@@ -1579,7 +1579,7 @@ body.tutorial-active {
   /* Says the badge does something, without spelling out "tap to unlock" in a
      space this small. */
   content: " ✕";
-  font-size: 9px;
+  font-size: 10px;
   opacity: 0.7;
 }
 
@@ -1817,7 +1817,7 @@ body.tutorial-active {
 /* Shown instead of a delete button on the fallback category, which cannot be
    removed because uncategorised entries are filed under it. */
 .category-locked {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #6a6a6a;
@@ -2085,7 +2085,7 @@ body.tutorial-active {
 
 .stat-label {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2100,7 +2100,7 @@ body.tutorial-active {
 
 .stat-sub {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: #666;
   margin-top: 2px;
 }
@@ -2386,7 +2386,7 @@ body.tutorial-active {
 .section-heading-row h3 { margin:2px 0 0; }
 .activity-search-head { align-items:center; margin-bottom:14px; }
 .activity-search-head h3 { margin:0; }
-.section-eyebrow { color:var(--text-tertiary); font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+.section-eyebrow { color:var(--text-tertiary); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
 
 .activity-modal-card { max-width:360px; text-align:left; }
 .activity-search-controls { display:grid; grid-template-columns:1fr; gap:10px; }
@@ -2415,7 +2415,7 @@ body.tutorial-active {
 .activity-search-controls input:focus,
 .activity-search-controls select:focus { outline:none; border-color:#3a3a3a; }
 .activity-search-controls input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(.6); cursor:pointer; }
-.date-filter { display:flex; min-width:0; flex-direction:column; gap:6px; color:#777; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.date-filter { display:flex; min-width:0; flex-direction:column; gap:6px; color:#777; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
 .text-button { width:auto; min-height:44px; padding:6px 8px; border:0; background:transparent; color:var(--text-secondary); font-size:12px; }
 .activity-summary { margin:14px 0 0; color:#777; font-size:12px; line-height:1.45; }
 .activity-results { margin-top:8px; }
@@ -2442,7 +2442,7 @@ body.tutorial-active {
 @media (max-width:380px) {
   :root { --space-page:16px; --space-card:14px; }
   .tab-bar { padding-inline:4px; }
-  .tab-btn { font-size:9px; letter-spacing:.06em; }
+  .tab-btn { font-size:10px; letter-spacing:.06em; }
 }
 
 @media (max-width:600px) {
@@ -2885,7 +2885,7 @@ table.day-list .day-row th {
   display: block;
   padding: 16px 0 4px;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .12em;
   text-align: left;

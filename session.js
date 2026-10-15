@@ -75,6 +75,19 @@
   function ready() { appReady = true; }
   window.MoNySession = { block, ready };
 
+  /* The panel freezes editing so a half-broken app cannot keep writing records.
+     That is only warranted for a fault in the app's own files. A browser
+     extension, a cross-origin script, or the harmless "ResizeObserver loop"
+     notice all raise the same window `error` event but cannot have touched a
+     record, and used to lock the app until a reload. The app's scripts are all
+     served from its own folder, so a real fault always carries that filename;
+     a cross-origin one arrives with none. */
+  const appBase = location.href.replace(/[?#].*$/, "").replace(/[^/]*$/, "");
+  function isAppFault(event) {
+    if (/ResizeObserver loop/.test(String(event.message || ""))) return false;
+    return String(event.filename || "").startsWith(appBase);
+  }
+
   async function start() {
     if (!navigator.locks) {
       block("Safe editing requires a browser with tab locking. Open MoNy over HTTPS in a current Safari, Chrome, Firefox, or Edge browser.");
@@ -87,13 +100,16 @@
           return;
         }
         blocked = false;
-        window.addEventListener("error", () => {
+        window.addEventListener("error", function onError(event) {
+          // Not the app's own fault: leave editing running, keep listening.
+          if (!isAppFault(event)) return;
+          window.removeEventListener("error", onError);
           if (appReady) {
             block("Something went wrong in MoNy. Reload to carry on - your saved records are safe on this device. Do not clear browser data.");
           } else {
             block("MoNy could not finish loading safely. Reload to recover - when you are online it downloads a fresh copy of the app. Your records stay on this device; do not clear browser data.", true);
           }
-        }, { once: true });
+        });
         const script = document.createElement("script");
         script.src = "app.js";
         script.onerror = () => block("MoNy could not load. Check your connection and reload.", true);

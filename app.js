@@ -246,7 +246,11 @@ let settings = load(SETTINGS_KEY, null) || {
   currency: "RM",
   sortOrder: "newest",
   budgetLimit: null,
-  wallets: []
+  wallets: [],
+  /* A brand-new install has no old unordered entries to migrate, so it keeps
+     the newest-first order chosen here. Without this the one-time migration
+     below ran for it too and switched it to oldest-first on first launch. */
+  dateOrderMigrated: true
 };
 // Default missing settings
 if (!settings.currency) settings.currency = "RM";
@@ -1115,8 +1119,18 @@ function hasEnough(available, amount) {
   return moneyCents(available) >= moneyCents(amount);
 }
 
-// Formats a number with 2 decimals
-function fmt(n) { return moneyValue(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+/* Currencies with no minor unit. They drop ".00" from a whole amount - "¥ 1,000"
+   rather than "¥ 1,000.00" - but a stored amount that really has cents is still
+   shown with them, so the screen never rounds to a figure that is not in the
+   books. Everything else keeps two decimals. */
+const ZERO_DECIMAL_CURRENCIES = new Set(["¥", "₩", "Rp"]);
+
+// Formats a number with 2 decimals (none for a whole amount in a no-cents currency)
+function fmt(n, currency = cur()) {
+  const value = moneyValue(n);
+  const whole = ZERO_DECIMAL_CURRENCIES.has(currency) && Number.isInteger(value);
+  return value.toLocaleString("en", { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
+}
 
 // Rounds to a whole number, for compact summaries where cents would be noise
 function fmtWhole(n) { return Math.round(Number(n)).toLocaleString("en"); }
@@ -3406,7 +3420,12 @@ function animateMoneyTo(el, to) {
     if (el._animToken !== token) return;
     const p = Math.min((now - start) / duration, 1);
     const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = `${cur()} ${fmt(from + (to - from) * eased)}`;
+    let frame = from + (to - from) * eased;
+    // Counting through fractions would flicker ".xx" on a currency with no cents.
+    if (ZERO_DECIMAL_CURRENCIES.has(cur()) && Number.isInteger(moneyValue(from)) && Number.isInteger(moneyValue(to))) {
+      frame = Math.round(frame);
+    }
+    el.textContent = `${cur()} ${fmt(frame)}`;
     if (p < 1) requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
@@ -5724,7 +5743,7 @@ function buildHistoryRow(key) {
             <span class="legend-dot" style="background:${color}"></span>
             <span>${esc(label)}</span>
           </div>
-          <span class="legend-amount">${esc(c)} ${fmt(amount)}</span>
+          <span class="legend-amount">${esc(c)} ${fmt(amount, c)}</span>
         </div>
       `;
     })
@@ -5736,7 +5755,7 @@ function buildHistoryRow(key) {
         <span class="legend-dot" style="background:${CHART_IN_WALLETS_COLOR}"></span>
         <span>In wallets</span>
       </div>
-      <span class="legend-amount">${esc(c)} ${fmt(s.inWallets)}</span>
+      <span class="legend-amount">${esc(c)} ${fmt(s.inWallets, c)}</span>
     </div>
   ` : "";
 
@@ -5746,7 +5765,7 @@ function buildHistoryRow(key) {
         <span class="legend-dot" style="background:${CHART_REMAINING_COLOR}"></span>
         <span>Available</span>
       </div>
-      <span class="legend-amount">${esc(c)} ${fmt(s.remaining)}</span>
+      <span class="legend-amount">${esc(c)} ${fmt(s.remaining, c)}</span>
     </div>
   ` : "";
 
@@ -5840,7 +5859,7 @@ function buildEndlessHistoryRow(entry, index) {
   const started = new Date(entry.startedAt).toLocaleDateString("default", { day: "numeric", month: "short", year: "numeric" });
   const ended = new Date(entry.endedAt).toLocaleDateString("default", { day: "numeric", month: "short", year: "numeric" });
   const counts = `${entry.data.priority.length} bills · ${entry.data.secondChoice.length} transactions · ${Object.values(entry.data.walletData || {}).reduce((n, wd) => n + (wd.items || []).length, 0)} wallet items`;
-  row.innerHTML = `<div class="history-row-main" role="button" tabindex="0" aria-expanded="false" aria-label="Endless period from ${esc(started)} to ${esc(ended)}"><div><div class="history-month">Endless period</div><div class="history-sub">${esc(started)} – ${esc(ended)} · ${esc(c)} ${fmtWhole(s.spent)} spent</div></div><div class="history-right"><strong class="history-remaining">${esc(c)} ${fmtWhole(s.remaining)}</strong></div></div><div class="history-detail hidden"><span class="history-meta">${esc(counts)}</span><span class="history-meta">${esc(c)} ${fmt(s.inWallets)} in wallets · ${esc(c)} ${fmt(s.remaining)} in main</span><div class="endless-entry-list"></div></div>`;
+  row.innerHTML = `<div class="history-row-main" role="button" tabindex="0" aria-expanded="false" aria-label="Endless period from ${esc(started)} to ${esc(ended)}"><div><div class="history-month">Endless period</div><div class="history-sub">${esc(started)} – ${esc(ended)} · ${esc(c)} ${fmtWhole(s.spent)} spent</div></div><div class="history-right"><strong class="history-remaining">${esc(c)} ${fmtWhole(s.remaining)}</strong></div></div><div class="history-detail hidden"><span class="history-meta">${esc(counts)}</span><span class="history-meta">${esc(c)} ${fmt(s.inWallets, c)} in wallets · ${esc(c)} ${fmt(s.remaining, c)} in main</span><div class="endless-entry-list"></div></div>`;
   const records = [
     ...entry.data.priority.map(bill => ({ name: bill.name, type: bill.paid ? "Paid bill" : "Unpaid bill", amount: bill.amount, date: bill.date, direction: bill.paid ? -1 : 0 })),
     ...entry.data.secondChoice.map(item => ({ name: item.name, type: isTransferEntry(item) ? "Transfer" : isReimbursement(item) ? "Money back" : item.type === "add" ? "Money in" : "Expense", amount: item.amount, date: item.date, direction: item.type === "add" ? 1 : -1 })),
@@ -5861,7 +5880,7 @@ function buildEndlessHistoryRow(entry, index) {
         item.className = "legend-item";
         const date = record.date && Number.isFinite(Date.parse(record.date))
           ? new Date(record.date).toLocaleDateString("default", { day: "numeric", month: "short", year: "numeric" }) : "Undated";
-        item.innerHTML = `<div class="legend-left"><span>${esc(record.name)}</span><small class="history-sub">${esc(record.type)} · ${esc(date)}</small></div><span class="legend-amount">${record.direction < 0 ? "−" : record.direction > 0 ? "+" : ""} ${esc(c)} ${fmt(record.amount)}</span>`;
+        item.innerHTML = `<div class="legend-left"><span>${esc(record.name)}</span><small class="history-sub">${esc(record.type)} · ${esc(date)}</small></div><span class="legend-amount">${record.direction < 0 ? "−" : record.direction > 0 ? "+" : ""} ${esc(c)} ${fmt(record.amount, c)}</span>`;
         return item;
       });
     }
