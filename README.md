@@ -398,7 +398,9 @@ to handle it — see [Overspending](#overspending).
 2. Tap **"+ Add"**.
 3. A pop-up asks **"Where's this from?"** with two options:
    - **New money** — genuinely new income (a gift, freelance pay, salary
-     top-up). This raises your **Total Income**.
+     top-up). This raises your **Total Income**. If you'd rather log your
+     pay this way than type it on the income card, that works too: the
+     month starts as soon as money is recorded.
    - **Money coming back** — a reimbursement (a friend repaying you, a
      refund). This does **not** raise your income, but it does put the cash
      back into your Remaining balance and cancels out the spending it repaid.

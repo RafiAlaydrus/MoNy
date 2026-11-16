@@ -561,7 +561,7 @@ function performRollover(today) {
     Object.keys(carry.wallets).forEach(id => {
       if (!live.has(id)) delete carry.wallets[id];
     });
-    carry.total = carry.main + Object.values(carry.wallets).reduce((a, b) => a + b, 0);
+    carry.total = moneyValue(carry.main + Object.values(carry.wallets).reduce((a, b) => a + b, 0));
   }
 
   /* The new cycle begins where the old one said it would - cycleNext, not a

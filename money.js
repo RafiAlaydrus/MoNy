@@ -42,6 +42,19 @@
     return cents === 0 ? 0 : cents;
   }
 
+  // A balance rounded to the cent, never -0.
+  function toCents(value) {
+    return moneyCents(value) / 100;
+  }
+
+  /* Below half a cent is binary floating-point residue, not money: 1000 minus
+     333.33, 333.33 and 333.34 is 1.1e-13. Carried figures stored before
+     closing balances were rounded can hold such residue, and treating it as
+     real made an empty month look started. */
+  function isRealAmount(n, signed) {
+    return Number.isFinite(n) && (signed ? Math.abs(n) : n) >= 0.005;
+  }
+
   // Wallets that could cover a shortfall on their own, richest first. Only
   // wallets that cover it in full are offered, so choosing one always lands
   // the main balance back at zero rather than a smaller overspend.
@@ -77,9 +90,9 @@
     const wallets = {};
     Object.keys(c.wallets || {}).forEach(id => {
       const v = Number(c.wallets[id]);
-      if (Number.isFinite(v) && v > 0) wallets[id] = v;
+      if (isRealAmount(v, false)) wallets[id] = v;
     });
-    return { main: Number.isFinite(main) && (main > 0 || d?.signedCarry === true) ? main : 0, wallets };
+    return { main: isRealAmount(main, d?.signedCarry === true) ? main : 0, wallets };
   }
 
   // Bills listed but not yet ticked off - what is still owed this month.
@@ -208,17 +221,29 @@
   function carryOverOf(d) {
     if (!d) return 0;
     const n = Number(d.carryOver);
-    return Number.isFinite(n) && (n > 0 || d.signedCarry === true) ? n : 0;
+    return isRealAmount(n, d.signedCarry === true) ? n : 0;
   }
 
-  // A month with no income typed and nothing brought forward has not been
-  // started yet, and reports null rather than zero. Carry-over alone is enough
-  // to make a month real - the first of the month with money still in hand is
-  // not an empty month.
+  /* Anything that has actually moved money this month: an entry in Spending,
+     a paid bill, or a wallet holding a budget or items. An UNPAID bill is a
+     plan, not a movement, and an empty wallet slot is created on demand by
+     rendering, so neither counts. */
+  function monthHasActivity(d) {
+    if (!d) return false;
+    return (d.secondChoice || []).length > 0 ||
+      (d.priority || []).some(b => b && b.paid) ||
+      Object.values(d.walletData || {}).some(wd => wd && (Number(wd.budget) > 0 || (wd.items || []).length > 0));
+  }
+
+  // A month with no income typed, nothing brought forward and no money moved
+  // has not been started yet, and reports null rather than zero. Carry-over
+  // alone is enough to make a month real - the first of the month with money
+  // still in hand is not an empty month - and so is recording money: someone
+  // who logs their pay as Money In instead of typing it has started too.
   function monthIsUnset(d) {
     if (d && d.signedCarry === true && d.carryIn && ((Number(d.carryIn.main) || 0) !== 0 ||
         Object.values(d.carryIn.wallets || {}).some(value => Number(value) !== 0))) return false;
-    return (!d || d.income === null || d.income === undefined) && carryOverOf(d) === 0;
+    return (!d || d.income === null || d.income === undefined) && carryOverOf(d) === 0 && !monthHasActivity(d);
   }
 
   // What a wallet currently holds.
@@ -414,23 +439,27 @@
      computed here rather than in app.js so the rollover and the tests agree
      on it. Never negative - an overspent month carries nothing forward rather
      than starting the next one in debt, which would be a second, hidden way
-     to go negative. */
+     to go negative.
+
+     Rounded to the cent, because the running sums are binary floats: a month
+     spent to exactly zero can end on 1.1e-13, and carrying that made the next
+     month look started and file an empty month in History. */
   function closingBalanceOf(d, wallets) {
     if (monthIsUnset(d)) return { main: 0, wallets: {}, total: 0 };
 
-    const main = Math.max(mainRemainingOf(d, wallets), 0);
+    const main = Math.max(toCents(mainRemainingOf(d, wallets)), 0);
     const walletBalances = {};
     let walletTotal = 0;
 
     (wallets || []).forEach(w => {
-      const bal = walletBalanceOf((d.walletData || {})[w.id]);
+      const bal = toCents(walletBalanceOf((d.walletData || {})[w.id]));
       if (bal > 0) {
         walletBalances[w.id] = bal;
         walletTotal += bal;
       }
     });
 
-    return { main, wallets: walletBalances, total: main + walletTotal };
+    return { main, wallets: walletBalances, total: toCents(main + walletTotal) };
   }
 
   return {
@@ -442,6 +471,7 @@
     carryInOf,
     unpaidPriorityOf,
     projectedRemainingOf,
+    monthHasActivity,
     monthIsUnset,
     closingBalanceOf,
     daysInMonth,
