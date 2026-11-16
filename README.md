@@ -250,7 +250,8 @@ week (or already overdue), soonest first. **View all** opens the Bills tab.
 
 When a new cycle starts, a **recurring bill** with a due day lands on that day
 of the new cycle, and **"Copy Last Priority"** keeps each bill's due day too.
-A due day of 31 falls on the last day of a shorter month.
+A due day of 31 falls on the last day of a shorter month, and goes back to
+the 31st in the next month that has one.
 
 ### Mark a bill as paid
 
@@ -553,8 +554,10 @@ change that:
 
 Your budgeting month then runs from that day to the day before it repeats
 (e.g. 25th to 24th). A note under the dropdown shows exactly when the new
-start day takes effect — changing this never cuts your *current* cycle
-short, it only applies from the next one onward. Days that don't exist in a
+start day takes effect and how many days the current cycle now runs.
+Changing it never shortens your *current* cycle to under two weeks — if the
+new day would, the change waits one more month, so that one cycle can run
+longer. Days that don't exist in a
 shorter month (like the 31st in April) automatically land on that month's
 last real day.
 

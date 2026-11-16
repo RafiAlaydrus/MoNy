@@ -663,11 +663,18 @@ function saveSnapshot() {
 function applyRecurringTransactions(target) {
   (settings.recurring || []).forEach(template => {
     if (!template || !template.name || !(Number(template.amount) > 0)) return;
-    const item = { name: template.name, category: template.category || "Others", amount: Number(template.amount), date: `${target.cycleStart}T12:00:00.000Z` };
+    /* Local noon on the cycle's first day. A fixed UTC noon is already the next
+       day from UTC+12 eastwards, which put the entry outside its own cycle. */
+    const [startY, startM, startD] = target.cycleStart.split("-").map(Number);
+    const item = { name: template.name, category: template.category || "Others", amount: Number(template.amount),
+      date: new Date(startY, startM - 1, startD, 12).toISOString() };
     if (template.type === "bill") {
       const bill = { ...item, paid: false };
       const day = Number(template.dueDay);
-      if (Number.isInteger(day) && day >= 1 && day <= 31) bill.due = dueDateInCycle(target.cycleStart, day);
+      if (Number.isInteger(day) && day >= 1 && day <= 31) {
+        bill.due = dueDateInCycle(target.cycleStart, day);
+        bill.dueDay = day;
+      }
       target.priority.push(bill);
     }
     else target.secondChoice.push({ ...item, type: template.type === "income" ? "add" : "take", newMoney: template.type === "income" });
@@ -1662,7 +1669,7 @@ function editPriorityBill(bill) {
         bill.name = name;
         bill.category = category;
         bill.amount = amount;
-        if (due) bill.due = due; else delete bill.due;
+        setBillDue(bill, due);
         saveData();
         renderPriority();
         calculateRemaining();
@@ -2001,7 +2008,7 @@ addPriorityBtn.addEventListener("click", () => {
   if (hasError) return;
 
   const newBill = { name, category, amount, paid: false, date: new Date().toISOString() };
-  if (pbDue.value) newBill.due = pbDue.value;
+  setBillDue(newBill, pbDue.value);
   data.priority.push(newBill);
   if (!saveData()) { data.priority.pop(); return; }
 
@@ -2049,9 +2056,7 @@ copyLastBtn.addEventListener("click", () => {
       date: new Date().toISOString()
     };
     // The due DAY carries over, landing on its date in this cycle.
-    const due = carriedDue(b, data.cycleStart);
-    if (due) bill.due = due;
-    return bill;
+    return Object.assign(bill, carriedDueFields(b, data.cycleStart));
   });
   saveData();
   copyLastBtn.classList.add("hidden");
@@ -3566,10 +3571,9 @@ function updateRemainingDisplay(to) {
 
 // Recalculates and renders the remaining balance, bars, and warnings
 function daysRemainingInCycle() {
-  const end = new Date(`${data.cycleNext}T00:00:00`);
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Math.max(1, Math.ceil((end - now) / 86400000));
+  // Calendar days, not elapsed milliseconds: a cycle containing a clock
+  // change is an hour longer or shorter, which rounded up to a whole extra day.
+  return Math.max(1, dayIndex(data.cycleNext) - dayIndex(todayString()));
 }
 
 function activityIndex() {
@@ -4151,10 +4155,36 @@ function dueDateInCycle(cycleStart, day) {
   return inStartMonth >= cycleStart ? inStartMonth : nextCycleStartOf(cycleStart, day);
 }
 
+/* The day of the month a bill is MEANT for, 1-31. Stored beside the date
+   because a date cannot say it: a bill due on the 31st shows the 28th in
+   February, and reading the day back out of that date made it the 28th in
+   every cycle after. A bill saved before this existed has no stored day and
+   falls back to the day in its date. */
+function billDueDay(bill) {
+  const stored = bill.dueDay;
+  if (Number.isInteger(stored) && stored >= 1 && stored <= 31) return stored;
+  return isValidYmd(bill.due) ? Number(bill.due.slice(8, 10)) : undefined;
+}
+
+/* Sets or clears a bill's due date together with its day. A save that leaves
+   the date as it was keeps the stored day, since the date may be a clamped
+   version of it. */
+function setBillDue(bill, due) {
+  if (!due) { delete bill.due; delete bill.dueDay; return; }
+  if (due !== bill.due || !Number.isInteger(bill.dueDay)) bill.dueDay = Number(due.slice(8, 10));
+  bill.due = due;
+}
+
 // A bill copied into a new cycle keeps its due DAY, not last cycle's date.
 function carriedDue(bill, cycleStart) {
-  if (!isValidYmd(bill.due)) return undefined;
-  return dueDateInCycle(cycleStart, Number(bill.due.slice(8, 10)));
+  const day = billDueDay(bill);
+  return day === undefined ? undefined : dueDateInCycle(cycleStart, day);
+}
+
+// A bill's due fields for a copy of it in a new cycle.
+function carriedDueFields(bill, cycleStart) {
+  const due = carriedDue(bill, cycleStart);
+  return due ? { due, dueDay: billDueDay(bill) } : {};
 }
 
 /* Safe to spend per day: what is left once every unpaid bill is covered, spread
@@ -4265,9 +4295,7 @@ document.getElementById("unpaid-carry-add").addEventListener("click", () => {
   if (!found || data.priorityLocked) return;
   const added = found.missing.map(b => {
     const bill = { name: b.name, category: b.category, amount: b.amount, paid: false, date: new Date().toISOString() };
-    const due = carriedDue(b, data.cycleStart);
-    if (due) bill.due = due;
-    return bill;
+    return Object.assign(bill, carriedDueFields(b, data.cycleStart));
   });
   data.priority.push(...added);
   if (!saveData()) { data.priority.splice(-added.length); return; }
@@ -4465,10 +4493,20 @@ function ordinal(n) {
    todayString() is intentionally read at interaction time. An installed PWA
    can stay alive across midnight; the startup snapshot `todayStr` may be days
    old by the time the user changes this setting. */
+/* A cycle must also not be left absurdly short. A cycle's next start has to
+   fall in a LATER calendar month than its own (that keeps archive keys
+   unique), so choosing the 1st on 28 Oct, in a cycle that began 25 Oct, would
+   end it on 31 Oct: seven days, when the README promises a change never cuts
+   the current cycle short. Anything under this waits one more month; the
+   rule depends only on the cycle's start, the chosen day and today, so
+   picking the old day again restores the old boundary. */
+const MIN_CYCLE_DAYS = 15;
+
 function startDayTakesEffect(chosenDay) {
   const today = todayString();
+  const length = next => dayIndex(next) - dayIndex(data.cycleStart);
   let next = nextCycleStartOf(data.cycleStart, chosenDay);
-  while (next <= today) next = nextCycleStartOf(next, chosenDay);
+  while (next <= today || length(next) < MIN_CYCLE_DAYS) next = nextCycleStartOf(next, chosenDay);
   return next;
 }
 
@@ -4488,9 +4526,10 @@ function renderMonthStartNote() {
   }
 
   const from = new Date(data.cycleNext + "T00:00:00");
+  const days = dayIndex(data.cycleNext) - dayIndex(data.cycleStart);
   monthStartNote.textContent =
-    `Next cycle begins ${from.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" })}. ` +
-    `The current cycle keeps its original start date.`;
+    `This cycle now runs ${days} days. ` +
+    `Next cycle begins ${from.toLocaleString("default", { day: "numeric", month: "short", year: "numeric" })}.`;
   monthStartNote.classList.remove("hidden");
 }
 
@@ -5305,6 +5344,7 @@ function validateBillList(list, scope) {
     !isNonEmptyString(b.category) || !isFiniteAmount(b.amount) ||
     (b.paid !== undefined && typeof b.paid !== "boolean") ||
     (b.due !== undefined && !isValidYmd(b.due)) ||
+    (b.dueDay !== undefined && !(Number.isInteger(b.dueDay) && b.dueDay >= 1 && b.dueDay <= 31)) ||
     !isValidStoredDate(b.date) ||
     (b.paidAt !== undefined && !isValidStoredDate(b.paidAt))
   );
