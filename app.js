@@ -29,6 +29,12 @@ let moneyBatch = false;
    While it is set the global guard stops retrying on every tap - which made
    the error impossible to dismiss - and only freezes money entry. */
 let rolloverBlocked = null;
+/* Set when the startup rollover opened a new cycle, so the automatic snapshot
+   is refreshed once the rest of the file has loaded (it cannot be earlier). */
+let bootRolledOver = false;
+/* The share of the storage quota in use, cached by storageUsedRatio().
+   Cleared by the writes that move it by a lot: commits and History edits. */
+let storageUsageCache = null;
 
 // An interrupted multi-key save is rolled back before migrations or rollover.
 function recoverPendingWrite() {
@@ -47,6 +53,26 @@ function recoverPendingWrite() {
   localStorage.removeItem(JOURNAL_KEY);
 }
 recoverPendingWrite();
+
+/* v1.53.2 and earlier copied all of History into the automatic snapshot,
+   which is rewritten after every save - a whole extra copy of the largest
+   record. Slim an old one now, before the startup rollover needs the room.
+   It is left whole while the live History cannot be read, because it may
+   then be the only readable copy of it. */
+function slimLegacySnapshot() {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return;
+    const snapshot = JSON.parse(raw);
+    if (!snapshot || snapshot.partial === true || !("archive" in snapshot || "endlessArchive" in snapshot)) return;
+    JSON.parse(localStorage.getItem(ARCHIVE_KEY) || "{}");
+    JSON.parse(localStorage.getItem(ENDLESS_ARCHIVE_KEY) || "[]");
+    const { archive: _archive, endlessArchive: _endless, ...slim } = snapshot;
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ ...slim, partial: true }));
+  } catch (_) { /* unreadable either way: leave it exactly as it is */ }
+}
+slimLegacySnapshot();
+
 const expectedStorage = new Map(STATE_KEYS.map(key => [key, localStorage.getItem(key)]));
 
 function storageIsCurrent() {
@@ -102,11 +128,17 @@ function saveSettings() { if (moneyBatch) return true; const ok = save(SETTINGS_
    copy exists to protect has changed, so it is not rewritten - a tab tap or an
    app launch used to re-serialise the whole archive for nothing. */
 function saveUiSettings() { if (moneyBatch) return true; return save(SETTINGS_KEY, settings); }
-function saveArchive() { const ok = save(ARCHIVE_KEY, archive); if (ok && snapshotReady) saveSnapshot(); return ok; }
+function saveArchive() { const ok = save(ARCHIVE_KEY, archive); storageUsageCache = null; if (ok && snapshotReady) saveSnapshot(); return ok; }
 
 function commitStateChanges(changes) {
   if (!storageIsCurrent()) return { ok: false, message: "Reload this tab before editing. Your records changed in another tab." };
-  const entries = Object.entries(changes).map(([key, value]) => [key, value === undefined ? null : JSON.stringify(value)]);
+  /* A key whose value is not changing is left out entirely. The journal holds
+     the previous value of every key it covers, and on a large install that is
+     a whole copy of History each time - for nothing, if History is untouched. */
+  const entries = Object.entries(changes)
+    .map(([key, value]) => [key, value === undefined ? null : JSON.stringify(value)])
+    .filter(([key, value]) => localStorage.getItem(key) !== value);
+  if (!entries.length) return { ok: true };
   const previous = entries.map(([key]) => [key, localStorage.getItem(key)]);
   try {
     localStorage.setItem(JOURNAL_KEY, JSON.stringify(previous));
@@ -116,6 +148,7 @@ function commitStateChanges(changes) {
     });
     localStorage.removeItem(JOURNAL_KEY);
     entries.forEach(([key, value]) => { if (expectedStorage.has(key)) expectedStorage.set(key, value); });
+    storageUsageCache = null;
     return { ok: true };
   } catch (_) {
     try {
@@ -507,7 +540,8 @@ if (!data) {
      remains the recovery path. */
   saveData();
 } else if (settings.cycleEnabled !== false && todayStr >= data.cycleNext) {
-  if (!performRollover(todayStr) && rolloverBlocked) appAlert(rolloverBlocked.message, "Couldn't start the new cycle");
+  if (performRollover(todayStr)) bootRolledOver = true;
+  else if (rolloverBlocked) appAlert(rolloverBlocked.message, "Couldn't start the new cycle");
 }
 
 /* Records why the rollover stopped. The caller decides whether to say so:
@@ -609,11 +643,17 @@ let checkingCycle = false;
 
 /* A single local recovery copy is updated after successful writes. It never
    leaves this device and is intentionally separate from Export: a mistaken
-   import can be rolled back without needing a downloaded file. */
+   import can be rolled back without needing a downloaded file.
+
+   `partial`: it holds the current month, settings and saved bills, but not
+   History. History only changes at rollover or a deletion, and copying it on
+   every tap doubled the space the records took - which is what filled the
+   storage quota. Restoring a partial copy leaves History as it is; the
+   pre-change recovery copy (commitStoredChanges) stays complete. */
 function saveSnapshot() {
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
-      savedAt: new Date().toISOString(), data, settings, archive, endlessArchive,
+      savedAt: new Date().toISOString(), partial: true, data, settings,
       priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
     }));
     renderBackupStatus();
@@ -5164,7 +5204,7 @@ document.getElementById("restore-backup-btn").addEventListener("click", () => {
     setDataControlError(dataControlFeedback, "There is no browser recovery copy yet. You can import an external backup file instead.");
     return;
   }
-  const problem = validateImport(snapshot);
+  const problem = validateImport(snapshot) || partialRestoreProblem(snapshot);
   if (problem) {
     setDataControlError(dataControlFeedback, `This local backup cannot be restored. ${problem}`);
     return;
@@ -5172,7 +5212,7 @@ document.getElementById("restore-backup-btn").addEventListener("click", () => {
   pendingRestore = snapshot;
   setDataControlError(restoreBackupError);
   document.getElementById("restore-backup-text").textContent =
-    `Replace your current data with this local backup? Your current data will be kept as the next recovery copy.${backupTimestamp(snapshot.savedAt, "Saved")}`;
+    `Replace your current data with this local backup?${snapshot.partial === true ? " Your History is kept as it is." : ""} Your current data will be kept as the next recovery copy.${backupTimestamp(snapshot.savedAt, "Saved")}`;
   renderBackupPreview(document.getElementById("restore-backup-preview"), snapshot);
   revealSurface(restoreBackupModal);
 });
@@ -5545,7 +5585,7 @@ function renderBackupPreview(element, backup) {
     ["Bills", month.priority.length],
     ["Spending / income entries", month.secondChoice.length],
     ["Wallets / wallet entries", `${wallets} / ${walletEntries}`],
-    ["Archived months", Object.keys(backup.archive || {}).length],
+    ["Archived months", backup.partial === true ? "Kept as it is" : Object.keys(backup.archive || {}).length],
     ["Saved bills", (backup.priorityBackup || []).length]
   ];
   if (backup.settings?.cycleEnabled === false) rows.unshift(["Tracking mode", "Endless"]);
@@ -5555,20 +5595,55 @@ function renderBackupPreview(element, backup) {
   ).join("");
 }
 
+/* Saves a complete copy of the records as they are now, then makes the change.
+
+   The copy is written on its own first, not as part of the change. Inside the
+   change, the save journal had to hold the PREVIOUS recovery copy too - a
+   whole extra copy of History at the moment storage was fullest, which is
+   what made large imports fail. If the change then fails, the previous copy
+   is put back, so a failed restore never costs the copy being restored. */
 function commitStoredChanges(changes, reason) {
+  if (!storageIsCurrent()) return { ok: false, message: "Reload this tab before editing. Your records changed in another tab." };
   const recovery = { savedAt: new Date().toISOString(), reason, data, settings, archive, endlessArchive,
     priorityBackup: load(BACKUP_PRIORITY_KEY, null) || [] };
-  return commitStateChanges({ [RECOVERY_KEY]: recovery, ...changes });
+  const previousRecovery = localStorage.getItem(RECOVERY_KEY);
+  try {
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify(recovery));
+  } catch (_) {
+    return { ok: false, message: "Couldn't save a recovery copy first, so your existing data is unchanged. Free some browser storage and try again." };
+  }
+  const result = commitStateChanges(changes);
+  if (!result.ok) {
+    try {
+      if (previousRecovery === null) localStorage.removeItem(RECOVERY_KEY);
+      else localStorage.setItem(RECOVERY_KEY, previousRecovery);
+    } catch (_) { /* the new copy holds the unchanged records, which is still safe */ }
+  }
+  return result;
+}
+
+/* A partial copy (the automatic snapshot) carries no History. Restoring one
+   from a cycle that has since been closed would put back a month History
+   already holds, and the next rollover would refuse to archive it again. */
+function partialRestoreProblem(backup) {
+  if (!backup || backup.partial !== true || !backup.data || backup.data.month === data.month) return null;
+  return "This recovery copy is from a cycle that has since been closed, so it can't be restored without its History. Import an exported backup file instead.";
 }
 
 function replaceBackupData(backup, reason) {
-  return commitStoredChanges({
+  const problem = partialRestoreProblem(backup);
+  if (problem) return { ok: false, message: problem };
+  const changes = {
     [STORAGE_KEY]: backup.data,
     [SETTINGS_KEY]: backup.settings || undefined,
-    [ARCHIVE_KEY]: backup.archive && Object.keys(backup.archive).length ? backup.archive : undefined,
-    [ENDLESS_ARCHIVE_KEY]: Array.isArray(backup.endlessArchive) && backup.endlessArchive.length ? backup.endlessArchive : undefined,
     [BACKUP_PRIORITY_KEY]: Array.isArray(backup.priorityBackup) && backup.priorityBackup.length ? backup.priorityBackup : undefined
-  }, reason);
+  };
+  // A complete backup replaces History too; a partial one leaves it alone.
+  if (backup.partial !== true) {
+    changes[ARCHIVE_KEY] = backup.archive && Object.keys(backup.archive).length ? backup.archive : undefined;
+    changes[ENDLESS_ARCHIVE_KEY] = Array.isArray(backup.endlessArchive) && backup.endlessArchive.length ? backup.endlessArchive : undefined;
+  }
+  return commitStoredChanges(changes, reason);
 }
 
 importBtn.addEventListener("click", () => {
@@ -5683,6 +5758,24 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const BACKUP_REMINDER_DAYS = 30;
 const BACKUP_SNOOZE_DAYS = 7;
 
+/* Storage is measured against 5 MB counted as UTF-16, two bytes a character -
+   the smallest limit a current browser gives a site, so the figure errs early.
+   Big changes (a rollover, an import) briefly need room for about twice the
+   History, so half full is when to start freeing space. */
+const STORAGE_LIMIT_BYTES = 5 * 1024 * 1024;
+const STORAGE_WARN_RATIO = 0.5;
+
+/* Reading every stored value is not free once History is large, and this runs
+   on each render, so the figure is cached for a minute. Commits and History
+   edits clear the cache, since those are what move it by a lot. */
+function storageUsedRatio() {
+  const now = Date.now();
+  if (!storageUsageCache || now - storageUsageCache.at > 60 * 1000) {
+    storageUsageCache = { at: now, ratio: totalStorageBytes() / STORAGE_LIMIT_BYTES };
+  }
+  return storageUsageCache.ratio;
+}
+
 function readReminderTime(key) {
   try {
     const value = Number(localStorage.getItem(key));
@@ -5704,10 +5797,20 @@ function renderBackupReminder() {
   const lastExport = readReminderTime(LAST_EXPORT_KEY);
   const since = lastExport || readReminderTime(FIRST_SEEN_KEY) || Date.now();
   const hasRecords = !monthIsUnset(data) || Object.keys(archive).length > 0;
-  const due = hasRecords && Date.now() - since >= BACKUP_REMINDER_DAYS * DAY_MS &&
-    Date.now() >= readReminderTime(BACKUP_SNOOZE_KEY);
+  const snoozed = Date.now() < readReminderTime(BACKUP_SNOOZE_KEY);
+  /* Filling storage is said whatever the 30-day timer says - a recent export
+     does not make room - but "Later" still snoozes it. */
+  const ratio = storageUsedRatio();
+  const filling = ratio >= STORAGE_WARN_RATIO;
+  const due = !snoozed && (filling || (hasRecords && Date.now() - since >= BACKUP_REMINDER_DAYS * DAY_MS));
   card.classList.toggle("hidden", !due);
   if (!due) return;
+  document.getElementById("backup-reminder-title").textContent = filling ? "Storage is filling up" : "Time for a backup";
+  if (filling) {
+    document.getElementById("backup-reminder-text").textContent =
+      `MoNy is using about ${Math.round(ratio * 100)}% of the space this browser gives it. Export a backup, then delete old months in History to make room - a new cycle needs space to open.`;
+    return;
+  }
   const days = Math.floor((Date.now() - lastExport) / DAY_MS);
   document.getElementById("backup-reminder-text").textContent =
     (lastExport ? `Your last backup was ${days} days ago. ` : "You haven't exported a backup yet. ") +
@@ -5853,7 +5956,9 @@ const initialTabRoute = ["home", "bills", "spending", "wallets"].includes(routeN
 /* showTab no longer writes the recovery copy, which this launch used to do as a
    side effect. Keep that guarantee for a first run: a copy exists from the
    start, and is only created here when there is none. */
-if (localStorage.getItem(SNAPSHOT_KEY) === null) saveSnapshot();
+/* Also after a startup rollover: the snapshot no longer carries History, so
+   one still describing the closed cycle could not be restored safely. */
+if (bootRolledOver || localStorage.getItem(SNAPSHOT_KEY) === null) saveSnapshot();
 showTab(initialTabRoute, false, false);
 
 /* =========================
@@ -6283,7 +6388,8 @@ function renderHistory() {
   }
 
   deleteArchiveBtn.classList.toggle("hidden", keys.length === 0 && endlessArchive.length === 0);
-  storageLine.textContent = `Storage used: ${fmtBytes(totalStorageBytes())} of ~5 MB`;
+  const bytes = totalStorageBytes();
+  storageLine.textContent = `Storage used: ${Math.round((bytes / STORAGE_LIMIT_BYTES) * 100)}% (${fmtBytes(bytes)} of about 5 MB)`;
 }
 
 function openHistory(updateRoute = true) {

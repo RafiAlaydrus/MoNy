@@ -601,8 +601,10 @@ Inside you'll find:
 - One row per past month — tap a row to expand it and see the full
   breakdown: income, spending by category, money in wallets, remaining
   balance, and item counts
-- A **storage line** at the bottom showing how much space your data is
-  using in the browser
+- A **storage line** at the bottom showing how much of the browser's space
+  your data is using, as a percentage. Once it passes about half, Home shows
+  a **Storage is filling up** card: export a backup, then delete old months
+  here to make room, because opening a new cycle needs some free space
 - A **delete button** on each row (with undo), and a **"Delete All
   History"** button at the bottom if you want to clear everything
 
