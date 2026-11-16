@@ -736,6 +736,13 @@ cycle-day changes keep a temporary recovery journal until all records save.
 If the app closes during that write, the next launch restores the previous
 state before retrying. Do not clear browser data during recovery.
 
+If a new cycle cannot be opened - for example because the browser's storage
+is full - Home shows a **This cycle could not be closed** card with **Try
+again** and **Export backup**. Entering money is paused until it is resolved,
+so nothing lands in the cycle that ended. Settings, History and exporting keep
+working: deleting old months in History frees space, and the new cycle then
+opens by itself.
+
 Opening after several months carries the closing balance into the current
 cycle once. Unopened cycles and their recurring expenses are not fabricated.
 Existing archived cycles are never silently replaced.

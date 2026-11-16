@@ -24,6 +24,11 @@ const hadMoNyStorageAtBoot = Array.from({ length: localStorage.length }, (_, ind
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 let storageConflict = false;
 let moneyBatch = false;
+/* Set when a rollover could not finish ({ message }), null otherwise. Declared
+   up here because the startup rollover runs long before the rest of the file.
+   While it is set the global guard stops retrying on every tap - which made
+   the error impossible to dismiss - and only freezes money entry. */
+let rolloverBlocked = null;
 
 // An interrupted multi-key save is rolled back before migrations or rollover.
 function recoverPendingWrite() {
@@ -502,7 +507,14 @@ if (!data) {
      remains the recovery path. */
   saveData();
 } else if (settings.cycleEnabled !== false && todayStr >= data.cycleNext) {
-  performRollover(todayStr);
+  if (!performRollover(todayStr) && rolloverBlocked) appAlert(rolloverBlocked.message, "Couldn't start the new cycle");
+}
+
+/* Records why the rollover stopped. The caller decides whether to say so:
+   only the first failure raises a dialog, later retries update the Home card. */
+function blockRollover(message) {
+  rolloverBlocked = { message };
+  return false;
 }
 
 /* Closes the month on screen and opens the one containing `today`.
@@ -516,14 +528,12 @@ if (!data) {
 function performRollover(today) {
   if (settings.cycleEnabled === false || !storageIsCurrent() || today < data.cycleNext) return false;
   if (!isValidYmd(data.cycleStart) || !isValidYmd(data.cycleNext) || data.cycleNext <= data.cycleStart) {
-    appAlert("This cycle has invalid dates. Export a backup before correcting it.");
-    return false;
+    return blockRollover("This cycle has invalid dates, so it was not closed. Export a backup before correcting it.");
   }
   const nextArchive = { ...archive };
   if (monthHasContent(data)) {
     if (archive[data.month]) {
-      appAlert("This cycle already exists in History. Rollover was stopped to protect it. Export a backup before resolving the duplicate cycle.");
-      return false;
+      return blockRollover("This cycle is already in History, so it was not closed again. Open History, delete or export that month, then try again.");
     }
     nextArchive[data.month] = {
       data: JSON.parse(JSON.stringify(data)),
@@ -566,18 +576,21 @@ function performRollover(today) {
 
   const fresh = freshMonthData(carry, nextStart);
   if (archive[fresh.month]) {
-    appAlert("The next cycle already exists in History. Rollover was stopped to protect your records.");
-    return false;
+    return blockRollover(`The next cycle (${fresh.month}) is already in History, so it was not opened again. Open History, delete or export that month, then try again.`);
   }
   applyRecurringTransactions(fresh);
   const changes = { [ARCHIVE_KEY]: nextArchive, [SETTINGS_KEY]: nextSettings, [STORAGE_KEY]: fresh };
   if ((data.priority || []).length > 0) changes[BACKUP_PRIORITY_KEY] = data.priority;
   const result = commitStateChanges(changes);
-  if (!result.ok) { appAlert(result.message); return false; }
+  if (!result.ok) {
+    // A conflict means another tab or a broken save; freeing space won't help.
+    return blockRollover(storageConflict ? result.message : `${result.message} Delete old months in History to free space.`);
+  }
   Object.assign(archive, nextArchive);
   Object.assign(settings, nextSettings);
   Object.keys(data).forEach(k => { delete data[k]; });
   Object.assign(data, fresh);
+  rolloverBlocked = null;
   if (snapshotReady) saveSnapshot();
   return true;
 }
@@ -3780,6 +3793,7 @@ function calculateRemaining(skipChart = false) {
   renderRail();
   renderDueSoon();
   renderUnpaidCarry();
+  renderRolloverBlocked();
   renderActivityFinder();
   renderRecentActivity();
 
@@ -4111,7 +4125,9 @@ function carriedDue(bill, cycleStart) {
 function renderDailyLine() {
   const line = document.getElementById("daily-line");
   if (!line) return;
-  if (settings.cycleEnabled === false || !data.cycleNext || monthIsUnset(data)) {
+  /* Past the cycle's end (a rollover that is still stuck) there is no day
+     left to budget for; "last day" would be false. */
+  if (settings.cycleEnabled === false || !data.cycleNext || monthIsUnset(data) || todayString() >= data.cycleNext) {
     line.classList.add("hidden");
     return;
   }
@@ -4220,6 +4236,25 @@ document.getElementById("unpaid-carry-add").addEventListener("click", () => {
   updateCopyLastBtn();
   calculateRemaining();
   showNotice(`${added.length} ${added.length === 1 ? "bill" : "bills"} added to this cycle`);
+});
+
+/* A cycle that ended but could not be closed. Shown on Home for as long as the
+   rollover stays stuck, with a retry and the way out that always works:
+   exporting a backup. Reuses the backup reminder's card. */
+function renderRolloverBlocked() {
+  const card = document.getElementById("rollover-blocked");
+  if (!card) return;
+  const stuck = !!rolloverBlocked && settings.cycleEnabled !== false && todayString() >= data.cycleNext;
+  card.classList.toggle("hidden", !stuck);
+  if (stuck) document.getElementById("rollover-blocked-text").textContent = rolloverBlocked.message;
+}
+
+document.getElementById("rollover-retry").addEventListener("click", () => {
+  if (checkCycleRollover()) return;
+  if (rolloverBlocked) showNotice("Still couldn't close this cycle.");
+});
+document.getElementById("rollover-export").addEventListener("click", () => {
+  document.getElementById("export-data-btn").click();
 });
 
 /* The month rail: one tick per day of this cycle, today in the accent, and a
@@ -6172,6 +6207,11 @@ function deleteArchivedMonth(key) {
     renderHistory();
     return true;
   });
+
+  /* A stuck rollover may have been waiting for exactly this - the duplicate
+     month, or the space it took. Its notice replaces the undo, which could
+     not put the month back under a key the new archive now uses anyway. */
+  if (rolloverBlocked) checkCycleRollover();
 }
 
 /* Everything this origin has stored, because the ~5 MB limit is shared by all
@@ -6870,6 +6910,7 @@ confirmArchiveDeleteBtn.addEventListener("click", () => {
   saveSnapshot();
   concealSurface(archiveModal);
   renderHistory();
+  if (rolloverBlocked) checkCycleRollover();
 });
 
 /* =========================
@@ -7164,20 +7205,37 @@ function checkCycleRollover() {
 
   /* Abandon any half-finished edit first. Its target belongs to the month
      being archived, and saving afterwards would write into an object that is
-     no longer part of the live month. */
-  cancelEdit();
-  /* And any open prompt, for the same reason but worse: the overspend,
+     no longer part of the live month.
+
+     And any open prompt, for the same reason but worse: the overspend,
      transfer and "Where's this from?" modals hold a callback closed over
      amounts worked out against the month that is about to be archived.
      Tapping an option after the rollover would commit those figures into the
      NEW month, where they mean nothing. Dismissing is the only safe move -
-     nothing has been written yet, so the user simply re-enters it. */
-  dismissOpenPrompts();
-  incomeInput.classList.add("hidden");
-  incomeInput.value = "";
+     nothing has been written yet, so the user simply re-enters it.
+
+     Not again on a retry of a rollover that is already stuck: tearing the
+     screen down on every attempt is what closed Settings and the error dialog
+     before the user could act on them. Nothing in that state can hold money
+     for the old month - the guard freezes money entry - so it waits until a
+     retry actually succeeds. */
+  const wasBlocked = !!rolloverBlocked;
+  const clearForNewCycle = () => {
+    cancelEdit();
+    dismissOpenPrompts();
+    incomeInput.classList.add("hidden");
+    incomeInput.value = "";
+  };
+  if (!wasBlocked) clearForNewCycle();
 
   const closedLabel = monthLabel(data.month);
-  if (!performRollover(today)) return false;
+  if (!performRollover(today)) {
+    // Said once; afterwards the Home card carries the message.
+    if (rolloverBlocked && !wasBlocked) appAlert(rolloverBlocked.message, "Couldn't start the new cycle");
+    renderRolloverBlocked();
+    return false;
+  }
+  if (wasBlocked) clearForNewCycle();
   currentMonthKey = data.month;
   backupPriority = load(BACKUP_PRIORITY_KEY, null);
 
@@ -7218,17 +7276,36 @@ window.addEventListener("focus", () => { if (!checkCycleRollover()) refreshDateD
 // in a different cycle than the form or confirmation the user saw.
 ["click", "change", "keydown", "blur", "submit", "pointerup", "pointerdown"].forEach(type => {
   document.addEventListener(type, event => {
-    if (event.target.closest?.("#session-blocker")) return;
+    const target = event.target;
+    if (target.closest?.("#session-blocker")) return;
     if (!storageIsCurrent()) {
       event.preventDefault(); event.stopImmediatePropagation(); return;
     }
-    // Recovery/export remains reachable when rollover cannot finish.
-    if (event.target.closest?.("#settings-toggle, #settings-panel > .settings-panel-card > .settings-modal-head, #close-settings, #export-data-btn") ||
-        (type === "keydown" && ["Tab", "Escape"].includes(event.key))) return;
-    if (settings.cycleEnabled !== false && todayString() >= data.cycleNext) {
-      event.preventDefault(); event.stopImmediatePropagation();
-      checkCycleRollover();
+    if (settings.cycleEnabled === false || todayString() < data.cycleNext) return;
+
+    if (rolloverBlocked) {
+      /* The rollover already failed. Retrying on every event re-raised the
+         error on each tap, so OK could never dismiss it and Settings closed
+         as it opened. Freeze only where money is entered - the four tabs and
+         the start day, which would quietly reopen the ended cycle - and leave
+         dialogs, Settings, History and Export working, so the user can free
+         space or take a backup. The Home card retries on request. */
+      const frozen = target.closest?.(".tab-panel, #monthly-start-row") &&
+        !target.closest("#backup-reminder, #rollover-blocked");
+      if (frozen) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (type === "click" && document.getElementById("app-dialog").classList.contains("hidden")) {
+          showNotice("This cycle has ended. Finish closing it from Home.");
+        }
+      }
+      return;
     }
+
+    // Recovery/export remains reachable before the first attempt too.
+    if (target.closest?.("#settings-toggle, #settings-panel > .settings-panel-card > .settings-modal-head, #close-settings, #export-data-btn") ||
+        (type === "keydown" && ["Tab", "Escape"].includes(event.key))) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    checkCycleRollover();
   }, true);
 });
 

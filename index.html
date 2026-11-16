@@ -207,7 +207,7 @@
               <button id="replay-tutorial-btn" class="setting-btn-action" type="button">Replay tutorial</button>
             </section>
             </div>
-            <div class="setting-version">v1.53.0</div>
+            <div class="setting-version">v1.53.1</div>
             <div class="modal-actions settings-modal-actions"><button id="close-settings" type="button">Done</button></div>
             </div>
           </div>
@@ -370,6 +370,20 @@
       <div class="backup-reminder-actions">
         <button id="unpaid-carry-add" class="primary" type="button">Add to this cycle</button>
         <button id="unpaid-carry-dismiss" type="button">Dismiss</button>
+      </div>
+    </section>
+
+    <!-- A cycle that ended but could not be closed (storage full, or the
+         month is already in History). Filled by renderRolloverBlocked();
+         reuses the backup reminder's card. Money entry stays frozen until
+         it is resolved, so Export is always offered here. -->
+    <section id="rollover-blocked" class="backup-reminder hidden" role="alert" aria-labelledby="rollover-blocked-title">
+      <span class="section-eyebrow">Action needed</span>
+      <h2 id="rollover-blocked-title">This cycle could not be closed</h2>
+      <p id="rollover-blocked-text"></p>
+      <div class="backup-reminder-actions">
+        <button id="rollover-retry" class="primary" type="button">Try again</button>
+        <button id="rollover-export" type="button">Export backup</button>
       </div>
     </section>
 
