@@ -647,6 +647,10 @@ worth backing it up now and then, and definitely before you get a new phone.
    containing everything — your current month, all history, and your
    settings.
 
+If the file can't be created, MoNy says so and does not count it as a
+backup, so the monthly reminder keeps asking. Check that the file is really
+in your Downloads or Files app before relying on it.
+
 Keep this file somewhere safe (a cloud drive, email it to yourself, etc.) —
 it's the only copy outside of this device.
 

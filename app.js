@@ -5770,18 +5770,46 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
     endlessArchive,
     priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
   };
-  const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = settings.cycleEnabled === false
+  const filename = settings.cycleEnabled === false
     ? `mony-endless-${todayString()}.json`
     : `money-tracker-${currentMonthKey}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  /* The export is the only copy of the records outside this device, so the
+     "last backup" time is only recorded once the file was really handed to
+     the browser. A failure used to be recorded anyway and silenced the
+     reminder for 30 days. */
+  try {
+    downloadBackup(JSON.stringify(exportObj, null, 2), filename);
+  } catch (err) {
+    console.error("export failed", err);
+    const message = "The backup file could not be created. Nothing was saved. Free some memory or close other apps, then try again.";
+    setDataControlError(dataControlFeedback, message);
+    // The Home reminder's button runs this too, where that line is not on screen.
+    appAlert(message, "Backup not saved");
+    return;
+  }
+  setDataControlError(dataControlFeedback);
   writeReminderTime(LAST_EXPORT_KEY, Date.now());
   renderBackupReminder();
 });
+
+/* Hands a file to the browser's download. The link is attached to the page
+   for the click (some browsers ignore a detached one), and the file URL is
+   revoked well afterwards - revoking it in the same tick as the click can
+   cancel the download before it starts. */
+function downloadBackup(json, filename) {
+  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.hidden = true;
+  document.body.appendChild(a);
+  try {
+    a.click();
+  } finally {
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+}
 
 /* =========================
    BACKUP REMINDER
