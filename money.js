@@ -29,8 +29,13 @@
   // books cannot represent.
   function isValidAmount(value) {
     const n = Number(value);
-    return Number.isFinite(n) && n > 0;
+    return Number.isFinite(n) && n > 0 && n <= MAX_AMOUNT;
   }
+
+  /* The largest single amount the app accepts. Far beyond any real budget, but
+     small enough that sums stay exact in a float and the figure still fits on
+     the screen - 1e300 used to be accepted and broke the Home layout. */
+  const MAX_AMOUNT = 999999999.99;
 
   // Comparisons must use the value the app can actually display and store:
   // cents. This avoids treating an exact decimal amount as insufficient due
@@ -467,6 +472,7 @@
     isTransferEntry,
     isReimbursement,
     isValidAmount,
+    MAX_AMOUNT,
     carryOverOf,
     carryInOf,
     unpaidPriorityOf,

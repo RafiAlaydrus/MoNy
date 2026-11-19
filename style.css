@@ -2777,6 +2777,20 @@ body.tutorial-active {
   color: var(--text-secondary);
 }
 
+/* Delete, shown only while an entry is open for editing. An outline in the
+   outgoing-money colour: clearly the destructive one, but not louder than Save. */
+.actions button.edit-delete {
+  background: transparent;
+  border: 1px solid var(--semantic-out);
+  color: var(--semantic-out);
+}
+
+/* Keyboard focus on a row. Rows are focusable now, so show where focus is. */
+.row-editable:focus-visible, .row-deletable:focus-visible, #priority-list li:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
 /* A row that can be opened for editing. Only a cursor hint on desktop - no
    badge or icon, because every row in these tables is editable and marking
    them all would be noise. Transfer halves and carried-forward lines never

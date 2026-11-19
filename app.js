@@ -40,11 +40,14 @@ let storageUsageCache = null;
 function recoverPendingWrite() {
   const raw = localStorage.getItem(JOURNAL_KEY);
   if (!raw) return;
-  const previous = JSON.parse(raw);
+  let previous = null;
+  try { previous = JSON.parse(raw); } catch (_) { /* judged unreadable just below */ }
   if (!Array.isArray(previous) || previous.some(pair => !Array.isArray(pair) ||
       !TRANSACTION_KEYS.includes(pair[0]) ||
       (pair[1] !== null && typeof pair[1] !== "string"))) {
-    throw new Error("The pending save needs recovery. Stored records have not been replaced.");
+    const error = new Error("The pending save needs recovery. Stored records have not been replaced.");
+    error.unreadable = true;
+    throw error;
   }
   previous.forEach(([key, value]) => {
     if (value === null) localStorage.removeItem(key);
@@ -52,7 +55,22 @@ function recoverPendingWrite() {
   });
   localStorage.removeItem(JOURNAL_KEY);
 }
-recoverPendingWrite();
+
+/* A journal that cannot even be read used to stop the app from starting at
+   all, with a "reload to recover" message that could never succeed. It is set
+   aside instead - kept, not deleted - and the app starts with a warning to
+   export. A journal that is readable but cannot be applied still throws. */
+let journalProblem = false;
+try {
+  recoverPendingWrite();
+} catch (err) {
+  if (!err || err.unreadable !== true) throw err;
+  journalProblem = true;
+  try {
+    localStorage.setItem(`${JOURNAL_KEY}-corrupt`, localStorage.getItem(JOURNAL_KEY));
+    localStorage.removeItem(JOURNAL_KEY);
+  } catch (_) { /* the warning below still tells the user */ }
+}
 
 /* v1.53.2 and earlier copied all of History into the automatic snapshot,
    which is rewritten after every save - a whole extra copy of the largest
@@ -983,6 +1001,11 @@ const CHART_SERIES = [
   "#d55181", // magenta
   "#008300", // green
   "#8478e2", // violet (likewise)
+  "#c2412d", // red
+  "#a65ec9", // purple
+  "#0f8ea3", // teal
+  "#8a8a1a", // olive
+  "#b5651d", // brown
 ];
 
 /* WHICH ENTITY GETS WHICH HUE
@@ -1023,15 +1046,58 @@ function chartSlotColor(index) {
   return CHART_SERIES[index % CHART_SERIES.length];
 }
 
+/* Each wallet and category keeps the colour slot it was first given, stored in
+   settings. The colour used to come from the name's position in a list, so
+   adding a wallet recoloured every category after it. A slot now only changes
+   when its name is removed; a new name takes the least-used slot, so no two
+   names share a hue until all twelve are taken. */
+function ensureChartSlots() {
+  const names = chartNameRegistry();
+  if (!settings.chartSlots || typeof settings.chartSlots !== "object" || Array.isArray(settings.chartSlots)) {
+    settings.chartSlots = {};
+  }
+  const slots = settings.chartSlots;
+  let changed = false;
+  Object.keys(slots).forEach(name => {
+    if (!names.includes(name) || !Number.isInteger(slots[name]) || slots[name] < 0 || slots[name] >= CHART_SERIES.length) {
+      delete slots[name];
+      changed = true;
+    }
+  });
+  const counts = new Array(CHART_SERIES.length).fill(0);
+  Object.values(slots).forEach(slot => { counts[slot]++; });
+  names.forEach(name => {
+    if (Object.prototype.hasOwnProperty.call(slots, name)) return;
+    let best = 0;
+    counts.forEach((count, slot) => { if (count < counts[best]) best = slot; });
+    slots[name] = best;
+    counts[best]++;
+    changed = true;
+  });
+  if (changed) saveUiSettings();
+}
+
+// A renamed wallet or category keeps its colour.
+function carryChartSlot(from, to) {
+  if (!settings.chartSlots || !Object.prototype.hasOwnProperty.call(settings.chartSlots, from)) return;
+  settings.chartSlots[to] = settings.chartSlots[from];
+  delete settings.chartSlots[from];
+}
+
 /* Picks a colour for a category name.
  *
  * Falls back to the end of the ramp for a name the registry has never seen -
  * an archived month can hold a category since deleted from settings, and it
  * still has to draw. */
 function categoryColor(name) {
-  const i = chartNameRegistry().indexOf(String(name == null ? "" : name));
-  if (i === -1) return CHART_SERIES[CHART_SERIES.length - 1];
-  return chartSlotColor(i);
+  const key = String(name == null ? "" : name);
+  let slots = settings.chartSlots;
+  if (!slots || !Object.prototype.hasOwnProperty.call(slots, key)) {
+    if (!chartNameRegistry().includes(key)) return CHART_SERIES[CHART_SERIES.length - 1];
+    ensureChartSlots();
+    slots = settings.chartSlots;
+  }
+  return chartSlotColor(slots[key]);
 }
 
 /* Every category currently offered, both lists together, lowercased. Wallet
@@ -1149,10 +1215,8 @@ const CHART_OVERSPENT_COLOR = "#e66767";
    greyscale; the chart is the one place colour is allowed, because same-shade
    segments are indistinguishable. */
 function walletColor(index) {
-  const wallets = allWallets();
-  const name = wallets[index] ? wallets[index].name : null;
-  const i = name === null ? index : chartNameRegistry().indexOf(name);
-  return chartSlotColor(i === -1 ? index : i);
+  const wallet = allWallets()[index];
+  return wallet ? categoryColor(wallet.name) : chartSlotColor(index);
 }
 
 // Returns the current currency symbol
@@ -1178,7 +1242,29 @@ function inputAmount(el) {
   const raw = String(el?.value ?? "").trim();
   if (!raw) return NaN;
   const n = Number(raw);
-  return Number.isFinite(n) ? moneyValue(n) : NaN;
+  if (!Number.isFinite(n) || n > MAX_AMOUNT) return NaN;
+  // More than two decimals is rejected, not silently rounded to something else.
+  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) return NaN;
+  return moneyValue(n);
+}
+
+/* Why an amount field was refused, in words. Empty is not a complaint - the
+   field simply is not filled in yet, and the red outline says enough. */
+function amountProblem(el, allowZero = false) {
+  const raw = String(el?.value ?? "").trim();
+  if (!raw) return "";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return "That isn't a valid amount.";
+  if (n < 0 || (!allowZero && n === 0)) return allowZero ? "The amount can't be negative." : "The amount must be more than zero.";
+  if (n > MAX_AMOUNT) return `The amount is too large. The most MoNy accepts is ${fmt(MAX_AMOUNT)}.`;
+  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) return "Use at most two decimal places.";
+  if (!allowZero && moneyCents(n) === 0) return "The amount must be at least 0.01.";
+  return "";
+}
+
+function notifyAmountProblem(el, allowZero = false) {
+  const message = amountProblem(el, allowZero);
+  if (message) showNotice(message);
 }
 
 function hasEnough(available, amount) {
@@ -1223,6 +1309,31 @@ function activeWallets() { return settings.wallets.filter(w => !w.deleted); }
 // means now; a picked day keeps the current time of day so several entries
 // backdated to the same day still order by when they were added. The date is
 // built in local time so it renders as the day the user actually picked.
+/* How far from today a picked date may be. Back-dating a few days is the point
+   of the field; a year either way is generous. Beyond that is a typo - 2099 or
+   1990 used to be accepted and sat in this cycle's totals. */
+const DATE_PICK_LIMIT_DAYS = 366;
+
+function dateLimitValue(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function applyDateLimits(el) {
+  if (!el) return;
+  el.min = dateLimitValue(-DATE_PICK_LIMIT_DAYS);
+  el.max = dateLimitValue(DATE_PICK_LIMIT_DAYS);
+}
+
+// Empty means "today" and is always fine. Otherwise "" when acceptable, or why not.
+function datePickProblem(value) {
+  if (!value) return "";
+  if (!isValidYmd(value)) return "Choose a valid date.";
+  const away = Math.abs(dayIndex(value) - dayIndex(todayString()));
+  return away > DATE_PICK_LIMIT_DAYS ? "Pick a date within a year of today." : "";
+}
+
 function resolveDate(value) {
   const now = new Date();
   if (!value) return now.toISOString();
@@ -1498,6 +1609,14 @@ renderMonthLabel();
    exactly like the data simply vanishing - and the user would have no reason
    to suspect a recoverable copy is still there. Deferred a tick so the first
    paint happens before the dialog blocks it. */
+if (journalProblem) {
+  setTimeout(() => appAlert(
+    "MoNy was closed in the middle of saving, and the note it keeps to finish that save was damaged. " +
+    "Your records opened as they were stored, and the damaged note was set aside. " +
+    "Check your latest entries, and export a backup from Settings.",
+    "An interrupted save couldn't be recovered"
+  ), 0);
+}
 if (corruptKeys.length > 0) {
   setTimeout(() => {
     const names = corruptKeys
@@ -1587,6 +1706,7 @@ function saveIncome() {
   /* Zero is a real answer - a cycle tracked for spending only - so it is
      accepted. Empty or negative input leaves the income as it was. */
   if (!Number.isFinite(value) || value < 0) {
+    notifyAmountProblem(incomeInput, true);
     incomeInput.classList.add("hidden");
     renderIncomeEditNote();
     calculateRemaining();
@@ -1641,6 +1761,7 @@ function editPriorityBill(bill) {
 
   editing = {
     item: bill, root,
+    remove() { deletePriorityBill(bill); },
     clear() {
       pbName.value = "";
       renderCategoryOptions(pbCategory, "priority");
@@ -1663,7 +1784,7 @@ function editPriorityBill(bill) {
         if (!f.valid) { f.el.classList.add("input-error"); bad = true; }
         else f.el.classList.remove("input-error");
       });
-      if (bad) return false;
+      if (bad) { notifyAmountProblem(pbAmount); return false; }
 
       const apply = () => {
         bill.name = name;
@@ -1694,6 +1815,56 @@ function billMetaHtml(bill) {
   return esc(bill.category) + (info
     ? ` · <span class="bill-due${info.overdue ? " is-overdue" : ""}">${esc(info.text)}</span>`
     : "");
+}
+
+/* Removes one bill, with the usual undo. Shared by the swipe, the keyboard
+   and the Delete button shown while a bill is being edited. */
+function deletePriorityBill(bill) {
+  if (data.priorityLocked) return;
+  // Resolve the position at delete time. Capturing an index earlier would go
+  // stale after any earlier deletion and remove the wrong bill.
+  const index = data.priority.indexOf(bill);
+  if (index === -1) return;
+  cancelEditIfEditing(bill);
+  data.priority.splice(index, 1);
+  if (!saveData()) {
+    data.priority.splice(index, 0, bill);
+    renderPriority();
+    calculateRemaining();
+    return;
+  }
+
+  renderPriority();
+  calculateRemaining();
+
+  // Saved already; undo puts back this one bill and nothing else.
+  showUndo(`"${bill.name}" deleted`, () => {
+    if (data.priority.includes(bill)) return true;
+    data.priority.splice(Math.min(index, data.priority.length), 0, bill);
+    saveData();
+    renderPriority();
+    calculateRemaining();
+    return true;
+  });
+}
+
+/* A way to delete and edit a row without a touchscreen: focus it with Tab,
+   then Enter to edit or Delete to remove (after a confirmation, since there
+   is no swipe to make the intent obvious). */
+function makeKeyboardDeletable(row, onDelete, onEdit) {
+  row.tabIndex = 0;
+  row.addEventListener("keydown", (e) => {
+    if (e.target !== row) return;
+    if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      appConfirm("This entry will be removed. You can undo it for a few seconds afterwards.",
+        { title: "Delete entry?", confirmLabel: "Delete" })
+        .then(ok => { if (ok) onDelete(); });
+    } else if ((e.key === "Enter" || e.key === " ") && onEdit) {
+      e.preventDefault();
+      onEdit();
+    }
+  });
 }
 
 function buildPriorityItem(bill) {
@@ -1765,33 +1936,8 @@ function buildPriorityItem(bill) {
   });
 
   if (!data.priorityLocked) {
-    attachSwipeToDelete(wrapper, li, () => {
-      // Resolve the position at delete time. Capturing an index here would go
-      // stale after any earlier deletion and remove the wrong bill.
-      const index = data.priority.indexOf(bill);
-      if (index === -1) return;
-      cancelEditIfEditing(bill);
-      data.priority.splice(index, 1);
-      if (!saveData()) {
-        data.priority.splice(index, 0, bill);
-        renderPriority();
-        calculateRemaining();
-        return;
-      }
-
-      renderPriority();
-      calculateRemaining();
-
-      // Saved already; undo puts back this one bill and nothing else.
-      showUndo(`"${bill.name}" deleted`, () => {
-        if (data.priority.includes(bill)) return true;
-        data.priority.splice(Math.min(index, data.priority.length), 0, bill);
-        saveData();
-        renderPriority();
-        calculateRemaining();
-        return true;
-      });
-    });
+    attachSwipeToDelete(wrapper, li, () => deletePriorityBill(bill));
+    makeKeyboardDeletable(li, () => deletePriorityBill(bill), () => editPriorityBill(bill));
   }
 
   wrapper.appendChild(deleteLayer);
@@ -2005,7 +2151,7 @@ addPriorityBtn.addEventListener("click", () => {
     if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
     else f.el.classList.remove("input-error");
   });
-  if (hasError) return;
+  if (hasError) { notifyAmountProblem(pbAmount); return; }
 
   const newBill = { name, category, amount, paid: false, date: new Date().toISOString() };
   setBillDue(newBill, pbDue.value);
@@ -2316,6 +2462,8 @@ function makeRowDeletable(row, onDelete) {
       { title: "Delete entry?", confirmLabel: "Delete" })
       .then(ok => { if (ok) onDelete(); });
   });
+  // And a keyboard route: focus the row, then press Delete.
+  makeKeyboardDeletable(row, onDelete, null);
 }
 
 const HISTORY_PAGE_SIZE = 50;
@@ -2520,6 +2668,7 @@ function buildWalletSection(wallet) {
   const tbody = section.querySelector("[data-role='table']");
 
   wireDateInput(dateInput);
+  applyDateLimits(dateInput);
 
   const tableEl = section.querySelector("table");
   tableEl.parentNode.insertBefore(buildTableToggle(wallet.id, tableEl), tableEl);
@@ -2543,6 +2692,7 @@ function buildWalletSection(wallet) {
     /* Zero is allowed: it hands the whole budget back to the main balance.
        Empty or negative input leaves the budget as it was. */
     if (!Number.isFinite(value) || value < 0) {
+      notifyAmountProblem(budgetInput, true);
       budgetInput.classList.add("hidden");
       return;
     }
@@ -2588,7 +2738,7 @@ function buildWalletSection(wallet) {
     if (!saveData()) { wd.items.pop(); return false; }
 
     if (rebuilt) {
-      renderWallets();
+      renderWallets(wallet.id);
       calculateRemaining();
       return;
     }
@@ -2621,7 +2771,9 @@ function buildWalletSection(wallet) {
       if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
       else f.el.classList.remove("input-error");
     });
-    if (hasError) return;
+    if (hasError) { notifyAmountProblem(amountInput); return; }
+    const dateProblem = datePickProblem(dateInput.value);
+    if (dateProblem) { dateInput.classList.add("input-error"); showNotice(dateProblem); return; }
 
     /* Taking more than the wallet holds would push its balance negative, which
        the books cannot represent. Rather than a bare red border, offer the
@@ -2670,6 +2822,7 @@ function buildWalletSection(wallet) {
 
     editing = {
       item, root: form,
+      remove() { deleteWalletItem(wallet, item, tbody, section); },
       clear() {
         nameInput.value = ""; amountInput.value = "";
         dateInput.value = ""; dateInput.classList.add("is-empty");
@@ -2686,7 +2839,9 @@ function buildWalletSection(wallet) {
           if (!f.valid) { f.el.classList.add("input-error"); bad = true; }
           else f.el.classList.remove("input-error");
         });
-        if (bad) return false;
+        if (bad) { notifyAmountProblem(amountInput); return false; }
+        const dateProblem = datePickProblem(dateInput.value);
+        if (dateProblem) { dateInput.classList.add("input-error"); showNotice(dateProblem); return false; }
 
         /* The take cap has to be re-checked against the balance WITHOUT this
            item, otherwise its own current amount counts against the headroom
@@ -2695,6 +2850,7 @@ function buildWalletSection(wallet) {
           const balanceExcludingThis = getWalletBalance(wallet.id) + Number(item.amount);
           if (!hasEnough(balanceExcludingThis, amount)) {
             amountInput.classList.add("input-error");
+            showNotice(`${wallet.name} only holds ${cur()} ${fmt(balanceExcludingThis)} for this.`);
             return false;
           }
         }
@@ -2705,6 +2861,7 @@ function buildWalletSection(wallet) {
           const balanceExcludingThis = getWalletBalance(wallet.id) - Number(item.amount);
           if (moneyCents(balanceExcludingThis + amount) < 0) {
             amountInput.classList.add("input-error");
+            showNotice("That would leave this wallet below zero, because some of the money has already been spent.");
             return false;
           }
         }
@@ -2754,11 +2911,14 @@ function buildWalletSection(wallet) {
       if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
       else f.el.classList.remove("input-error");
     });
-    if (hasError) return;
+    if (hasError) { notifyAmountProblem(amountInput); return; }
+    const dateProblem = datePickProblem(dateInput.value);
+    if (dateProblem) { dateInput.classList.add("input-error"); showNotice(dateProblem); return; }
 
     // A transfer credits the destination, so it cannot exceed what this wallet holds
     if (!hasEnough(getWalletBalance(wallet.id), amount)) {
       amountInput.classList.add("input-error");
+      showNotice(`${wallet.name} only holds ${cur()} ${fmt(getWalletBalance(wallet.id))}.`);
       return;
     }
 
@@ -2770,8 +2930,9 @@ function buildWalletSection(wallet) {
       haptic(12);
     });
   });
-  [nameInput, amountInput].forEach(el => {
+  [nameInput, amountInput, dateInput].forEach(el => {
     el.addEventListener("input", () => el.classList.remove("input-error"));
+    el.addEventListener("change", () => el.classList.remove("input-error"));
   });
 
   renderWalletItemsTable(wallet, tbody, section);
@@ -2781,11 +2942,37 @@ function buildWalletSection(wallet) {
 }
 
 // Rebuilds every wallet section on the main page
-function renderWallets() {
+/* Rebuilds every wallet section. Half-typed entries in the OTHER wallets are
+   carried across the rebuild - a transfer or a top-up in one wallet used to
+   wipe whatever had been typed into the rest. `exceptWalletId` is the wallet
+   the action was for: its form is meant to come back empty. */
+function renderWallets(exceptWalletId) {
+  const drafts = {};
+  walletsContainer.querySelectorAll(".wallet-section").forEach(section => {
+    if (section.dataset.walletId === exceptWalletId) return;
+    // A form open for editing is a different matter; it is left as it was.
+    if (editing && editing.root && section.contains(editing.root)) return;
+    const draft = {};
+    ["item-name", "item-amount", "item-date"].forEach(role => {
+      const field = section.querySelector(`[data-role="${role}"]`);
+      if (field && field.value) draft[role] = field.value;
+    });
+    if (Object.keys(draft).length) drafts[section.dataset.walletId] = draft;
+  });
   walletsContainer.innerHTML = "";
   const open = activeWallets();
   open.forEach(wallet => {
-    walletsContainer.appendChild(buildWalletSection(wallet));
+    const section = buildWalletSection(wallet);
+    const draft = drafts[wallet.id];
+    if (draft) {
+      Object.entries(draft).forEach(([role, value]) => {
+        const field = section.querySelector(`[data-role="${role}"]`);
+        if (!field) return;
+        field.value = value;
+        if (role === "item-date") field.classList.toggle("is-empty", !field.value);
+      });
+    }
+    walletsContainer.appendChild(section);
   });
   // Looked up each time rather than cached: renderWallets runs before the
   // element bindings further down the file exist.
@@ -2794,7 +2981,7 @@ function renderWallets() {
     empty.classList.toggle("hidden", open.length > 0);
     empty.querySelector("p").textContent = settings.wallets.length ? "No open wallets." : "No wallets yet.";
     empty.querySelector(".wallets-empty-note").textContent = settings.wallets.length
-      ? "Your closed wallets are saved in Settings. Add a wallet to keep a new budget separate."
+      ? "Closed wallets can't be reopened. Add a wallet to keep a new budget separate."
       : "Give part of your balance a purpose: groceries, fuel, or anything you want to keep separate.";
   }
 }
@@ -2920,7 +3107,7 @@ function executeTransfer(sourceWallet, destId, name, amount, date) {
   }
 
   saveData();
-  renderWallets();
+  renderWallets(sourceWallet.id);
   renderSecondChoice();
   calculateRemaining();
   return true;
@@ -3162,6 +3349,10 @@ function makeRowEditable(row, item, onEdit) {
     if (e.target.closest("input, button, a, label")) return;
     onEdit();
   });
+  row.tabIndex = 0;
+  row.addEventListener("keydown", (e) => {
+    if (e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onEdit(); }
+  });
 }
 
 function buildSecondChoiceRow(item) {
@@ -3277,6 +3468,23 @@ function setFormEditing(root, on, saveLabel = "Save changes") {
   }
   others.forEach(el => el.classList.toggle("hidden", on));
   if (cancel) cancel.classList.toggle("hidden", !on);
+  /* Deleting an entry used to need a swipe. While one is being edited there is
+     now a plain Delete button as well, which works with a mouse, a keyboard
+     or a screen reader. */
+  let del = root.querySelector("[data-edit='delete']");
+  if (!del && cancel && on) {
+    del = document.createElement("button");
+    del.type = "button";
+    del.className = "edit-delete";
+    del.dataset.edit = "delete";
+    del.textContent = "Delete";
+    del.setAttribute("aria-label", "Delete this entry");
+    del.addEventListener("click", () => {
+      if (editing && editing.root === root && typeof editing.remove === "function") editing.remove();
+    });
+    cancel.after(del);
+  }
+  if (del) del.classList.toggle("hidden", !on);
   root.classList.toggle("is-editing", on);
 }
 
@@ -3335,7 +3543,13 @@ function readSecondChoiceForm() {
     if (!f.valid) { f.el.classList.add("input-error"); hasError = true; }
     else f.el.classList.remove("input-error");
   });
-  if (hasError) return null;
+  if (hasError) { notifyAmountProblem(scAmount); return null; }
+  const dateProblem = datePickProblem(scDate.value);
+  if (dateProblem) {
+    scDate.classList.add("input-error");
+    showNotice(dateProblem);
+    return null;
+  }
 
   return { name, category, amount, fields };
 }
@@ -3402,6 +3616,7 @@ function editSecondChoice(item) {
   const root = document.getElementById("second-choice-form");
   editing = {
     item, root,
+    remove() { deleteSecondChoiceItem(item); },
     clear() {
       scName.value = "";
       renderCategoryOptions(scCategory, "secondChoice");
@@ -4393,6 +4608,7 @@ function refreshDateDriven() {
 ========================= */
 
 wireDateInput(scDate);
+applyDateLimits(scDate);
 wireDateInput(document.getElementById("pb-due"));
 renderCurrencyPlaceholders();
 
@@ -4648,6 +4864,11 @@ budgetLimitInput.value = settings.budgetLimit || "";
 
 budgetLimitInput.addEventListener("change", () => {
   const val = inputAmount(budgetLimitInput);
+  if (budgetLimitInput.value.trim() && !(val > 0)) {
+    notifyAmountProblem(budgetLimitInput);
+    budgetLimitInput.value = settings.budgetLimit || "";
+    return;
+  }
   settings.budgetLimit = val > 0 ? val : null;
   if (!val) budgetLimitInput.value = "";
   saveSettings();
@@ -4723,6 +4944,7 @@ function renderWalletsSettings() {
         input.value = wallet.name;
         return;
       }
+      carryChartSlot(wallet.name, newName);
       wallet.name = newName;
       saveSettings();
       renderWallets();
@@ -4889,6 +5111,7 @@ function renameCategory(list, from, to) {
   const at = arr.indexOf(from);
   if (at === -1) return 0;
   arr[at] = to;
+  carryChartSlot(from, to);
 
   const entries = list === "priority" ? (data.priority || []) : (data.secondChoice || []);
   entries.forEach(e => {
@@ -5207,7 +5430,12 @@ document.getElementById("add-recurring").addEventListener("click", () => {
   const dueDay = type.value === "bill" && dueInput.value.trim() !== "" ? Number(dueInput.value) : undefined;
   const dueBad = dueDay !== undefined && !(Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31);
   dueInput.classList.toggle("input-error", dueBad);
-  if (!name.value.trim() || !isValidAmount(inputAmount(amount)) || dueBad) { name.classList.toggle("input-error", !name.value.trim()); amount.classList.toggle("input-error", !isValidAmount(inputAmount(amount))); return; }
+  if (!name.value.trim() || !isValidAmount(inputAmount(amount)) || dueBad) {
+    name.classList.toggle("input-error", !name.value.trim());
+    amount.classList.toggle("input-error", !isValidAmount(inputAmount(amount)));
+    notifyAmountProblem(amount);
+    return;
+  }
   const template = { name: name.value.trim(), type: type.value, category: category.value || "Others", amount: inputAmount(amount) };
   if (dueDay !== undefined) template.dueDay = dueDay;
   settings.recurring.push(template);
@@ -5312,7 +5540,7 @@ function isNonEmptyString(value) {
 function isFiniteAmount(value, allowZero = false) {
   if (value === null || value === "") return false;
   const n = Number(value);
-  return Number.isFinite(n) && (allowZero ? n >= 0 : n > 0);
+  return Number.isFinite(n) && (allowZero ? n >= 0 : n > 0) && n <= MAX_AMOUNT;
 }
 function isSignedAmount(value) {
   return value !== null && value !== "" && Number.isFinite(Number(value));
@@ -6275,7 +6503,7 @@ function buildHistoryRow(key) {
   const incomeText = s.income !== null ? `${esc(c)} ${fmtWhole(s.income)} in` : "no income set";
 
   const walletColorMap = {};
-  entry.wallets.forEach((w, i) => { walletColorMap[w.name] = walletColor(i); });
+  entry.wallets.forEach(w => { walletColorMap[w.name] = categoryColor(w.name); });
 
   const detailRows = Object.entries(s.totals)
     .sort((a, b) => b[1] - a[1])
@@ -6354,7 +6582,9 @@ function buildHistoryRow(key) {
   });
 
   row.querySelector(".history-delete").addEventListener("click", () => {
-    deleteArchivedMonth(key);
+    appConfirm(`Delete ${monthLabel(key)} from History? You can undo it for a few seconds afterwards, but not after that.`,
+      { title: "Delete this month?", confirmLabel: "Delete" })
+      .then(ok => { if (ok) deleteArchivedMonth(key); });
   });
 
   return row;
@@ -7439,6 +7669,24 @@ function checkCycleRollover() {
    suspends timers in a backgrounded app anyway, so the moment that actually
    matters is the user coming back to it. `pageshow` covers a restore from
    the back-forward cache, which fires no visibilitychange. */
+/* An app left open past midnight (a tablet on a desk) used to keep yesterday's
+   "Due today", "Overdue" and "Today" wording until it was next focused. This
+   refreshes the date-driven text at the turn of each day. It does not close
+   the cycle by itself - that still waits for the next tap, so nothing a person
+   is in the middle of typing is thrown away at 00:00. */
+function scheduleMidnightRefresh() {
+  clearTimeout(scheduleMidnightRefresh.timer);
+  const next = new Date();
+  next.setHours(24, 0, 5, 0);
+  const wait = Math.max(1000, Math.min(next.getTime() - Date.now(), 2147483000));
+  scheduleMidnightRefresh.timer = setTimeout(() => {
+    refreshDateDriven();
+    renderRecentActivity();
+    scheduleMidnightRefresh();
+  }, wait);
+}
+scheduleMidnightRefresh();
+
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !checkCycleRollover()) refreshDateDriven();
 });
