@@ -140,7 +140,44 @@ function save(key, value) {
 /* One wrapper per stored key. Every write in the app goes through these three
    rather than touching localStorage directly, so a full-storage failure is
    caught in one place instead of silently dropping data at 36 call sites. */
-function saveData() { if (moneyBatch) return true; const ok = save(STORAGE_KEY, data); if (ok && snapshotReady) saveSnapshot(); return ok; }
+function saveData() { if (moneyBatch) return true; const ok = save(STORAGE_KEY, data); if (ok && snapshotReady) saveSnapshot(); if (ok) requestPersistence(); return ok; }
+
+/* DURABLE STORAGE
+   Everything MoNy keeps lives in this browser, and a browser is allowed to
+   clear a site's storage on its own when the device runs low on space or the
+   site has not been visited for a while. `navigator.storage.persist()` asks it
+   not to. It is asked once records exist (never for an empty app), at most once
+   a day, and the answer is shown in Settings. A refusal changes nothing: the
+   data is stored exactly as before. */
+const PERSIST_ASKED_KEY = "mony-persist-asked";
+let persistRequested = false;
+
+function renderPersistStatus(state) {
+  const el = document.getElementById("persist-status");
+  if (!el) return;
+  el.textContent = state === "yes" ? "Protected" : state === "no" ? "Not protected" : "Not available";
+  el.dataset.state = state;
+}
+
+async function refreshPersistStatus() {
+  try {
+    if (!navigator.storage || typeof navigator.storage.persisted !== "function") { renderPersistStatus("na"); return; }
+    renderPersistStatus(await navigator.storage.persisted() ? "yes" : "no");
+  } catch (_) { renderPersistStatus("na"); }
+}
+
+async function requestPersistence() {
+  if (persistRequested || !data || monthIsUnset(data)) return;
+  persistRequested = true;
+  try {
+    if (!navigator.storage || typeof navigator.storage.persist !== "function") { renderPersistStatus("na"); return; }
+    if (typeof navigator.storage.persisted === "function" && await navigator.storage.persisted()) { renderPersistStatus("yes"); return; }
+    const last = Number(localStorage.getItem(PERSIST_ASKED_KEY)) || 0;
+    if (Date.now() - last < 24 * 60 * 60 * 1000) { await refreshPersistStatus(); return; }
+    localStorage.setItem(PERSIST_ASKED_KEY, String(Date.now()));
+    renderPersistStatus(await navigator.storage.persist() ? "yes" : "no");
+  } catch (_) { renderPersistStatus("na"); }
+}
 function saveSettings() { if (moneyBatch) return true; const ok = save(SETTINGS_KEY, settings); if (ok && snapshotReady) saveSnapshot(); return ok; }
 /* For view preferences only (open tab, collapsed tables). Nothing the recovery
    copy exists to protect has changed, so it is not rewritten - a tab tap or an
@@ -5495,6 +5532,7 @@ document.getElementById("confirm-restore-backup").addEventListener("click", () =
   location.reload();
 });
 renderBackupStatus();
+refreshPersistStatus();
 
 /* =========================
    IMPORT DATA

@@ -77,9 +77,9 @@
   function minBudgetOf(wd) {
     if (!wd) return 0;
     const committed = (wd.items || []).reduce((sum, i) => {
-      return sum + (isWalletInflow(i) ? -Number(i.amount) : Number(i.amount));
+      return sum + (isWalletInflow(i) ? -moneyCents(i.amount) : moneyCents(i.amount));
     }, 0);
-    return Math.max(committed, 0);
+    return Math.max(committed, 0) / 100;
   }
 
   /* The carried balance split by where it landed: what stayed in main, and
@@ -103,7 +103,7 @@
   // Bills listed but not yet ticked off - what is still owed this month.
   function unpaidPriorityOf(d) {
     return ((d && d.priority) || []).reduce(
-      (sum, b) => sum + (b.paid ? 0 : Number(b.amount) || 0), 0);
+      (sum, b) => sum + (b.paid ? 0 : moneyCents(b.amount)), 0) / 100;
   }
 
   /* What the main balance will be once every outstanding bill is paid.
@@ -255,8 +255,8 @@
   function walletBalanceOf(wd) {
     if (!wd) return 0;
     return (wd.items || []).reduce((bal, i) => {
-      return bal + (isWalletInflow(i) ? Number(i.amount) : -Number(i.amount));
-    }, Number(wd.budget) || 0);
+      return bal + (isWalletInflow(i) ? moneyCents(i.amount) : -moneyCents(i.amount));
+    }, moneyCents(Number(wd.budget) || 0)) / 100;
   }
 
   // Net outflow from a wallet: outflows minus inflows. Kept for backward
@@ -265,8 +265,8 @@
   function walletSpentOf(wd) {
     if (!wd) return 0;
     return (wd.items || []).reduce((sum, i) => {
-      return sum + (isWalletInflow(i) ? -Number(i.amount) : Number(i.amount));
-    }, 0);
+      return sum + (isWalletInflow(i) ? -moneyCents(i.amount) : moneyCents(i.amount));
+    }, 0) / 100;
   }
 
   // Every cent ever put into a wallet: its budget plus every inflow item
@@ -278,8 +278,8 @@
   function walletAllocatedOf(wd) {
     if (!wd) return 0;
     return (wd.items || []).reduce((sum, i) => {
-      return sum + (isWalletInflow(i) ? Number(i.amount) : 0);
-    }, Number(wd.budget) || 0);
+      return sum + (isWalletInflow(i) ? moneyCents(i.amount) : 0);
+    }, moneyCents(Number(wd.budget) || 0)) / 100;
   }
 
   // Every cent that has left a wallet for any reason - taken and spent, or
@@ -293,8 +293,8 @@
   function walletUsedOf(wd) {
     if (!wd) return 0;
     return (wd.items || []).reduce((sum, i) => {
-      return sum + (isWalletInflow(i) ? 0 : Number(i.amount));
-    }, 0);
+      return sum + (isWalletInflow(i) ? 0 : moneyCents(i.amount));
+    }, 0) / 100;
   }
 
   // Money actually taken out of a wallet and spent. Transfers out move money
@@ -302,8 +302,8 @@
   function walletTakenOf(wd) {
     if (!wd) return 0;
     return (wd.items || []).reduce((sum, i) => {
-      return sum + (i.type === "take" ? Number(i.amount) : 0);
-    }, 0);
+      return sum + (i.type === "take" ? moneyCents(i.amount) : 0);
+    }, 0) / 100;
   }
 
   // One pass over a month producing every derived figure, so income and the
@@ -314,29 +314,30 @@
   // fronted from a wallet comes back into main under a different label.
   // Anything that finds no spending to cancel really is new money.
   function monthTotalsOf(d, wallets) {
+    // Everything below is whole cents until the very end.
     const categories = {};
-    const bump = (cat, amount) => {
+    const bump = (cat, cents) => {
       const key = cat || "Others";
-      categories[key] = (categories[key] || 0) + Number(amount);
+      categories[key] = (categories[key] || 0) + cents;
     };
 
-    (d.priority || []).forEach(b => { if (b.paid) bump(b.category, b.amount); });
-    (d.secondChoice || []).forEach(i => { if (i.type === "take") bump(i.category, i.amount); });
+    (d.priority || []).forEach(b => { if (b.paid) bump(b.category, moneyCents(b.amount)); });
+    (d.secondChoice || []).forEach(i => { if (i.type === "take") bump(i.category, moneyCents(i.amount)); });
 
     let inWallets = 0;
     (wallets || []).forEach(w => {
       const wd = (d.walletData || {})[w.id];
       if (!wd) return;
-      const taken = walletTakenOf(wd);
+      const taken = moneyCents(walletTakenOf(wd));
       if (taken > 0) bump(w.name, taken);
-      inWallets += walletBalanceOf(wd);
+      inWallets += moneyCents(walletBalanceOf(wd));
     });
 
     let excess = 0;
     (d.secondChoice || []).forEach(i => {
       if (!isReimbursement(i)) return;
 
-      let left = Number(i.amount);
+      let left = moneyCents(i.amount);
       const own = i.category || "Others";
       const order = [own].concat(
         Object.keys(categories)
@@ -354,9 +355,9 @@
       if (left > 0) excess += left;
     });
 
-    // Drop categories the reimbursements emptied, allowing for float dust
+    // Drop categories the reimbursements emptied
     Object.keys(categories).forEach(c => {
-      if (categories[c] < 1e-9) delete categories[c];
+      if (categories[c] <= 0) delete categories[c];
     });
 
     const spent = Object.values(categories).reduce((a, b) => a + b, 0);
@@ -366,19 +367,22 @@
       const realAdds = (d.secondChoice || []).reduce((sum, i) => {
         if (i.type !== "add") return sum;
         if (isTransferEntry(i) || isReimbursement(i)) return sum;
-        return sum + Number(i.amount);
+        return sum + moneyCents(i.amount);
       }, 0);
       // Income may be null while carry-over is not, on the 1st of a month
       // before anything has been earned, so it is coerced rather than read
       // directly.
-      totalIncome = (Number(d.income) || 0) + realAdds + excess + carryOverOf(d);
+      totalIncome = (moneyCents(Number(d.income) || 0) + realAdds + excess + moneyCents(carryOverOf(d))) / 100;
     }
 
+    const result = {};
+    Object.keys(categories).forEach(c => { result[c] = categories[c] / 100; });
+
     return {
-      categories,
-      inWallets,
-      spent,
-      excess,
+      categories: result,
+      inWallets: inWallets / 100,
+      spent: spent / 100,
+      excess: excess / 100,
       totalIncome,
       mainRemaining: mainRemainingOf(d, wallets)
     };
@@ -400,27 +404,31 @@
     /* Carry-over lands in main, exactly like the income figure. Wallet
        balances brought forward are NOT added here - they are written as each
        wallet's opening budget, which this function already subtracts, and
-       counting them twice would invent money. */
-    let remaining = (Number(d.income) || 0) + carryOverOf(d);
+       counting them twice would invent money.
+
+       All of it is added up in whole cents. Summing decimals as floats leaves
+       dust such as 1.1e-13 after a month spent to exactly zero; whole cents
+       cannot. What is STORED is unchanged - only the arithmetic differs. */
+    let remaining = moneyCents(Number(d.income) || 0) + moneyCents(carryOverOf(d));
 
     (d.priority || []).forEach(b => {
-      if (b.paid) remaining -= Number(b.amount);
+      if (b.paid) remaining -= moneyCents(b.amount);
     });
 
     (wallets || []).forEach(w => {
       const wd = (d.walletData || {})[w.id];
       if (!wd) return;
-      if (wd.budget) remaining -= Number(wd.budget);
+      if (wd.budget) remaining -= moneyCents(wd.budget);
       (wd.items || []).forEach(i => {
-        if (i.type === "add") remaining -= Number(i.amount);
+        if (i.type === "add") remaining -= moneyCents(i.amount);
       });
     });
 
     (d.secondChoice || []).forEach(i => {
-      remaining += i.type === "add" ? Number(i.amount) : -Number(i.amount);
+      remaining += i.type === "add" ? moneyCents(i.amount) : -moneyCents(i.amount);
     });
 
-    return remaining;
+    return (remaining === 0 ? 0 : remaining) / 100;
   }
 
   // What was actually spent per category, net of reimbursements, plus what is
