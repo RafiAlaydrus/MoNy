@@ -6010,6 +6010,62 @@ function backupTimestamp(value, label) {
   return ` ${label} ${new Date(value).toLocaleString("default", { dateStyle: "medium", timeStyle: "short" })}.`;
 }
 
+/* A look at a backup's books before it replaces anything. It only ever WARNS:
+   an old backup of someone's own records must always be restorable, even if it
+   has a quirk, so nothing here blocks the Replace button. Three things are
+   checked in each month: no wallet below zero, every transfer has exactly its
+   two halves, and the totals add up. */
+function bookNotesFor(d, wallets, scope, currency) {
+  const notes = [];
+  if (!isRecord(d)) return notes;
+  const list = Array.isArray(wallets) ? wallets : [];
+  list.forEach(w => {
+    const wd = (d.walletData || {})[w.id];
+    if (!wd) return;
+    const balance = walletBalanceOf(wd);
+    if (moneyCents(balance) < 0) notes.push(`${scope}: the wallet "${w.name}" is below zero (${currency} ${fmt(balance, currency)}).`);
+  });
+  const groups = {};
+  const tally = (item, role) => {
+    const g = groups[item.txId] || (groups[item.txId] = { out: 0, in: 0, main: 0, name: item.name });
+    g[role]++;
+  };
+  Object.values(d.walletData || {}).forEach(wd => {
+    ((wd && wd.items) || []).forEach(item => {
+      if (!item || !item.txId) return;
+      if (item.type === "out") tally(item, "out");
+      else if (item.type === "in") tally(item, "in");
+    });
+  });
+  (d.secondChoice || []).forEach(item => {
+    if (item && item.txId && item.type === "add" && isTransferEntry(item)) tally(item, "main");
+  });
+  Object.values(groups).forEach(g => {
+    if (!(g.out === 1 && g.in + g.main === 1)) {
+      notes.push(`${scope}: the transfer "${g.name}" is missing its other half or was recorded twice.`);
+    }
+  });
+  if (!reconciles(d, list)) notes.push(`${scope}: the totals do not add up.`);
+  return notes;
+}
+
+function bookNotes(backup) {
+  const notes = [];
+  const currency = (backup.settings && backup.settings.currency) || cur();
+  notes.push(...bookNotesFor(backup.data, backup.settings && backup.settings.wallets, "This month", currency));
+  Object.keys(backup.archive || {}).forEach(key => {
+    const entry = backup.archive[key];
+    if (!usableArchiveEntry(entry)) return;
+    const normal = normalizeArchiveEntry(entry);
+    notes.push(...bookNotesFor(normal.data, normal.wallets, monthLabel(key), normal.currency || currency));
+  });
+  (backup.endlessArchive || []).forEach((entry, index) => {
+    if (!usableEndlessEntry(entry)) return;
+    notes.push(...bookNotesFor(entry.data, entry.wallets, `Endless period ${index + 1}`, entry.currency || currency));
+  });
+  return notes;
+}
+
 function renderBackupPreview(element, backup) {
   const month = backup.data;
   const wallets = backup.settings && Array.isArray(backup.settings.wallets)
@@ -6031,6 +6087,16 @@ function renderBackupPreview(element, backup) {
   element.innerHTML = rows.map(([label, value]) =>
     `<div class="setting-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
   ).join("");
+  let notes = [];
+  try { notes = bookNotes(backup); } catch (err) { console.error("book check failed", err); }
+  if (notes.length) {
+    const shown = notes.slice(0, 4).map(note => `<li>${esc(note)}</li>`).join("");
+    const more = notes.length > 4 ? `<li>…and ${notes.length - 4} more.</li>` : "";
+    element.insertAdjacentHTML("beforeend",
+      `<div class="preview-notes" role="note"><strong>Heads-up</strong>` +
+      `<p>These records look unusual. You can still restore them - nothing is blocked - but it is worth checking afterwards.</p>` +
+      `<ul>${shown}${more}</ul></div>`);
+  }
 }
 
 /* Saves a complete copy of the records as they are now, then makes the change.

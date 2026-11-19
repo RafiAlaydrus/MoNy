@@ -3133,3 +3133,8 @@ body.scroll-locked {
   width: 100%;
   overflow: hidden;
 }
+
+/* The "Heads-up" box in a backup preview: a notice, not an error. */
+.preview-notes { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--semantic-out); background: var(--surface-field); border-radius: 0 var(--radius-control) var(--radius-control) 0; font-size: 13px; }
+.preview-notes p { margin: 4px 0 6px; color: var(--text-secondary); }
+.preview-notes ul { margin: 0; padding-left: 18px; color: var(--text-secondary); }
