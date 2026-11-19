@@ -6221,7 +6221,7 @@ confirmImportBtn.addEventListener("click", () => {
    EXPORT DATA
 ========================= */
 
-document.getElementById("export-data-btn").addEventListener("click", () => {
+document.getElementById("export-data-btn").addEventListener("click", async () => {
   // Everything the app persists, so an import can rebuild it exactly. The
   // priority backup is included too - it is what "Copy Last Priority" reads.
   const exportObj = {
@@ -6234,15 +6234,20 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
     endlessArchive,
     priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
   };
+  /* The time is part of the name. Two backups in one month used to share a
+     name, so the second overwrote or sat beside the first as "(1)" - and on a
+     phone it is the time that tells them apart. */
+  const stamp = backupStamp();
   const filename = settings.cycleEnabled === false
-    ? `mony-endless-${todayString()}.json`
-    : `money-tracker-${currentMonthKey}.json`;
+    ? `mony-endless-${stamp}.json`
+    : `money-tracker-${stamp}.json`;
   /* The export is the only copy of the records outside this device, so the
      "last backup" time is only recorded once the file was really handed to
      the browser. A failure used to be recorded anyway and silenced the
      reminder for 30 days. */
+  let outcome;
   try {
-    downloadBackup(JSON.stringify(exportObj, null, 2), filename);
+    outcome = await deliverBackup(JSON.stringify(exportObj, null, 2), filename);
   } catch (err) {
     console.error("export failed", err);
     const message = "The backup file could not be created. Nothing was saved. Free some memory or close other apps, then try again.";
@@ -6251,10 +6256,61 @@ document.getElementById("export-data-btn").addEventListener("click", () => {
     appAlert(message, "Backup not saved");
     return;
   }
+  if (outcome === "cancelled") {
+    // Closing the share sheet without choosing where to save is not a backup.
+    setDataControlError(dataControlFeedback);
+    showNotice("Backup cancelled - nothing was saved.");
+    return;
+  }
   setDataControlError(dataControlFeedback);
   writeReminderTime(LAST_EXPORT_KEY, Date.now());
   renderBackupReminder();
 });
+
+// 2026-11-19-143005: the date, then hours, minutes and seconds.
+function backupStamp() {
+  const d = new Date();
+  const two = n => String(n).padStart(2, "0");
+  return `${todayString()}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
+}
+
+/* An installed iPhone or iPad app cannot be trusted to download a generated
+   file - the download can vanish or open as unreadable text - but it can hand
+   the file to the share sheet ("Save to Files", AirDrop, Mail). That is only
+   used there: everywhere else a normal download is the better experience. */
+function shouldUseShareSheet() {
+  try {
+    const standalone = navigator.standalone === true ||
+      (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches);
+    const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+    return standalone && apple && typeof navigator.share === "function" && typeof navigator.canShare === "function";
+  } catch (_) {
+    return false;
+  }
+}
+
+/* Delivers a backup file: "shared" or "downloaded" when it was handed over,
+   "cancelled" when the person closed the share sheet, and a thrown error when
+   no file could be made. If sharing fails for any reason except being
+   cancelled it falls back to the ordinary download, so a backup is never lost
+   to a share sheet that would not open. */
+async function deliverBackup(json, filename) {
+  if (shouldUseShareSheet()) {
+    try {
+      const file = new File([json], filename, { type: "application/json" });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "MoNy backup" });
+        return "shared";
+      }
+    } catch (err) {
+      if (err && err.name === "AbortError") return "cancelled";
+      console.warn("share sheet failed, downloading instead", err);
+    }
+  }
+  downloadBackup(json, filename);
+  return "downloaded";
+}
 
 /* Hands a file to the browser's download. The link is attached to the page
    for the click (some browsers ignore a detached one), and the file URL is
