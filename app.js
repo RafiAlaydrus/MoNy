@@ -334,6 +334,103 @@ function load(key, fallback) {
   }
 }
 
+/* DATA THAT PARSES BUT IS THE WRONG SHAPE
+
+   load() above handles text that is not JSON. This handles JSON that is the
+   wrong kind of thing - a settings record that is a string, a bill list that
+   is an object - which used to throw somewhere during start-up and leave the
+   app unable to open at all.
+
+   Nothing here touches data that is fine. A record of the wrong kind is
+   treated like unreadable text: set aside under its key + "-corrupt" and
+   replaced by the default. A record of the right kind with a wrong-shaped
+   FIELD has just that field put right in memory. Either way the original text
+   is copied aside first, and the person is told. */
+const repairedKeys = [];
+
+function noteRepair(key) {
+  if (repairedKeys.includes(key)) return;
+  repairedKeys.push(key);
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw !== null && localStorage.getItem(`${key}-invalid`) !== raw) localStorage.setItem(`${key}-invalid`, raw);
+  } catch (_) { /* the original is still in place under its own key */ }
+}
+
+// Like load(), but the value must be a plain record (not a string, array or number).
+function loadRecord(key, fallback) {
+  const value = load(key, fallback);
+  if (value === fallback || isRecord(value)) return value;
+  corruptKeys.push(key);
+  try { localStorage.setItem(`${key}-corrupt`, localStorage.getItem(key)); } catch (_) { /* see load() */ }
+  return fallback;
+}
+
+function repairSettingsShape(s) {
+  let changed = false;
+  if (s.wallets !== undefined && s.wallets !== null) {
+    if (!Array.isArray(s.wallets)) { s.wallets = []; changed = true; }
+    else {
+      const good = s.wallets.filter(w => isRecord(w) && isNonEmptyString(w.id) && isNonEmptyString(w.name));
+      if (good.length !== s.wallets.length) { s.wallets = good; changed = true; }
+    }
+  }
+  if (s.collapsed !== undefined && !isRecord(s.collapsed)) { s.collapsed = {}; changed = true; }
+  if (Array.isArray(s.recurring)) {
+    const good = s.recurring.filter(isRecord);
+    if (good.length !== s.recurring.length) { s.recurring = good; changed = true; }
+  }
+  if (s.currency !== undefined && !isNonEmptyString(s.currency)) { s.currency = "RM"; changed = true; }
+  if (s.sortOrder !== undefined && !["oldest", "newest"].includes(s.sortOrder)) { s.sortOrder = "oldest"; changed = true; }
+  if (s.monthStartDay !== undefined && !(Number.isInteger(Number(s.monthStartDay)) && Number(s.monthStartDay) >= 1 && Number(s.monthStartDay) <= 31)) {
+    s.monthStartDay = 1; changed = true;
+  }
+  if (s.budgetLimit !== undefined && s.budgetLimit !== null && !(s.budgetLimit !== "" && Number.isFinite(Number(s.budgetLimit)) && Number(s.budgetLimit) > 0)) {
+    s.budgetLimit = null; changed = true;
+  }
+  if (changed) noteRepair(SETTINGS_KEY);
+  return s;
+}
+
+function repairDataShape(d) {
+  if (!isRecord(d)) return d;
+  let changed = false;
+  for (const field of ["priority", "secondChoice"]) {
+    if (!Array.isArray(d[field])) {
+      if (d[field] !== undefined) { d[field] = []; changed = true; }
+    } else {
+      const good = d[field].filter(isRecord);
+      if (good.length !== d[field].length) { d[field] = good; changed = true; }
+    }
+  }
+  if (d.walletData !== undefined && d.walletData !== null) {
+    if (!isRecord(d.walletData)) { d.walletData = {}; changed = true; }
+    else {
+      for (const id of Object.keys(d.walletData)) {
+        let wd = d.walletData[id];
+        if (!isRecord(wd)) { wd = d.walletData[id] = { budget: null, items: [] }; changed = true; }
+        if (!Array.isArray(wd.items)) { wd.items = []; changed = true; }
+        else {
+          const good = wd.items.filter(isRecord);
+          if (good.length !== wd.items.length) { wd.items = good; changed = true; }
+        }
+      }
+    }
+  }
+  if (changed) noteRepair(STORAGE_KEY);
+  return d;
+}
+
+// An archived month that cannot be read is left in storage but not listed.
+function usableArchiveEntry(entry) {
+  return isRecord(entry) && isRecord(entry.data);
+}
+
+function usableEndlessEntry(entry) {
+  return isRecord(entry) && isRecord(entry.data) && Array.isArray(entry.data.priority) &&
+    Array.isArray(entry.data.secondChoice) && Array.isArray(entry.wallets);
+}
+
 /* DATA FORMAT VERSION
    Stored in settings.schemaVersion. Every change to the SHAPE of what is saved
    - a field renamed, split or given a new meaning - bumps this number and adds
@@ -347,7 +444,7 @@ function load(key, fallback) {
    the current version instead. */
 const SCHEMA_VERSION = 1;
 
-let settings = load(SETTINGS_KEY, null) || {
+let settings = loadRecord(SETTINGS_KEY, null) || {
   showChart: true,
   currency: "RM",
   sortOrder: "newest",
@@ -365,6 +462,7 @@ if (Number.isInteger(settings.schemaVersion) && settings.schemaVersion > SCHEMA_
   if (window.MoNySession && window.MoNySession.halt) window.MoNySession.halt(message, true);
   throw new Error(message);
 }
+repairSettingsShape(settings);
 // Default missing settings
 if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "oldest";
@@ -490,7 +588,7 @@ if (settings.schemaVersion !== SCHEMA_VERSION) {
   saveSettings();
 }
 
-let archive = load(ARCHIVE_KEY, null) || {};
+let archive = loadRecord(ARCHIVE_KEY, null) || {};
 
 function genWalletId() {
   return "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -564,7 +662,7 @@ function monthHasContent(d) {
     (d.secondChoice || []).length > 0;
 }
 
-let data = load(STORAGE_KEY, null);
+let data = repairDataShape(loadRecord(STORAGE_KEY, null));
 if (data?.endless === true && settings.cycleEnabled !== false) {
   settings.cycleEnabled = false;
   saveSettings();
@@ -6376,7 +6474,7 @@ function monthShort(key) {
 
 // Archive keys in chronological order
 function sortedArchiveKeys() {
-  return Object.keys(archive).sort((a, b) => {
+  return Object.keys(archive).filter(key => usableArchiveEntry(archive[key])).sort((a, b) => {
     const [ay, am] = a.split("-").map(Number);
     const [by, bm] = b.split("-").map(Number);
     return ay - by || am - bm;
@@ -6753,7 +6851,7 @@ function renderHistory() {
   if (keys.length === 0 && endlessArchive.length === 0) {
     historyList.innerHTML = '<div class="empty-state-rich"><strong>No completed cycles yet</strong><p>Your first cycle will appear here automatically when its end date is reached.</p></div>';
   } else {
-    [...endlessArchive].reverse().forEach((entry, index) => historyList.appendChild(buildEndlessHistoryRow(entry, index)));
+    [...endlessArchive].reverse().forEach((entry, index) => { if (usableEndlessEntry(entry)) historyList.appendChild(buildEndlessHistoryRow(entry, index)); });
     if (keys.length) renderPagedRecords(historyList, "archive", [...keys].reverse(), buildHistoryRow);
   }
 
@@ -7838,4 +7936,32 @@ window.addEventListener("resize", () => {
 /* Start-up has finished: every line above ran without throwing. From here on
    an error is reported as a problem with what was being done, not as a broken
    download of the app's files. */
+/* A look over what was loaded, once start-up is done, with the same checks a
+   backup file gets before it can be imported. It only REPORTS: nothing is
+   changed, and each distinct finding is shown once, not at every launch. */
+function integrityCheck() {
+  try {
+    const messages = [];
+    if (repairedKeys.length) {
+      messages.push("Part of your saved records was in an unexpected shape, so MoNy put that part right in memory to be able to open. The original text is kept aside.");
+    }
+    const problem = validateImport({
+      data, settings, archive, endlessArchive,
+      priorityBackup: load(BACKUP_PRIORITY_KEY, null) || []
+    });
+    if (problem) {
+      messages.push(problem.replace(/^That file's /, "Your saved ").replace(/^That file /, "Your saved data "));
+    }
+    if (!messages.length) return;
+    const signature = messages.join("|");
+    if (localStorage.getItem("mony-integrity-noted") === signature) return;
+    localStorage.setItem("mony-integrity-noted", signature);
+    appAlert(messages.join("\n\n") + "\n\nNothing was deleted. Export a backup from Settings and check your latest entries.",
+      "Some saved records look unusual");
+  } catch (err) {
+    console.error("integrity check failed", err);
+  }
+}
+setTimeout(integrityCheck, 1200);
+
 window.MoNySession?.ready?.();
