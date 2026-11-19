@@ -73,7 +73,12 @@
      a fault in something the user did, not a broken download, so it gets a
      plain message and a plain reload. */
   function ready() { appReady = true; }
-  window.MoNySession = { block, ready };
+  /* Stops the app for a reason that is already explained, and keeps the generic
+     "could not finish loading" wording from replacing that explanation when
+     the script is then abandoned. */
+  let halted = false;
+  function halt(text, repair = false) { halted = true; block(text, repair); }
+  window.MoNySession = { block, halt, ready };
 
   /* The panel freezes editing so a half-broken app cannot keep writing records.
      That is only warranted for a fault in the app's own files. A browser
@@ -84,6 +89,7 @@
      a cross-origin one arrives with none. */
   const appBase = location.href.replace(/[?#].*$/, "").replace(/[^/]*$/, "");
   function isAppFault(event) {
+    if (halted) return false;
     if (/ResizeObserver loop/.test(String(event.message || ""))) return false;
     return String(event.filename || "").startsWith(appBase);
   }

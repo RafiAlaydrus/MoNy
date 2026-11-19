@@ -334,6 +334,19 @@ function load(key, fallback) {
   }
 }
 
+/* DATA FORMAT VERSION
+   Stored in settings.schemaVersion. Every change to the SHAPE of what is saved
+   - a field renamed, split or given a new meaning - bumps this number and adds
+   a step to the upgrade code below, instead of the app guessing from which
+   fields happen to exist. Adding an optional field needs no bump.
+
+   Data with no version is from before this existed and is treated as version 1:
+   nothing about it changes, it is only labelled. Data labelled NEWER than this
+   code understands is never opened for editing - an older app rewriting a newer
+   app's records is how data gets lost - and the app asks for a reload to fetch
+   the current version instead. */
+const SCHEMA_VERSION = 1;
+
 let settings = load(SETTINGS_KEY, null) || {
   showChart: true,
   currency: "RM",
@@ -345,6 +358,13 @@ let settings = load(SETTINGS_KEY, null) || {
      below ran for it too and switched it to oldest-first on first launch. */
   dateOrderMigrated: true
 };
+if (Number.isInteger(settings.schemaVersion) && settings.schemaVersion > SCHEMA_VERSION) {
+  const message = "Your records were saved by a newer version of MoNy than this one. " +
+    "Reload to get the latest version - when you are online it downloads automatically. " +
+    "Nothing has been changed, and your records stay on this device. Do not clear browser data.";
+  if (window.MoNySession && window.MoNySession.halt) window.MoNySession.halt(message, true);
+  throw new Error(message);
+}
 // Default missing settings
 if (!settings.currency) settings.currency = "RM";
 if (!settings.sortOrder) settings.sortOrder = "oldest";
@@ -461,6 +481,12 @@ if (!settings.dateOrderMigrated) {
 // The archive replaced the old keep-data option
 if ("keepData" in settings) {
   delete settings.keepData;
+  saveSettings();
+}
+
+// Label the records with the format version they are in (see SCHEMA_VERSION).
+if (settings.schemaVersion !== SCHEMA_VERSION) {
+  settings.schemaVersion = SCHEMA_VERSION;
   saveSettings();
 }
 
@@ -5795,6 +5821,14 @@ function validateSettings(settings) {
   }
   if (settings.currency !== undefined && !isNonEmptyString(settings.currency)) {
     return "That file's currency is invalid.";
+  }
+  if (settings.schemaVersion !== undefined) {
+    if (!Number.isInteger(settings.schemaVersion) || settings.schemaVersion < 1) {
+      return "That file's data format version is invalid.";
+    }
+    if (settings.schemaVersion > SCHEMA_VERSION) {
+      return "This backup was made by a newer version of MoNy. Update MoNy, then import it again.";
+    }
   }
   if (settings.budgetLimit !== undefined && settings.budgetLimit !== null &&
       !isFiniteAmount(settings.budgetLimit)) {
