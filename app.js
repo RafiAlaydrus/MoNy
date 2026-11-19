@@ -66,10 +66,8 @@ try {
 } catch (err) {
   if (!err || err.unreadable !== true) throw err;
   journalProblem = true;
-  try {
-    localStorage.setItem(`${JOURNAL_KEY}-corrupt`, localStorage.getItem(JOURNAL_KEY));
-    localStorage.removeItem(JOURNAL_KEY);
-  } catch (_) { /* the warning below still tells the user */ }
+  setAsideCopy(JOURNAL_KEY, "corrupt", localStorage.getItem(JOURNAL_KEY));
+  try { localStorage.removeItem(JOURNAL_KEY); } catch (_) { /* the warning below still tells the user */ }
 }
 
 /* v1.53.2 and earlier copied all of History into the automatic snapshot,
@@ -314,6 +312,29 @@ const todayStr = todayString();
  * rather than silently pretending the data never existed. */
 const corruptKeys = [];
 
+/* Keeps a copy of text that could not be used, without ever losing an earlier
+   one. The newest copy lives under `key-suffix`, the one before it under
+   `key-suffix-2`, then `-3`; a fourth pushes out only the oldest. The same text
+   seen again is not stored twice. Nothing here can throw: if storage is full
+   the original is still in place under its own key. */
+function setAsideCopy(key, suffix, raw) {
+  // Declared here, not at the top level: the start-up journal check calls this
+  // before the rest of the file has run, when a top-level constant would not
+  // exist yet.
+  const KEPT_COPIES = 3;
+  if (typeof raw !== "string") return;
+  const slot = n => n === 1 ? `${key}-${suffix}` : `${key}-${suffix}-${n}`;
+  try {
+    for (let n = 1; n <= KEPT_COPIES; n++) if (localStorage.getItem(slot(n)) === raw) return;
+    for (let n = KEPT_COPIES; n > 1; n--) {
+      const older = localStorage.getItem(slot(n - 1));
+      if (older !== null) localStorage.setItem(slot(n), older);
+      else localStorage.removeItem(slot(n));
+    }
+    localStorage.setItem(slot(1), raw);
+  } catch (_) { /* quota: the original is still where it was */ }
+}
+
 function load(key, fallback) {
   const raw = localStorage.getItem(key);
   if (raw === null) return fallback;
@@ -324,12 +345,8 @@ function load(key, fallback) {
   } catch (err) {
     console.error(`Corrupt storage in ${key} - set aside, continuing without it`, err);
     corruptKeys.push(key);
-    try {
-      localStorage.setItem(`${key}-corrupt`, raw);
-    } catch (_) {
-      /* Quota is likely why it broke in the first place. Nothing more to do -
-         the original is still in place under its own key either way. */
-    }
+    // If storage is full, the original is still in place under its own key.
+    setAsideCopy(key, "corrupt", raw);
     return fallback;
   }
 }
@@ -351,10 +368,7 @@ const repairedKeys = [];
 function noteRepair(key) {
   if (repairedKeys.includes(key)) return;
   repairedKeys.push(key);
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw !== null && localStorage.getItem(`${key}-invalid`) !== raw) localStorage.setItem(`${key}-invalid`, raw);
-  } catch (_) { /* the original is still in place under its own key */ }
+  setAsideCopy(key, "invalid", localStorage.getItem(key));
 }
 
 // Like load(), but the value must be a plain record (not a string, array or number).
@@ -362,7 +376,7 @@ function loadRecord(key, fallback) {
   const value = load(key, fallback);
   if (value === fallback || isRecord(value)) return value;
   corruptKeys.push(key);
-  try { localStorage.setItem(`${key}-corrupt`, localStorage.getItem(key)); } catch (_) { /* see load() */ }
+  setAsideCopy(key, "corrupt", localStorage.getItem(key));
   return fallback;
 }
 
